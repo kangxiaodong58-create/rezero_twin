@@ -200,7 +200,7 @@ class TwinChatApp:
         if not history:
             self.append_message(
                 "系统",
-                "欢迎来到 Re:Zero 双子系统。\n输入消息开始和蕾姆、拉姆对话。\n输入 /status 查看状态，/empire /mansion /late 切换篇章，/quit 退出。",
+                "欢迎来到 Re:Zero 双子系统。\n输入消息开始和蕾姆、拉姆对话。\n输入 /status 查看状态，/empire /mansion /late 切换篇章，/llm /local 切换模式，/quit 退出。",
                 "system",
             )
 
@@ -258,6 +258,9 @@ class TwinChatApp:
             self.store.set("recovery", p)
             self.append_message("系统", f"→ 记忆恢复进度设为 {p}", "system")
             self.update_status()
+            return
+        if lowered in ("/llm", "/local"):
+            self._switch_mode("llm" if lowered == "/llm" else "local")
             return
 
         if self.mode == "llm":
@@ -334,6 +337,52 @@ class TwinChatApp:
         self.store.set("events", engine.events)
         self.store.set("user_name", engine.user_name)
         self.store.set("mode", self.mode)
+        self.update_status()
+
+    def _current_engine(self):
+        """返回当前 bot 的硬状态引擎（两种模式统一取值）。"""
+        return self.bot.engine if self.mode == "llm" else self.bot.rem.engine
+
+    def _switch_mode(self, target: str) -> None:
+        """切换 local / llm 模式，并迁移硬状态（v9.4.0）。"""
+        if target == self.mode:
+            self.append_message("系统", f"当前已是{'LLM 桥接' if target == 'llm' else '本地模板'}模式。", "system")
+            return
+        old = self._current_engine()
+        try:
+            if target == "llm":
+                from llm import ReZeroLLMBridge
+
+                new_bot = ReZeroLLMBridge(
+                    api_key=os.getenv("DEEPSEEK_API_KEY"),
+                    base_url="https://api.deepseek.com",
+                    model_name="deepseek-chat",
+                    arc=old.arc,
+                    max_history=8,
+                )
+                new_engine = new_bot.engine
+            else:
+                new_bot = ReZeroTwinSystem()
+                new_bot.set_arc(old.arc)
+                new_engine = new_bot.rem.engine
+            # 状态迁移（在 set_arc 之后覆盖，避免被篇章默认值重置）
+            new_engine.favor = old.favor
+            new_engine.ram_favor = old.ram_favor
+            new_engine.independence = old.independence
+            new_engine.recovery = old.recovery
+            new_engine.locked = old.locked
+            new_engine.user_name = old.user_name
+            new_engine.events = old.events
+            self.bot = new_bot
+            self.mode = target
+            self.store.set("mode", target)
+            self.append_message(
+                "系统",
+                f"→ 已切换至{'LLM 桥接' if target == 'llm' else '本地模板'}模式（好感/独立度/记忆/共同经历已迁移）",
+                "system",
+            )
+        except Exception as e:
+            self.append_message("系统", f"切换失败：{e}", "system")
         self.update_status()
 
     def update_status(self) -> None:

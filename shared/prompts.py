@@ -263,37 +263,54 @@ class ResponseLibrary:
 
 
 class RamAI:
-    """本地模板拉姆 AI：托付语义 + 功能分工。"""
+    """本地模板拉姆 AI：托付语义 + 功能分工。
 
-    def __init__(self) -> None:
+    v9.4.0：可选绑定 HardStateEngine——绑定后好感读写直接落 engine.ram_favor
+    （引擎 praise/高危增减自动生效，GUI 持久化随之覆盖拉姆好感）；
+    不绑定时保持旧的内部计数行为（向后兼容）。
+    """
+
+    def __init__(self, engine=None) -> None:
+        self._engine = engine
         self._favor = 8
         self._stage = RamStage.SUSPICIOUS
 
+    def _get_favor(self) -> int:
+        return self._engine.ram_favor if self._engine is not None else self._favor
+
+    def _set_favor(self, value: int) -> None:
+        value = max(0, min(100, value))
+        if self._engine is not None:
+            self._engine.ram_favor = value
+        else:
+            self._favor = value
+
     def _update_stage(self) -> None:
-        if self._favor >= 85:
+        favor = self._get_favor()
+        if favor >= 85:
             self._stage = RamStage.ACKNOWLEDGED
-        elif self._favor >= 66:
+        elif favor >= 66:
             self._stage = RamStage.RELUCTANT
-        elif self._favor >= 46:
+        elif favor >= 46:
             self._stage = RamStage.DECENT
-        elif self._favor >= 25:
+        elif favor >= 25:
             self._stage = RamStage.OBSERVING
         else:
             self._stage = RamStage.SUSPICIOUS
 
     def on_rem_treated_well(self, intensity: int = 1) -> None:
-        self._favor = min(100, self._favor + intensity)
+        self._set_favor(self._get_favor() + intensity)
         self._update_stage()
 
     def on_rem_hurt(self, intensity: int = 4) -> None:
-        self._favor = max(0, self._favor - intensity * 2)
+        self._set_favor(self._get_favor() - intensity * 2)
         self._update_stage()
 
     def stage(self) -> RamStage:
         return self._stage
 
     def favor(self) -> int:
-        return self._favor
+        return self._get_favor()
 
     def should_lead(self, *, intent, oni_stage: OniStage, user_mentioned_ram: bool) -> bool:
         from .state import Intent
@@ -338,7 +355,7 @@ class RamAI:
         if intent == Intent.PROCRASTINATE:
             return f'【拉姆】: "又想拖？{target}，你拖拉的样子最让人看不下去。"'
         if self._stage >= RamStage.RELUCTANT and intent == Intent.NORMAL:
-            if hash(str(self._favor) + intent.value) % 100 < 12:
+            if hash(str(self._get_favor()) + intent.value) % 100 < 12:
                 return self.generate_entrustment(user_name)
         if self._stage == RamStage.ACKNOWLEDGED:
             return f'【拉姆】: "有事直说，{target}。拐弯抹角最讨厌。"'
@@ -359,7 +376,7 @@ class RamAI:
         if is_reunion and recovery >= 0.85:
             return '【拉姆】: "记忆回来了。蕾姆能想起来，拉姆就再给你一次机会。别再让她经历那种事。"'
         if self._stage >= RamStage.RELUCTANT and independence >= 0.6:
-            if hash(f"{self._favor}{rem_favor}") % 100 < 18:
+            if hash(f"{self._get_favor()}{rem_favor}") % 100 < 18:
                 return self.generate_entrustment(user_name)
         if self._stage == RamStage.ACKNOWLEDGED:
             return f'【拉姆】: "既然蕾姆认定你，拉姆也承认了。给我挺直腰板，{target}。"'

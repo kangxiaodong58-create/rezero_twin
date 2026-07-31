@@ -6,6 +6,21 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.4.0] - 2026-07-31 (Refactor)
+
+### Changed
+- **本地模式状态真源收敛**：`RemAI` 的 `_favor/_locked/_independence/_recovery/_oni_stage/_is_reunion/_breaker_triggered/_arc` 全部改为 property 直通 `HardStateEngine`，删除手动同步（`_sync_from_engine`），双真源隐患消除；对外属性名不变，行为等价
+- **RamAI 好感统一**：`RamAI(engine=...)` 绑定后好感读写落 `engine.ram_favor`（不绑定时保持旧行为）；本地模式拉姆好感从此可累积并随 GUI 持久化，不再重启归零
+
+### Fixed
+- **鬼化余韵死代码**：`RemAI._oni_aftermath` 从未被赋正数导致余韵分支永不触发；改为按「上一回合鬼化阶段」判定（EMERGING/FULL/BRINK 分别对应 1/2/3 回合余韵），计数由引擎统一管理
+
+### Added
+- GUI 新增 `/llm`、`/local` 切换指令：就地切换模式并迁移好感/独立度/记忆恢复/锁定/称呼/共同经历
+- `tests/smoke_test.py` 新增真源收敛测试（总计 12 项）
+
+---
+
 ## [V9.3.1] - 2026-07-31 (Bug Fix)
 
 ### Fixed

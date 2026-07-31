@@ -1,9 +1,14 @@
-"""本地蕾姆回复生成器（基于模板词库）。"""
+"""本地蕾姆回复生成器（基于模板词库）。
+
+v9.4.0：状态字段全部镜像至 HardStateEngine（唯一真源），删除手动同步；
+鬼化余韵死代码修复——余韵计数由引擎统一管理，
+RemAI 按「上一回合是否处于鬼化」判定是否输出余韵台词。
+"""
 
 from __future__ import annotations
 
 from collections import deque
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, Optional, Tuple
 
 from shared.state import FavorLevel, HardStateEngine, Intent, OniStage, StoryArc, TwinState
 from shared.prompts import ResponseLibrary
@@ -13,20 +18,50 @@ class RemAI:
     """本地模板蕾姆 AI，基于状态机选择回复模板。"""
 
     def __init__(self, arc: StoryArc = StoryArc.MANSION_ERA) -> None:
-        self._arc = arc
-        self._recovery = 1.0 if arc != StoryArc.EMPIRE_ERA else 0.0
-        self._favor = 15
-        self._locked = False
-        self._independence = 0.25 if arc != StoryArc.EMPIRE_ERA else 0.0
-        self._oni_stage = OniStage.NONE
-        self._oni_aftermath = 0
         self._short_memory: deque = deque(maxlen=14)
         self.profile: Dict = {"name": None, "context": []}
-        self._is_reunion = False
-        self._breaker_triggered = False
         self._libs = ResponseLibrary()
         self.engine = HardStateEngine(arc=arc)
         self._last_intent: Optional[Intent] = None
+        # 上一回合的鬼化阶段（余韵判定用，v9.4.0）
+        self._prev_oni_stage = OniStage.NONE
+
+    # ---- 状态镜像：唯一真源是 self.engine（v9.4.0）----
+    @property
+    def _arc(self) -> StoryArc:
+        return self.engine.arc
+
+    @property
+    def _favor(self) -> int:
+        return self.engine.favor
+
+    @property
+    def _locked(self) -> bool:
+        return self.engine.locked
+
+    @property
+    def _independence(self) -> float:
+        return self.engine.independence
+
+    @property
+    def _recovery(self) -> float:
+        return self.engine.recovery
+
+    @property
+    def _oni_stage(self) -> OniStage:
+        return self.engine.oni_stage
+
+    @property
+    def _oni_aftermath(self) -> int:
+        return self.engine.oni_aftermath
+
+    @property
+    def _is_reunion(self) -> bool:
+        return self.engine.is_reunion
+
+    @property
+    def _breaker_triggered(self) -> bool:
+        return self.engine.breaker_triggered
 
     def _get_favor_level(self) -> FavorLevel:
         if self._favor >= 95:
@@ -39,16 +74,6 @@ class RemAI:
             return FavorLevel.FAMILIAR
         return FavorLevel.STRANGER
 
-    def _sync_from_engine(self, state: TwinState) -> None:
-        self._favor = state.favor
-        self._locked = state.locked
-        self._independence = state.independence
-        self._recovery = state.recovery
-        self._oni_stage = state.oni_stage
-        self._is_reunion = state.is_reunion
-        self._breaker_triggered = state.breaker_triggered
-        self.profile["name"] = state.user_name
-
     def _build_address(self, favor: FavorLevel) -> str:
         name = self.profile.get("name")
         if self._recovery < 0.35:
@@ -58,8 +83,10 @@ class RemAI:
         return name if favor >= FavorLevel.CLOSE else f"{name}大人"
 
     def generate(self, user_input: str) -> Tuple[str, Intent, OniStage]:
+        prev_oni = self._prev_oni_stage
         state = self.engine.update(user_input)
-        self._sync_from_engine(state)
+        self._prev_oni_stage = state.oni_stage
+        self.profile["name"] = state.user_name
 
         # 高风险越界已经在 engine 中处理，这里只需要读取状态生成文案
         intent = self.engine._classify_intent(user_input)
@@ -77,7 +104,6 @@ class RemAI:
         ):
             if hash(user_input + str(self._favor)) % 100 < 8:
                 self.engine.mark_breaker_triggered()
-                self._breaker_triggered = True
                 reply = (
                     "【蕾姆】: "
                     '"以前的蕾姆，一直活在姐姐的影子里。是您……把蕾姆从那个封闭的世界里拉了出来。谢谢您，成为了蕾姆的破局者。"'
@@ -93,11 +119,8 @@ class RemAI:
             self._short_memory.append((user_input, reply))
             return reply, intent, self._oni_stage
 
-        # 鬼化余韵
-        if self._oni_aftermath > 0:
-            self._oni_aftermath -= 1
-            if self._oni_aftermath == 0:
-                self._oni_stage = OniStage.NONE
+        # 鬼化余韵（v9.4.0 修复：上一回合处于鬼化则本回合进入余韵，计数由引擎管理）
+        if prev_oni != OniStage.NONE:
             raw = self._libs.get(self._arc, "aftermath", favor, fallback="角已经收回去了……")
             reply = f'【蕾姆】: "{raw}"'
             self._short_memory.append((user_input, reply))
@@ -141,15 +164,10 @@ class RemAI:
         return reply, intent, self._oni_stage
 
     def set_arc(self, arc: StoryArc) -> None:
-        self._arc = arc
         self.engine.set_arc(arc)
-        self._sync_from_engine(self.engine.update(""))
 
     def recover(self, progress: float = 1.0) -> str:
         self.engine.recover(progress)
-        self._recovery = self.engine.recovery
-        if self.engine.is_reunion:
-            self._is_reunion = True
         if self._recovery >= 0.95:
             return '【蕾姆】: "全部想起来了。姐姐大人、宅邸、还有您。蕾姆的英雄。"'
         if self._recovery >= 0.6:

@@ -183,6 +183,33 @@ def test_intent_affirm_v931() -> None:
     assert e2.consecutive_negative == 1
 
 
+def test_local_convergence_v940() -> None:
+    """v9.4.0：RemAI 镜像一致性、鬼化→余韵链路、RamAI 好感统一。"""
+    from shared.state import OniStage
+    from shared.prompts import RamAI
+    # RemAI 镜像：字段直通 engine
+    twin = ReZeroTwinSystem()
+    twin.rem.engine.favor = 42
+    assert twin.rem._favor == 42, "RemAI 镜像读取失败"
+    # 鬼化 → 余韵：EMERGING 应恰好持续 1 回合余韵
+    r1 = twin.interact("危险！有魔兽袭击！")
+    assert "角" in r1 and twin.rem.engine.oni_stage == OniStage.EMERGING, f"鬼化未触发: {r1}"
+    r2 = twin.interact("今天天气不错。")
+    assert "角" in r2, f"余韵台词未触发: {r2}"
+    r3 = twin.interact("那就好。")
+    assert "角已经收回去" not in r3 and "头好沉" not in r3, f"余韵应只持续一回合: {r3}"
+    # RamAI 好感统一：与 engine.ram_favor 同真源
+    twin2 = ReZeroTwinSystem()
+    before = twin2.rem.engine.ram_favor
+    twin2.interact("谢谢你")
+    assert twin2.ram.favor() == twin2.rem.engine.ram_favor, "RamAI 与引擎好感未统一"
+    assert twin2.rem.engine.ram_favor > before, "拉姆好感未增长"
+    # 未绑定 engine 的 RamAI 保持旧行为
+    solo = RamAI()
+    solo.on_rem_treated_well(2)
+    assert solo.favor() == 10, "未绑定 RamAI 旧行为被破坏"
+
+
 def test_local_interact() -> None:
     """本地模板模式一轮对话。"""
     twin = ReZeroTwinSystem()
@@ -204,6 +231,7 @@ def main() -> int:
         ("失忆防备指令 v9.2.7", test_amnesia_prompt_v927),
         ("长期事件记忆 v9.3.0", test_event_memory_v930),
         ("意图误判修复 v9.3.1", test_intent_affirm_v931),
+        ("本地真源收敛 v9.4.0", test_local_convergence_v940),
         ("本地模式对话", test_local_interact),
     ]
     failed = 0

@@ -12,7 +12,8 @@ class ReZeroTwinSystem:
 
     def __init__(self, arc: StoryArc = StoryArc.MANSION_ERA) -> None:
         self.rem = RemAI(arc=arc)
-        self.ram = RamAI()
+        # v9.4.0：RamAI 好感与引擎 ram_favor 统一（可持久化）
+        self.ram = RamAI(engine=self.rem.engine)
         self.twin_enabled = True
 
     def set_arc(self, arc: StoryArc) -> None:
