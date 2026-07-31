@@ -13,7 +13,7 @@ ImportError: 请先安装 openai 库：pip install openai
 ## 根因分析
 
 1. `openai` 实际安装在用户 site-packages：
-   `C:\Users\11985\AppData\Roaming\Python\Python311\site-packages\openai`
+   `<用户目录>\AppData\Roaming\Python\Python311\site-packages\openai`
 2. 当前 `python` 指向 OpenClaw 自带解释器：`D:\Q-claw\QClaw\v0.2.35.624\resources\python\python.exe`
 3. 该解释器的 `sys.path` 已包含用户 site-packages，所以常规命令下能导入。
 4. 问题出现在 `llm/bridge.py` 的 `from openai import OpenAI` 处；之前 `try/except ImportError` 把 **任何** 导入失败都伪装成 openai 未安装，而真正的底层异常被 `from _e` 隐藏。
@@ -29,7 +29,7 @@ ImportError: 请先安装 openai 库：pip install openai
 在同一终端下执行：
 
 ```powershell
-cd C:\Users\11985\.qclaw\workspace\rezero_twin
+cd <项目根目录>
 python main.py --mode llm
 ```
 

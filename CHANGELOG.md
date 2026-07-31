@@ -6,6 +6,16 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.5.2] - 2026-07-31 (Docs, Open Source Ready)
+
+### Added
+- `LICENSE`：MIT 协议（附注：仅覆盖代码，角色权利归原作者）
+
+### Security
+- 开源前敏感信息清理：废弃 key 脱敏为占位符；开发日志中 16 处本机用户名路径替换为 `<项目根目录>`/`<用户目录>`；移除 AI 工具名痕迹。全历史扫描确认 `.env` 与 PAT 从未入库
+
+---
+
 ## [V9.5.1] - 2026-07-31 (Docs)
 
 ### Removed
