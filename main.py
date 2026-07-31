@@ -6,19 +6,15 @@ import argparse
 import os
 import sys
 
-# 优先加载项目目录下的 .env 文件
-try:
-    from dotenv import load_dotenv
-
-    _ENV_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env")
-    load_dotenv(_ENV_PATH)
-except ImportError:
-    pass
-
 # 将项目根目录加入模块搜索路径
 PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
+
+# 加载 .env（项目根目录 / EXE 同级目录 / 当前工作目录）
+from shared.config import load_env
+
+load_env()
 
 from shared.state import StoryArc
 from local import ReZeroTwinSystem as LocalTwinSystem

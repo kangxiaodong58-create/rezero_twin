@@ -1,12 +1,12 @@
 # -*- mode: python ; coding: utf-8 -*-
-from PyInstaller.building.build_main import Analysis, PYZ, EXE, BUNDLE
+from PyInstaller.building.build_main import Analysis, PYZ, EXE
 
 a = Analysis(
     ['gui.py'],
     pathex=[],
     binaries=[],
-    datas=[('.env', '.')],
-    hiddenimports=['openai', 'dotenv'],
+    datas=[],
+    hiddenimports=['openai', 'dotenv', 'shared.config'],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],

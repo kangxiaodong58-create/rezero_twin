@@ -6,6 +6,21 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.2.0] - 2026-07-31 (Security Fix)
+
+### Security
+- `.env` 不再随 PyInstaller 打包进 EXE，杜绝 API Key 随 EXE 分发泄露的风险
+
+### Added
+- `shared/config.py`：统一 `.env` 查找逻辑（EXE 同级目录 → 项目根目录 → 当前工作目录）
+- GUI 缺少 API Key 时弹窗提示并回退本地模板模式，不再无声退出
+
+### Changed
+- `ReZeroTwin.spec` 移除 `.env` 打包项；EXE 运行需在同级目录放置 `.env`
+- `main.py` / `gui.py` / `llm/bridge.py` 的 dotenv 加载统一收口到 `shared/config.py`
+
+---
+
 ## [V9.1.1] - 2026-07-31 (GUI + EXE Edition)
 
 ### Added

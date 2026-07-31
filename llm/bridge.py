@@ -15,13 +15,9 @@ _PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-try:
-    from dotenv import load_dotenv
+from shared.config import load_env
 
-    _ENV_PATH = os.path.join(_PROJECT_ROOT, ".env")
-    load_dotenv(_ENV_PATH)
-except ImportError:
-    pass
+load_env()
 
 try:
     from openai import OpenAI

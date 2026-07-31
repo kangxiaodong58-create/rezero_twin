@@ -20,10 +20,10 @@ from local import ReZeroTwinSystem
 from shared.state import StoryArc
 from shared.memory_store import MemoryStore
 
-# 加载 .env
-from dotenv import load_dotenv
-_ENV_PATH = os.path.join(_PROJECT_ROOT, ".env")
-load_dotenv(_ENV_PATH)
+# 加载 .env（EXE 同级目录 → 项目根目录 → 当前工作目录）
+from shared.config import load_env
+
+load_env()
 
 
 class TwinChatApp:
@@ -41,21 +41,32 @@ class TwinChatApp:
         # 模式选择：local 或 llm
         self.mode = mem.get("mode", "llm")
         if self.mode == "llm":
-            from llm import ReZeroLLMBridge
+            try:
+                from llm import ReZeroLLMBridge
 
-            api_key = os.getenv("DEEPSEEK_API_KEY")
-            self.bot = ReZeroLLMBridge(
-                api_key=api_key,
-                base_url="https://api.deepseek.com",
-                model_name="deepseek-chat",
-                arc=StoryArc(mem.get("arc", "mansion_era")),
-                max_history=8,
-            )
-            self.bot.engine.favor = mem.get("favor", 15)
-            self.bot.engine.ram_favor = mem.get("ram_favor", 8)
-            self.bot.engine.independence = mem.get("independence", 0.25)
-            self.bot.engine.recovery = mem.get("recovery", 1.0)
-        else:
+                api_key = os.getenv("DEEPSEEK_API_KEY")
+                self.bot = ReZeroLLMBridge(
+                    api_key=api_key,
+                    base_url="https://api.deepseek.com",
+                    model_name="deepseek-chat",
+                    arc=StoryArc(mem.get("arc", "mansion_era")),
+                    max_history=8,
+                )
+                self.bot.engine.favor = mem.get("favor", 15)
+                self.bot.engine.ram_favor = mem.get("ram_favor", 8)
+                self.bot.engine.independence = mem.get("independence", 0.25)
+                self.bot.engine.recovery = mem.get("recovery", 1.0)
+            except Exception as e:
+                # 缺少 API Key / 依赖时提示并回退本地模板模式，避免无声闪退
+                from tkinter import messagebox
+
+                messagebox.showwarning(
+                    "LLM 模式不可用",
+                    f"{e}\n\n请将包含 DEEPSEEK_API_KEY 的 .env 放到程序同目录。\n"
+                    "本次启动将使用本地模板模式。",
+                )
+                self.mode = "local"
+        if self.mode != "llm":
             self.bot = ReZeroTwinSystem()
             self.bot.rem.engine.favor = mem.get("favor", 15)
             self.bot.rem.engine.ram_favor = mem.get("ram_favor", 8)

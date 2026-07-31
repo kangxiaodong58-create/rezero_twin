@@ -85,6 +85,8 @@ pip install openai python-dotenv
 DEEPSEEK_API_KEY=sk-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
+> 使用打包版 EXE 时，把 `.env` 放在 `ReZeroTwin.exe` 同目录即可（v9.2.0 起密钥不再嵌入 EXE）。
+
 ### 终端启动
 
 ```powershell
@@ -114,7 +116,7 @@ python gui.py
 pyinstaller ReZeroTwin.spec --clean
 ```
 
-打包完成后，`dist\ReZeroTwin.exe` 会生成，双击即可运行。窗口标题为 **"Re:Zero 双子系统"**，状态栏显示当前模式与状态。
+打包完成后，`dist\ReZeroTwin.exe` 会生成。**v9.2.0 起 `.env` 不再打包进 EXE**：请把包含 `DEEPSEEK_API_KEY` 的 `.env` 复制到 `ReZeroTwin.exe` 同目录，再双击运行。缺少 `.env` 时程序会弹窗提示并回退到本地模板模式，不会闪退。窗口标题为 **"Re:Zero 双子系统"**，状态栏显示当前模式与状态。
 
 > 注意：PyInstaller 输出末尾的 `Process exited with code 1` 不影响 EXE 正常生成，属于已知现象。
 
