@@ -10,6 +10,10 @@ v9.2.0 起 .env 不再打包进 EXE，改为运行时按以下顺序查找：
 
 找到第一个存在的文件即加载；都找不到则静默跳过
 （由调用方在读取 DEEPSEEK_API_KEY 时给出友好报错）。
+
+另提供 get_data_dir()：统一解析持久化数据目录，
+frozen 模式下指向 EXE 同级 data/（不可写时兜底用户数据目录），
+源码运行时指向项目根 data/。
 """
 
 from __future__ import annotations
@@ -61,3 +65,31 @@ def load_env(verbose: bool = False) -> Optional[str]:
         for path in _candidate_paths():
             print(f"  - {path}")
     return None
+
+
+def _user_data_root() -> str:
+    """平台用户数据目录（Windows: %APPDATA%；其他系统回退用户主目录）。"""
+    return os.environ.get("APPDATA") or os.path.expanduser("~")
+
+
+def get_data_dir() -> str:
+    """返回持久化数据目录（返回前确保目录已存在）。
+
+    - PyInstaller(frozen) 模式：EXE 同级目录的 data/；
+      若创建失败（如只读目录），静默兜底到 %APPDATA%/ReZeroTwin/data
+    - 源码运行：项目根目录的 data/
+    """
+    if getattr(sys, "frozen", False):
+        exe_path = sys.argv[0] if len(sys.argv) > 0 else sys.executable
+        candidate = os.path.join(os.path.dirname(os.path.abspath(exe_path)), "data")
+    else:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        candidate = os.path.join(project_root, "data")
+
+    try:
+        os.makedirs(candidate, exist_ok=True)
+        return candidate
+    except OSError:
+        fallback = os.path.join(_user_data_root(), "ReZeroTwin", "data")
+        os.makedirs(fallback, exist_ok=True)
+        return fallback

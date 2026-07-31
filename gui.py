@@ -36,8 +36,8 @@ class TwinChatApp:
         self.root.configure(bg="#fafafa")
         self.root.minsize(560, 400)
 
-        # 记忆存储
-        self.store = MemoryStore(_PROJECT_ROOT)
+        # 记忆存储（frozen → EXE 同级 data/；源码 → 项目根 data/）
+        self.store = MemoryStore()
         mem = self.store.load()
 
         # LLM 异步回复队列与等待标记

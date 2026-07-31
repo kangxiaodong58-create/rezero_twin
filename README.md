@@ -118,6 +118,8 @@ pyinstaller ReZeroTwin.spec --clean
 
 打包完成后，`dist\ReZeroTwin.exe` 会生成。**v9.2.0 起 `.env` 不再打包进 EXE**：请把包含 `DEEPSEEK_API_KEY` 的 `.env` 复制到 `ReZeroTwin.exe` 同目录，再双击运行。缺少 `.env` 时程序会弹窗提示并回退到本地模板模式，不会闪退。窗口标题为 **"Re:Zero 双子系统"**，状态栏显示当前模式与状态。
 
+**数据保存位置（v9.2.3 起）**：好感度、聊天记录等持久化数据保存在 EXE 同级 `data\` 目录（源码运行时为项目根 `data\`），删除该目录即可重置记忆。若 EXE 所在目录不可写（如 Program Files），会自动改存 `%APPDATA%\ReZeroTwin\data\`。
+
 > 注意：PyInstaller 输出末尾的 `Process exited with code 1` 不影响 EXE 正常生成，属于已知现象。
 
 ## 常见问题

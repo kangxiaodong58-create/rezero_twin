@@ -6,6 +6,20 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.2.3] - 2026-07-31 (Bug Fix)
+
+### Fixed
+- EXE（PyInstaller frozen）模式下好感度/聊天记录不再丢失：此前 `MemoryStore` 根目录指向临时解压目录（`sys._MEIPASS`），退出即被系统清理；现默认改存 EXE 同级 `data/` 目录，目录不可写时自动兜底到 `%APPDATA%\ReZeroTwin\data`
+
+### Added
+- `shared/config.py` 新增 `get_data_dir()`：统一解析持久化数据目录（frozen / 源码双模式，与 `load_env()` 同一惯例）
+
+### Changed
+- `MemoryStore` 默认存储根目录改由 `get_data_dir()` 解析；显式传入 `root_dir` 的行为不变
+- 源码运行（`python gui.py`）数据路径不变，仍为项目根 `data/`
+
+---
+
 ## [V9.2.2] - 2026-07-31 (Bug Fix)
 
 ### Fixed

@@ -10,11 +10,19 @@ import json
 import os
 from typing import Any, Dict, List, Optional
 
+from .config import get_data_dir
+
 
 class MemoryStore:
     def __init__(self, root_dir: Optional[str] = None) -> None:
-        self.root = root_dir or os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.data_dir = os.path.join(self.root, "data")
+        if root_dir is not None:
+            # 显式指定：保持原有语义（root_dir 下建 data/）
+            self.root = root_dir
+            self.data_dir = os.path.join(self.root, "data")
+        else:
+            # 默认：统一解析（frozen → EXE 同级 data/；源码 → 项目根 data/）
+            self.data_dir = get_data_dir()
+            self.root = os.path.dirname(self.data_dir)
         os.makedirs(self.data_dir, exist_ok=True)
         self.path = os.path.join(self.data_dir, "memory.json")
 
