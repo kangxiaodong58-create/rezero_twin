@@ -6,6 +6,14 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.2.5] - 2026-07-31 (Docs)
+
+### Changed
+- 全部开发日志（16 篇）归档至 `docs/devlog/`，`README_old.md` 移至 `docs/`；根目录只保留 `README.md` 与 `CHANGELOG.md`
+- 日志文件全部纳入版本管理（此前部分被 .gitignore 排除），作为项目历史完整保留
+
+---
+
 ## [V9.2.4] - 2026-07-31 (Chore)
 
 ### Added

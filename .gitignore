@@ -24,17 +24,4 @@ Thumbs.db
 .DS_Store
 
 # Old/temp files
-README_old.md
 test_mode.py
-fix_openai_import_2026-07-30.md
-修复dotenv路径问题_2026-07-30.md
-修复openai路径问题_2026-07-30.md
-修复多Python环境_2026-07-30.md
-修复默认模式为LLM_2026-07-31.md
-写入GitHub文档_2026-07-31.md
-切换为LLM模式_2026-07-30.md
-删除旧记忆并验证LLM_2026-07-31.md
-生成EXE总结_2026-07-30.md
-gui使用说明_2026-07-30.md
-项目诊断与优化路线_2026-07-31.md
-v9.2.0安全修复_2026-07-31.md
