@@ -7,7 +7,9 @@
 from __future__ import annotations
 
 import os
+import queue
 import sys
+import threading
 import tkinter as tk
 from tkinter import scrolledtext, font as tkfont
 
@@ -37,6 +39,10 @@ class TwinChatApp:
         # 记忆存储
         self.store = MemoryStore(_PROJECT_ROOT)
         mem = self.store.load()
+
+        # LLM 异步回复队列与等待标记
+        self._reply_queue = queue.Queue()
+        self._waiting_reply = False
 
         # 模式选择：local 或 llm
         self.mode = mem.get("mode", "llm")
@@ -203,6 +209,8 @@ class TwinChatApp:
         pass
 
     def on_send(self) -> None:
+        if self._waiting_reply:
+            return
         text = self.input_box.get("1.0", tk.END).strip()
         if not text:
             return
@@ -248,14 +256,52 @@ class TwinChatApp:
             self.update_status()
             return
 
+        if self.mode == "llm":
+            # LLM 网络调用放入后台线程，避免阻塞 Tkinter 主线程
+            self._set_waiting(True)
+            threading.Thread(
+                target=self._fetch_llm_reply, args=(text,), daemon=True
+            ).start()
+            self.root.after(100, self._poll_reply)
+            return
+
         try:
-            if self.mode == "llm":
-                raw_reply = self.bot.chat(text)
-            else:
-                raw_reply = self.bot.interact(text)
+            raw_reply = self.bot.interact(text)
         except Exception as e:
             raw_reply = f"【系统】调用失败：{e}"
+        self._handle_reply(raw_reply)
 
+    def _fetch_llm_reply(self, text: str) -> None:
+        """后台线程：调用 LLM 并把结果放入队列（线程内不触碰任何 Tkinter 控件）。"""
+        try:
+            reply = self.bot.chat(text)
+        except Exception as e:
+            reply = f"【系统】调用失败：{e}"
+        self._reply_queue.put(reply)
+
+    def _poll_reply(self) -> None:
+        """主线程轮询回复队列，收到后交 _handle_reply 处理。"""
+        try:
+            reply = self._reply_queue.get_nowait()
+        except queue.Empty:
+            self.root.after(100, self._poll_reply)
+            return
+        self._set_waiting(False)
+        self._handle_reply(reply)
+
+    def _set_waiting(self, waiting: bool) -> None:
+        """等待 LLM 回复期间禁用输入，防止并发发送。"""
+        self._waiting_reply = waiting
+        state = "disabled" if waiting else "normal"
+        self.input_box.config(state=state)
+        self.send_btn.config(state=state)
+        if waiting:
+            self.status_var.set("LLM 桥接模式 | 等待双子回复…")
+        else:
+            self.input_box.focus_set()
+
+    def _handle_reply(self, raw_reply: str) -> None:
+        """解析双子回复并持久化状态（local / llm 共用）。"""
         lines = raw_reply.strip().split("\n")
         for line in lines:
             line = line.strip()

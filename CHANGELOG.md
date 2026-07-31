@@ -6,6 +6,14 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.2.2] - 2026-07-31 (Bug Fix)
+
+### Fixed
+- GUI 在 LLM 模式下不再假死：`bot.chat()` 网络调用移入后台线程，主线程通过队列 + `root.after` 轮询接收回复；等待期间禁用输入框与发送键，回复到达后自动恢复
+- 回复解析与状态持久化逻辑提取为 `_handle_reply()`，local / llm 两种模式共用（行为不变）
+
+---
+
 ## [V9.2.1] - 2026-07-31 (Bug Fix)
 
 ### Fixed
