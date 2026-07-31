@@ -139,7 +139,7 @@ A: 确保在当前 PowerShell 使用的 Python 环境中安装依赖：
 pip install openai python-dotenv
 ```
 
-注意 OpenClaw 自带 Python 环境可能与系统 Python 不一致。
+注意 Python 环境可能与系统 Python 不一致。
 
 ## 状态一览（V9+）
 
