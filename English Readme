@@ -1,0 +1,376 @@
+## 1. English README.md
+
+```markdown
+# Re:Zero Twin System
+
+> A stateful character system for Ram & Rem from *Re:Zero − Starting Life in Another World*  
+> Evolving from pure rule-based engine to **Hard Constraints × Soft Expression** with LLM
+
+This project implements a dual-maid role-playing system centered on Ram and Rem.  
+It has gone through a complete iteration path: Rule Engine → Deep Psychological State Machine → State Machine + LLM Bridge.
+
+**Core Goal**:  
+Preserve the hard constraints of original lore, numerical progression, and risk control, while granting the LLM highly flexible and soulful natural language expression.
+
+---
+
+## Vision
+
+In character AI, two extremes are common:
+
+- Pure rule systems → Stable but rigid, lacking soul
+- Pure LLM systems → Flexible but prone to persona collapse, forgotten settings, and numerical chaos
+
+This project explores a third path:  
+**Let the state machine guard boundaries and growth logic, while the LLM unleashes linguistic and emotional expressiveness.**
+
+---
+
+## Core Design Principles
+
+1. **Numbers and logic must be controlled by the state machine** (favor, independence, evaluation stages, Oni form, etc.)
+2. **The LLM is only responsible for “how to say it”, never for “what it becomes”**
+3. **Relationships have structure** (not just favor point arithmetic)
+   - Rem: Emotional salvation ↔ Personal independence
+   - Ram: Observation → Recognition → Entrustment
+4. **High favor should have “loyalty lock”**, matching the emotional quality of the later original work
+5. **The twins must have functional division of labor**, not just taking turns speaking
+
+---
+
+## Architecture Overview
+
+```mermaid
+flowchart TD
+    A[User Input] --> B[HardStateEngine]
+    B --> C{Intent Detection}
+    C --> D[Safe Favor / Independence / Ram Stage Update]
+    C --> E[Oni Stage Machine]
+    C --> F[Context Summary]
+    D & E & F --> G[TwinState Snapshot]
+    G --> H[PromptBuilder]
+    H --> I[Structured System Prompt]
+    I --> J[LLM - DeepSeek / OpenAI / Local]
+    J --> K[Twin Response<br/>Rem + Ram]
+```
+
+---
+
+## Version Evolution (Key Insights)
+
+| Version | Core Breakthrough                        | Key Problem Solved                  | Reusable Insight                          |
+|---------|------------------------------------------|-------------------------------------|-------------------------------------------|
+| V4      | Bug fixes + Strict third-person          | Logic crashes, crude replacement    | Enum comparison, placeholders, order      |
+| V5      | Empire arc amnesia + Detailed Oni        | Missing arc differences             | State-branched dialogue libraries         |
+| V6      | Dynamic profile + Intent + Gentle push   | Only comfort, no push               | Session state & behavior patterns         |
+| V7      | Favor Loyalty Lock                       | Mysterious favor drops              | Anti-decay design for high-value bonds    |
+| V8      | Ram Evaluation Stages + Initiative       | Ram reduced to reply machine        | Supporting characters need growth curves  |
+| V9      | Entrustment + Independence + Breaker     | Relationships lack structure        | Upgrade from “favor” to “relationship stage” |
+| V9.1    | State Machine × LLM Bridge               | Rules rigid vs LLM uncontrolled     | Hard-soft separation paradigm             |
+
+---
+
+## Quick Start (LLM Version)
+
+```bash
+pip install openai
+
+export DEEPSEEK_API_KEY="your-key"
+python rezero_bridge.py
+```
+
+Useful commands:
+- `status` — View all hard states
+- `empire` / `mansion` — Switch story arc
+- `recover 0.6` — Set memory recovery progress
+- `quit` — Exit
+
+---
+
+## Current State Features (V9+)
+
+- Rem Favor + Loyalty Lock
+- Identity Independence (affects inferiority & subjectivity)
+- Ram Independent Favor + 5 Evaluation Stages
+- Oni Transformation (3 stages + aftermath)
+- Empire Arc Memory Recovery Progress
+- Structured Context Summary
+- Gentle Push + Procrastination Detection
+- Breaker Easter Egg
+
+---
+
+## Design Insights for Future Projects
+
+1. **Clarify relationship structure before writing code**  
+   Favor is surface-level. What matters is how characters define each other.
+
+2. **High-value states need anti-decay design**  
+   Once deep trust is given, it should not easily regress from daily friction.
+
+3. **Supporting characters deserve independent state machines**  
+   Ram’s evaluation stages and initiative significantly elevated the overall experience.
+
+4. **State machine owns “truth”, LLM owns “beauty”**  
+   This is currently one of the more sustainable architectures for character AI.
+
+5. **Easter eggs and narrative beats can be rare, but must carry weight**  
+   The Breaker line has extremely low trigger rate, yet creates strong emotional memory.
+
+---
+
+## Possible Future Directions
+
+- [ ] Streaming output support
+- [ ] Finer post-generation validation
+- [ ] Vectorized multi-turn context memory
+- [ ] Independent short-term goals for Ram & Rem
+- [ ] WebUI status panel
+- [ ] More late-arc (Chapter 9/10) anchors
+
+---
+
+## Disclaimer
+
+This is a personal learning and character understanding project.  
+All characters and settings belong to the original author of *Re:Zero* and related rights holders.
+
+For technical exploration and doujin exchange only.
+
+---
+
+**Maintainer**: [Your GitHub Username]  
+**Last Updated**: 2026-07-30
+```
+
+---
+
+## 2. Detailed Architecture Diagram (Mermaid)
+
+You can put this in `docs/architecture.md` or directly in the README.
+
+```markdown
+# System Architecture
+
+## High-Level Flow
+
+```mermaid
+flowchart TB
+    subgraph Input
+        U[User Input]
+    end
+
+    subgraph Hard Constraint Layer
+        HSE[HardStateEngine]
+        ID[Intent Detector]
+        SF[Safe Favor Updater<br/>with Loyalty Lock]
+        IND[Independence Adjuster]
+        RAM[Ram Stage Manager]
+        ONI[Oni Stage Machine]
+        CTX[Context Summarizer]
+    end
+
+    subgraph Snapshot
+        TS[TwinState]
+    end
+
+    subgraph Soft Expression Layer
+        PB[PromptBuilder]
+        SP[Structured System Prompt]
+        LLM[LLM API<br/>DeepSeek / OpenAI / Local]
+    end
+
+    subgraph Output
+        RESP[Formatted Twin Response<br/>【蕾姆】+【拉姆】]
+    end
+
+    U --> HSE
+    HSE --> ID
+    ID --> SF & IND & RAM & ONI & CTX
+    SF & IND & RAM & ONI & CTX --> TS
+    TS --> PB
+    PB --> SP
+    SP --> LLM
+    LLM --> RESP
+```
+
+## State Responsibility Separation
+
+```mermaid
+graph LR
+    A[HardStateEngine] -->|Owns| B[Numbers & Logic]
+    A -->|Owns| C[Risk Control]
+    A -->|Owns| D[Relationship Stages]
+    A -->|Owns| E[Growth / Decay Rules]
+
+    F[LLM] -->|Owns| G[Natural Language]
+    F -->|Owns| H[Emotional Nuance]
+    F -->|Owns| I[Twin Banter Style]
+    F -->|Does NOT own| B
+```
+
+## Rem & Ram Relationship Structure
+
+```mermaid
+graph TD
+    SUB[User / Subaru Role] -->|Breaks closed loop| REM[Rem]
+    SUB -->|Earns entrustment| RAM[Ram]
+
+    REM -->|Emotional Salvation| SUB
+    RAM -->|Tactical Trust & Entrustment| SUB
+
+    REM <-->|Symbiosis → Independence| RAM
+```
+```
+
+---
+
+## 3. Contribution Guide / Development Standards
+
+**File: `CONTRIBUTING.md`**
+
+```markdown
+# Contributing to Re:Zero Twin System
+
+Thank you for your interest in improving this project.  
+This document outlines the development standards and contribution process.
+
+## Development Philosophy
+
+- **State First**: Any new feature must first be expressible as a clear state or transition in the HardStateEngine.
+- **LLM is a renderer, not a decision maker**: Never let the model directly modify favor, independence, stages, or other hard values.
+- **Original Lore Priority**: When in conflict between “interesting” and “accurate to Re:Zero”, accuracy wins.
+- **Small, Testable Changes**: Prefer focused pull requests over large rewrites.
+
+## Code Standards
+
+### Python
+- Python 3.10+
+- Use type hints for all public functions and class attributes
+- Prefer `Enum` / `IntEnum` for states
+- Keep functions focused; avoid methods longer than ~40 lines when possible
+- Docstrings for all non-obvious classes and methods
+
+### Naming
+- Hard state related: `HardStateEngine`, `TwinState`, `safe_add_favor`
+- Prompt related: `PromptBuilder`, `build_system_prompt`
+- Character specific: `RemAI`, `RamAI` (if kept separate)
+
+### State Update Rules
+- All favor changes **must** go through `_safe_add_favor()` or equivalent guarded method
+- Independence and Ram stage changes should be intentional and logged in reason strings when debugging
+- Never decrease high-value states (BELOVED / ACKNOWLEDGED) without clear high-risk triggers
+
+## Adding New Features
+
+1. First design the **state impact** (what new field or transition is needed?)
+2. Update `HardStateEngine` and `TwinState`
+3. Extend `PromptBuilder` so the LLM receives clear natural language instructions about the new state
+4. Add test cases or at least manual verification paths
+5. Update CHANGELOG.md
+
+## Prompt Engineering Guidelines
+
+- Keep the system prompt structured and dense
+- Translate numerical states into behavioral guidance (e.g. “Independence 0.8 → rarely uses substitute speech”)
+- Prefer explicit instructions over hoping the model “understands”
+- Temperature should generally stay between 0.6–0.75 for persona stability
+
+## Testing Recommendations
+
+Before submitting:
+- [ ] Test favor lock behavior (try to drop favor after BELOVED)
+- [ ] Test independence growth and its effect on inferiority lines
+- [ ] Test Ram stage progression and entrustment lines
+- [ ] Test Empire arc amnesia → recovery transition
+- [ ] Test Oni stages and Ram’s reaction
+- [ ] Verify LLM still respects output format under various states
+
+## Pull Request Process
+
+1. Fork the repository
+2. Create a feature branch (`feature/ram-initiative-v2`)
+3. Make your changes following the standards above
+4. Update CHANGELOG.md under “Unreleased” or the appropriate version
+5. Open a Pull Request with a clear description of:
+   - What problem it solves
+   - Which states are affected
+   - How to test it
+
+## Questions & Discussion
+
+Feel free to open an Issue for:
+- Design discussions
+- Lore accuracy questions
+- Architecture proposals
+
+We value thoughtful discussion about character psychology and system design as much as code contributions.
+```
+
+---
+
+## 4. Suggested Module Structure
+
+Recommended directory layout for better maintainability:
+
+```text
+rezero-twin-system/
+├── README.md
+├── CHANGELOG.md
+├── CONTRIBUTING.md
+├── requirements.txt
+├── .env.example
+│
+├── rezero/
+│   ├── __init__.py
+│   │
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── enums.py              # StoryArc, FavorLevel, RamStage, OniStage, Intent...
+│   │   ├── state.py              # TwinState dataclass
+│   │   └── hard_engine.py        # HardStateEngine (numerical & logic core)
+│   │
+│   ├── characters/
+│   │   ├── __init__.py
+│   │   ├── rem.py                # Rem-specific logic & independence
+│   │   └── ram.py                # Ram stages, initiative, entrustment
+│   │
+│   ├── prompt/
+│   │   ├── __init__.py
+│   │   └── builder.py            # PromptBuilder
+│   │
+│   ├── llm/
+│   │   ├── __init__.py
+│   │   └── bridge.py             # ReZeroLLMBridge
+│   │
+│   └── utils/
+│       ├── __init__.py
+│       └── helpers.py
+│
+├── docs/
+│   ├── architecture.md           # Mermaid diagrams + design notes
+│   └── design_insights.md        # Longer reflections
+│
+├── examples/
+│   └── basic_chat.py
+│
+└── tests/
+    ├── test_favor_lock.py
+    ├── test_independence.py
+    └── test_ram_stages.py
+```
+
+### Module Responsibility Summary
+
+| Module              | Responsibility                                      | Should NOT contain          |
+|---------------------|-----------------------------------------------------|-----------------------------|
+| `core/hard_engine.py` | All numerical updates, locks, stage transitions    | Any natural language        |
+| `core/state.py`     | Pure data snapshot (`TwinState`)                    | Business logic              |
+| `characters/rem.py` | Independence logic, Rem-specific reactions          | Ram logic                   |
+| `characters/ram.py` | Evaluation stages, initiative, entrustment lines    | Rem favor logic             |
+| `prompt/builder.py` | Convert `TwinState` → high-quality system prompt    | State mutation              |
+| `llm/bridge.py`     | API calls, history management, orchestration        | Hard rules                  |
+
+
+
+你可以先把现在这些文件放进仓库，结构会清晰很多。
