@@ -6,6 +6,16 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.2.1] - 2026-07-31 (Bug Fix)
+
+### Fixed
+- 状态查询（`/status` 指令、GUI 状态栏刷新）不再推进状态机：此前显示层调用 `update("")` 会让状态机空转一轮，导致鬼化余韵衰减翻倍、连续负面/拖延计数被悄悄清零
+
+### Added
+- `HardStateEngine.snapshot()` 只读快照接口（pure read-only）：输出与 `update()` 相同字段的 `TwinState`，但零副作用，专供显示层使用
+
+---
+
 ## [V9.2.0] - 2026-07-31 (Security Fix)
 
 ### Security

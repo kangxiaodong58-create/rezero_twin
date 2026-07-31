@@ -380,6 +380,48 @@ class HardStateEngine:
             breaker_triggered=self.breaker_triggered,
         )
 
+    def snapshot(self) -> TwinState:
+        """只读状态快照（pure read-only）。
+
+        返回与 update() 末尾相同字段的 TwinState，但保证零副作用：
+        - 不推进鬼化余韵、不改变鬼化阶段
+        - 不衰减连续负面 / 连续拖延计数
+        - 不记录意图、不裁剪 context_emotions、不写 profile
+
+        专供状态显示（status 指令 / GUI 状态栏）使用；
+        真实用户输入的状态更新仍必须走 update()。
+        """
+        summary = (
+            f"近期情绪倾向: {' → '.join(self.context_emotions[-3:])}"
+            if self.context_emotions
+            else "平稳"
+        )
+        summary += f" | {self.profile.context.brief()}"
+
+        favor_level = self._get_favor_level()
+        wants_push = favor_level >= FavorLevel.DEAR and (
+            self.consecutive_negative >= 3 or self.consecutive_procrastinate >= 2
+        )
+
+        return TwinState(
+            arc=self.arc,
+            favor=self.favor,
+            favor_level=favor_level,
+            locked=self.locked,
+            independence=self.independence,
+            recovery=self.recovery,
+            ram_favor=self.ram_favor,
+            ram_stage=self._get_ram_stage(),
+            oni_stage=self.oni_stage,
+            witch_scent=self.witch_scent,
+            context_summary=summary,
+            user_name=self.user_name,
+            consecutive_negative=self.consecutive_negative,
+            wants_push=wants_push,
+            is_reunion=self.is_reunion,
+            breaker_triggered=self.breaker_triggered,
+        )
+
     def set_arc(self, arc: StoryArc) -> None:
         self.arc = arc
         if arc == StoryArc.EMPIRE_ERA:

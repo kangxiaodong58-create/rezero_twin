@@ -286,9 +286,9 @@ class TwinChatApp:
 
     def update_status(self) -> None:
         if self.mode == "llm":
-            state = self.bot.engine.update("")
+            state = self.bot.engine.snapshot()
         else:
-            state = self.bot.rem.engine.update("")
+            state = self.bot.rem.engine.snapshot()
         mode_text = "本地模板模式" if self.mode == "local" else "LLM 桥接模式"
         self.status_var.set(
             f"{mode_text} | 篇章：{state.arc.value} | "

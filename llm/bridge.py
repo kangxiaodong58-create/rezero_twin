@@ -91,7 +91,7 @@ class ReZeroLLMBridge:
         return reply
 
     def status(self) -> str:
-        state = self.engine.update("")
+        state = self.engine.snapshot()
         d = state.to_prompt_dict()
         lines = [f"{k}: {v}" for k, v in d.items()]
         return "===== 当前硬状态 =====\n" + "\n".join(lines)
