@@ -120,6 +120,16 @@ def test_keyword_judgment_v926() -> None:
     assert e5.favor == 16, f"温情档应 +1，实际 {e5.favor}"
 
 
+def test_amnesia_prompt_v927() -> None:
+    """v9.2.7：失忆篇 prompt 含防备/距离指令，正常篇章不含。"""
+    from shared.state import TwinState
+    amnesia = PromptBuilder.build(TwinState(recovery=0.0, arc=StoryArc.EMPIRE_ERA))
+    assert "防备" in amnesia and "距离感" in amnesia, "失忆 prompt 缺少防备/距离指令"
+    assert "沉睡的羁绊" in amnesia, "失忆 prompt 缺少数值-行为分离说明"
+    normal = PromptBuilder.build(TwinState(recovery=1.0, arc=StoryArc.MANSION_ERA))
+    assert "防备" not in normal, "正常篇章 prompt 不应含失忆防备指令"
+
+
 def test_local_interact() -> None:
     """本地模板模式一轮对话。"""
     twin = ReZeroTwinSystem()
@@ -138,6 +148,7 @@ def main() -> int:
         ("MemoryStore 读写", test_memory_store),
         ("PromptBuilder 约束字段", test_prompt_builder),
         ("关键词判定 v9.2.6", test_keyword_judgment_v926),
+        ("失忆防备指令 v9.2.7", test_amnesia_prompt_v927),
         ("本地模式对话", test_local_interact),
     ]
     failed = 0

@@ -6,6 +6,16 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.2.7] - 2026-07-31 (Bug Fix)
+
+### Fixed
+- **失忆篇防备感不足**：`recovery < 0.4` 的 prompt 指令重写——失忆蕾姆改为「温和但明显的距离感与轻微防备」，不再主动亲昵；新增「高好感数值是沉睡的羁绊，不要直接表现」的数值-行为分离说明，解决高锁定状态下失忆台词过度亲密的矛盾
+
+### Added
+- `tests/smoke_test.py` 新增失忆防备指令测试（总计 9 项）
+
+---
+
 ## [V9.2.6] - 2026-07-31 (Bug Fix)
 
 ### Fixed
