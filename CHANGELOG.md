@@ -6,6 +6,17 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.5.1] - 2026-07-31 (Docs)
+
+### Removed
+- 根目录冗余文件 `English Readme`（内容与 README 重复）
+
+### Changed
+- README 重构：移除内嵌的四段英文附录，新增「文档导航」「项目结构」（真实结构），版本路线更新至 V9.5，快速开始改用 `requirements.txt`
+- 英文内容各归其位：`docs/README_en.md`（修正失效命令）、`docs/architecture.md`（Mermaid，GitHub 原生渲染）、`CONTRIBUTING.md`（仓库标准位置）、`docs/vision_module_structure.md`（标注为远期愿景，非当前结构）
+
+---
+
 ## [V9.5.0] - 2026-07-31 (Feature)
 
 ### Added
