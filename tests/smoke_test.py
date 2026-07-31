@@ -94,6 +94,32 @@ def test_prompt_builder() -> None:
     assert state.favor_level == FavorLevel.STRANGER
 
 
+def test_keyword_judgment_v926() -> None:
+    """v9.2.6：肯定句识别与正面反馈词扩充。"""
+    # 肯定句「你不是替代品」→ 独立度上升
+    e = HardStateEngine()
+    base = e.independence
+    e.update("蕾姆，你不是任何人的替代品。你就是你。")
+    assert e.independence > base, f"肯定句应提升独立度: {base} -> {e.independence}"
+    # 攻击句「你只是替代品」→ 独立度下降（旧行为保持）
+    e2 = HardStateEngine()
+    base2 = e2.independence
+    e2.update("你只是拉姆的替代品。")
+    assert e2.independence < base2, f"攻击句应降低独立度: {base2} -> {e2.independence}"
+    # 表扬变体「辛苦你们了」→ +2
+    e3 = HardStateEngine()
+    e3.update("早餐很丰盛，辛苦你们了。")
+    assert e3.favor == 17, f"「辛苦你们了」应 +2，实际 {e3.favor}"
+    # 否定温情词「不太开心」→ 不加分
+    e4 = HardStateEngine()
+    e4.update("我今天不太开心。")
+    assert e4.favor == 15, f"否定句不应加分，实际 {e4.favor}"
+    # 温情档「有你们……幸福」→ +1
+    e5 = HardStateEngine()
+    e5.update("有你们在身边，真的很幸福。")
+    assert e5.favor == 16, f"温情档应 +1，实际 {e5.favor}"
+
+
 def test_local_interact() -> None:
     """本地模板模式一轮对话。"""
     twin = ReZeroTwinSystem()
@@ -111,6 +137,7 @@ def main() -> int:
         ("snapshot 无副作用", test_snapshot_no_side_effect),
         ("MemoryStore 读写", test_memory_store),
         ("PromptBuilder 约束字段", test_prompt_builder),
+        ("关键词判定 v9.2.6", test_keyword_judgment_v926),
         ("本地模式对话", test_local_interact),
     ]
     failed = 0

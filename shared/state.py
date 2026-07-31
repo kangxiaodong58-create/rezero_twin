@@ -191,7 +191,14 @@ class HardStateEngine:
     NEGATIVE_KEYWORDS = ["累", "疲惫", "难过", "伤心", "哭", "放弃", "做不到", "不配", "废物"]
     PROCRASTINATE_KEYWORDS = ["明天再说", "以后再做", "好麻烦", "不想做", "算了吧", "拖延"]
     DANGER_KEYWORDS = ["袭击", "危险", "杀", "敌人", "魔兽", "快跑"]
-    PRAISE_KEYWORDS = ["谢谢", "辛苦了", "真棒", "厉害", "喜欢你", "感谢"]
+    PRAISE_KEYWORDS = [
+        "谢谢", "感谢", "辛苦了", "辛苦你们", "辛苦你", "真棒", "很棒",
+        "厉害", "做得好", "了不起", "喜欢你", "喜欢你们", "爱你", "心疼你",
+    ]
+    # 温情小档（+1 好感）：温和正面但不含明确表扬词的表达
+    WARM_KEYWORDS = ["幸运", "安心", "开心", "幸福", "温柔", "可爱", "遇见你们", "有你们"]
+    # 否定语境词（用于「不是替代品」式肯定句识别）
+    NEGATORS = ["不是", "不再", "并没", "没有", "不", "没", "绝非"]
 
     def __init__(self, arc: StoryArc = StoryArc.MANSION_ERA) -> None:
         self.arc = arc
@@ -255,6 +262,28 @@ class HardStateEngine:
         if m:
             return m.group(1).strip()
         return None
+
+    def _is_negated(self, text: str, keyword: str, window: int = 6) -> bool:
+        """关键词首次出现处前方 window 字内是否存在否定词。"""
+        idx = text.find(keyword)
+        if idx < 0:
+            return False
+        prefix = text[max(0, idx - window):idx]
+        return any(neg in prefix for neg in self.NEGATORS)
+
+    def _contains_unnegated(self, text: str, keywords: List[str], window: int = 6) -> bool:
+        """任一关键词存在「前方 window 字内无否定词」的出现。"""
+        for kw in keywords:
+            start = 0
+            while True:
+                idx = text.find(kw, start)
+                if idx < 0:
+                    break
+                prefix = text[max(0, idx - window):idx]
+                if not any(neg in prefix for neg in self.NEGATORS):
+                    return True
+                start = idx + len(kw)
+        return False
 
     def _classify_intent(self, text: str) -> Intent:
         lowered = text.lower()
@@ -329,11 +358,23 @@ class HardStateEngine:
             self._safe_add_favor(3 if intent == Intent.FROM_ZERO else 2)
             self.independence = min(1.0, self.independence + 0.03)
             self.ram_favor = min(100, self.ram_favor + 1)
+        elif intent not in (Intent.VENT, Intent.SELF_DOUBT, Intent.BOUNDARY_TEST, Intent.DANGER) \
+                and self._contains_unnegated(text, self.WARM_KEYWORDS):
+            # 温情小档：无明确表扬词的温和正面表达，给小幅好感反馈
+            self._safe_add_favor(1)
 
-        # 替代品 / 姐姐比较 -> 独立度下降
-        if "替代品" in text or "不如姐姐" in text:
+        # 替代品 / 姐姐比较 -> 独立度变化（含肯定句识别）
+        if "不如姐姐" in text:
             self.independence = max(0.0, self.independence - 0.04)
             self.profile.context.add_emotion("自卑")
+        elif "替代品" in text:
+            if self._is_negated(text, "替代品"):
+                # 「你不是替代品」式肯定 -> 独立度上升
+                self.independence = min(1.0, self.independence + 0.04)
+                self.profile.context.add_emotion("被肯定")
+            else:
+                self.independence = max(0.0, self.independence - 0.04)
+                self.profile.context.add_emotion("自卑")
 
         # 名字提取
         extracted_name = self._extract_name(text)
