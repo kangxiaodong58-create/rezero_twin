@@ -62,6 +62,8 @@ class TwinChatApp:
                 self.bot.engine.ram_favor = mem.get("ram_favor", 8)
                 self.bot.engine.independence = mem.get("independence", 0.25)
                 self.bot.engine.recovery = mem.get("recovery", 1.0)
+                self.bot.engine.events = mem.get("events", [])
+                self.bot.engine.user_name = mem.get("user_name")
             except Exception as e:
                 # 缺少 API Key / 依赖时提示并回退本地模板模式，避免无声闪退
                 from tkinter import messagebox
@@ -78,6 +80,8 @@ class TwinChatApp:
             self.bot.rem.engine.ram_favor = mem.get("ram_favor", 8)
             self.bot.rem.engine.independence = mem.get("independence", 0.25)
             self.bot.rem.engine.recovery = mem.get("recovery", 1.0)
+            self.bot.rem.engine.events = mem.get("events", [])
+            self.bot.rem.engine.user_name = mem.get("user_name")
             try:
                 self.bot.set_arc(StoryArc(mem.get("arc", "mansion_era")))
             except ValueError:
@@ -327,6 +331,8 @@ class TwinChatApp:
         self.store.set("ram_favor", engine.ram_favor)
         self.store.set("independence", engine.independence)
         self.store.set("recovery", engine.recovery)
+        self.store.set("events", engine.events)
+        self.store.set("user_name", engine.user_name)
         self.store.set("mode", self.mode)
         self.update_status()
 

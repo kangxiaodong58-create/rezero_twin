@@ -37,6 +37,7 @@ class MemoryStore:
             "arc": "mansion_era",
             "chat_history": [],
             "mode": "llm",
+            "events": [],
         }
         try:
             with open(self.path, "r", encoding="utf-8") as f:

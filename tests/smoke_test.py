@@ -130,6 +130,46 @@ def test_amnesia_prompt_v927() -> None:
     assert "防备" not in normal, "正常篇章 prompt 不应含失忆防备指令"
 
 
+def test_event_memory_v930() -> None:
+    """v9.3.0：长期事件记忆——记录、钉住淘汰、prompt 注入、持久化。"""
+    from shared.state import TwinState
+    # 首次告知名字 → name_first 事件
+    e = HardStateEngine()
+    e.update("我叫小东，以后请多指教。")
+    assert any(ev["type"] == "name_first" and "小东" in ev["summary"] for ev in e.events), \
+        f"未记录名字事件: {e.events}"
+    # 好感等级跃迁 → favor_up 事件
+    e2 = HardStateEngine()
+    e2.favor = 19
+    e2.update("谢谢你")
+    assert any(ev["type"] == "favor_up" for ev in e2.events), "未记录好感跃迁事件"
+    # 肯定句 → affirm 事件
+    e3 = HardStateEngine()
+    e3.update("你不是任何人的替代品。")
+    assert any(ev["type"] == "affirm" for ev in e3.events), "未记录肯定事件"
+    # 容量与钉住：name_first 钉住，30 条上限
+    e4 = HardStateEngine()
+    e4.update("我叫小东。")
+    for _ in range(35):
+        e4.update("黑化吧")
+    assert len(e4.events) <= 30, f"超出容量上限: {len(e4.events)}"
+    assert any(ev["type"] == "name_first" for ev in e4.events), "钉住事件被误淘汰"
+    # prompt 注入：有事件出现「共同经历」，无事件不出现
+    p = PromptBuilder.build(TwinState(events=e.events))
+    assert "共同经历" in p and "小东" in p, "prompt 未注入共同经历"
+    p2 = PromptBuilder.build(TwinState())
+    assert "共同经历" not in p2, "空事件不应出现共同经历小节"
+    # 持久化：events + user_name 经 MemoryStore 跨重开保留
+    with tempfile.TemporaryDirectory() as tmp:
+        store = MemoryStore(tmp)
+        store.set("events", e.events)
+        store.set("user_name", e.user_name)
+        store2 = MemoryStore(tmp)
+        evs = store2.get("events")
+        assert evs and evs[0]["type"] == "name_first", "events 未持久化"
+        assert store2.get("user_name") == "小东", "user_name 未持久化"
+
+
 def test_local_interact() -> None:
     """本地模板模式一轮对话。"""
     twin = ReZeroTwinSystem()
@@ -149,6 +189,7 @@ def main() -> int:
         ("PromptBuilder 约束字段", test_prompt_builder),
         ("关键词判定 v9.2.6", test_keyword_judgment_v926),
         ("失忆防备指令 v9.2.7", test_amnesia_prompt_v927),
+        ("长期事件记忆 v9.3.0", test_event_memory_v930),
         ("本地模式对话", test_local_interact),
     ]
     failed = 0

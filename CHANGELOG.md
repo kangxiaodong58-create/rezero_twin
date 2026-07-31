@@ -6,6 +6,22 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.3.0] - 2026-07-31 (Feature)
+
+### Added
+- **长期事件记忆**：状态机自动认定重要时刻并沉淀为事件（首次告知名字 / 好感等级跃迁 / 忠诚锁定 / 拉姆阶段跃迁 / 重逢 / 鬼化 / 破局者 / 身份肯定 / 高风险冲突），零 API 成本
+  - 容量 30 条；里程碑类事件（名字/锁定/重逢/破局者）钉住不淘汰
+  - `PromptBuilder` 新增「共同经历」小节：钉住 + 最近事件至多 6 条注入 prompt，并明确「不要编造未列出的经历」
+  - `memory.json` 新增 `events` 字段；GUI 双模式持久化
+- `user_name` 纳入 GUI 持久化（此前重启丢失称呼；也是名字事件去重的前提）
+- `tests/smoke_test.py` 新增事件记忆测试（总计 10 项）
+
+### Compatibility
+- 旧 `memory.json` 无 `events` 字段 → 默认空列表，无缝兼容
+- 本地模式台词逻辑不变（事件照常记录，模板回复不读事件）
+
+---
+
 ## [V9.2.7] - 2026-07-31 (Bug Fix)
 
 ### Fixed

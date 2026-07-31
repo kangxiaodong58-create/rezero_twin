@@ -136,6 +136,7 @@ class TwinState:
         wants_push: bool = False,
         is_reunion: bool = False,
         breaker_triggered: bool = False,
+        events: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         self.arc = arc
         self.favor = favor
@@ -153,6 +154,7 @@ class TwinState:
         self.wants_push = wants_push
         self.is_reunion = is_reunion
         self.breaker_triggered = breaker_triggered
+        self.events = events if events is not None else []
 
     def to_prompt_dict(self) -> Dict[str, Any]:
         return {
@@ -199,6 +201,9 @@ class HardStateEngine:
     WARM_KEYWORDS = ["幸运", "安心", "开心", "幸福", "温柔", "可爱", "遇见你们", "有你们"]
     # 否定语境词（用于「不是替代品」式肯定句识别）
     NEGATORS = ["不是", "不再", "并没", "没有", "不", "没", "绝非"]
+    # 长期事件记忆（v9.3.0）：容量上限与钉住类型（钉住事件不被淘汰）
+    MAX_EVENTS = 30
+    PINNED_EVENT_TYPES = ("name_first", "locked", "reunion", "breaker")
 
     def __init__(self, arc: StoryArc = StoryArc.MANSION_ERA) -> None:
         self.arc = arc
@@ -218,6 +223,9 @@ class HardStateEngine:
         self.context_emotions: List[str] = []
         self.open_topics: List[str] = []
         self.profile = UserProfile()
+        # 长期事件记忆与对话计数（v9.3.0）
+        self.events: List[Dict[str, Any]] = []
+        self.turn_count = 0
 
     def _get_favor_level(self) -> FavorLevel:
         for lv in reversed(FavorLevel):
@@ -285,6 +293,61 @@ class HardStateEngine:
                 start = idx + len(kw)
         return False
 
+    def _add_event(self, type_: str, summary: str, excerpt: str = "") -> None:
+        """追加一条长期事件记忆；超容量时优先淘汰最旧的非钉住事件。"""
+        self.events.append({
+            "type": type_,
+            "summary": summary,
+            "excerpt": excerpt[:30],
+            "favor": self.favor,
+            "arc": self.arc.value,
+            "seq": self.turn_count,
+            "pinned": type_ in self.PINNED_EVENT_TYPES,
+        })
+        if len(self.events) > self.MAX_EVENTS:
+            for i, ev in enumerate(self.events):
+                if not ev.get("pinned"):
+                    self.events.pop(i)
+                    break
+            else:
+                self.events.pop(0)
+
+    def _detect_events(self, text: str, intent: Intent, prev: Dict[str, Any]) -> None:
+        """重要时刻检测（规则判定，零 API 成本）。在 update() 末尾调用。"""
+        n = self.turn_count
+        # 首次告知名字
+        if prev["user_name"] is None and self.user_name:
+            self._add_event("name_first", f"第{n}次对话：用户第一次告知名字「{self.user_name}」", text)
+        # 好感等级跃迁
+        level_now = self._get_favor_level()
+        if level_now > prev["level"]:
+            self._add_event("favor_up", f"第{n}次对话：好感提升至 {level_now.name}", text)
+        # 忠诚锁定达成
+        if self.locked and not prev["locked"]:
+            self._add_event("locked", f"第{n}次对话：好感抵达 95，忠诚锁定达成", text)
+        # 拉姆阶段跃迁
+        order = [RamStage.SUSPICIOUS, RamStage.OBSERVING, RamStage.DECENT,
+                 RamStage.RELUCTANT, RamStage.ACKNOWLEDGED]
+        ram_now = self._get_ram_stage()
+        if order.index(ram_now) > order.index(prev["ram_stage"]):
+            self._add_event("ram_up", f"第{n}次对话：拉姆评价进入「{ram_now.value}」", text)
+        # 记忆恢复重逢
+        if self.is_reunion and not prev["reunion"]:
+            self._add_event("reunion", f"第{n}次对话：记忆恢复，重逢", text)
+        # 鬼化进入完全解放 / 失控边缘
+        if self.oni_stage in (OniStage.FULL, OniStage.BRINK) and self.oni_stage != prev["oni"]:
+            label = "完全解放" if self.oni_stage == OniStage.FULL else "失控边缘"
+            self._add_event("oni", f"第{n}次对话：蕾姆鬼化{label}", text)
+        # 破局者彩蛋
+        if self.breaker_triggered and not prev["breaker"]:
+            self._add_event("breaker", f"第{n}次对话：破局者时刻", text)
+        # 身份肯定（「你不是替代品」式）
+        if "替代品" in text and self._is_negated(text, "替代品"):
+            self._add_event("affirm", f"第{n}次对话：用户肯定蕾姆是独立的个体", text)
+        # 高风险冲突
+        if any(k in text for k in self.HIGH_RISK_KEYWORDS):
+            self._add_event("conflict", f"第{n}次对话：发生高风险冲突（魔女残香上升）", text)
+
     def _classify_intent(self, text: str) -> Intent:
         lowered = text.lower()
         if "从零开始" in text and any(k in text for k in ["吧", "吧！", "吧。", "啊"]):
@@ -309,6 +372,17 @@ class HardStateEngine:
 
     def update(self, user_input: str) -> TwinState:
         text = user_input.strip()
+        # 记录更新前快照，供事件检测对比（v9.3.0）
+        prev = {
+            "level": self._get_favor_level(),
+            "ram_stage": self._get_ram_stage(),
+            "locked": self.locked,
+            "reunion": self.is_reunion,
+            "breaker": self.breaker_triggered,
+            "oni": self.oni_stage,
+            "user_name": self.user_name,
+        }
+        self.turn_count += 1
         intent = self._classify_intent(text)
         self.profile.session.last_intent = intent
 
@@ -396,6 +470,9 @@ class HardStateEngine:
         )
         summary += f" | {self.profile.context.brief()}"
 
+        # 重要时刻检测（长期事件记忆，v9.3.0）
+        self._detect_events(text, intent, prev)
+
         favor_level = self._get_favor_level()
         wants_push = favor_level >= FavorLevel.DEAR and (
             self.consecutive_negative >= 3 or self.consecutive_procrastinate >= 2
@@ -419,6 +496,7 @@ class HardStateEngine:
             wants_push=wants_push,
             is_reunion=self.is_reunion,
             breaker_triggered=self.breaker_triggered,
+            events=self.events,
         )
 
     def snapshot(self) -> TwinState:
@@ -461,6 +539,7 @@ class HardStateEngine:
             wants_push=wants_push,
             is_reunion=self.is_reunion,
             breaker_triggered=self.breaker_triggered,
+            events=self.events,
         )
 
     def set_arc(self, arc: StoryArc) -> None:

@@ -58,6 +58,26 @@ class PromptBuilder:
             )
         special_str = "\n".join(special) if special else "无特殊战斗或危机状态。"
 
+        # 共同经历（长期事件记忆，v9.3.0）：钉住里程碑 + 最近事件，至多 6 条
+        events = getattr(state, "events", None) or []
+        if events:
+            pinned = [e for e in events if e.get("pinned")]
+            recent = [e for e in events if not e.get("pinned")][-3:]
+            shown = (pinned + recent)[-6:]
+            lines = []
+            for e in shown:
+                line = f"- {e.get('summary', '')}"
+                if e.get("excerpt"):
+                    line += f"（用户当时说：{e['excerpt']}）"
+                lines.append(line)
+            events_section = (
+                "\n### 共同经历（真实发生的长期记忆，可自然引用；不要编造未列出的经历）\n\n"
+                + "\n".join(lines)
+                + "\n"
+            )
+        else:
+            events_section = ""
+
         return f"""你正在扮演《Re:从零开始的异世界生活》中的蕾姆与拉姆。必须严格遵守以下状态与人设，不得擅自改变数值或关系阶段。
 
 ### 当前硬性状态（不可违背）
@@ -71,7 +91,7 @@ class PromptBuilder:
 - 拉姆好感：{state.ram_favor}/100
 - 上下文摘要：{state.context_summary}
 - 特殊状态：{special_str}
-
+{events_section}
 ### 角色扮演核心要求
 
 **蕾姆**：
