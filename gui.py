@@ -1,4 +1,4 @@
-"""Re:Zero 双子系统 —— 图形界面聊天窗口。
+"""Re:Zero 双子系统 —— PySide6(Qt) 图形界面聊天窗口。
 
 双击运行或启动后弹出窗口，像 QQ/微信一样聊天。
 自动保存聊天记录和好感度到 data/memory.json，重启后记忆恢复。
@@ -7,401 +7,358 @@
 from __future__ import annotations
 
 import os
-import queue
 import sys
-import threading
-import tkinter as tk
-from tkinter import scrolledtext, font as tkfont
 
 # 确保项目根目录在路径中
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from local import ReZeroTwinSystem
-from shared.state import StoryArc
-from shared.memory_store import MemoryStore
-
-# 加载 .env（EXE 同级目录 → 项目根目录 → 当前工作目录）
 from shared.config import load_env
 
 load_env()
 
+from PySide6.QtCore import Qt, QTimer, QSize
+from PySide6.QtGui import QFont, QColor, QPalette, QTextCursor, QIcon
+from PySide6.QtWidgets import (
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QTextEdit,
+    QLineEdit,
+    QPushButton,
+    QLabel,
+    QFrame,
+    QScrollArea,
+    QMessageBox,
+    QSizePolicy,
+    QSpacerItem,
+)
 
-class TwinChatApp:
-    def __init__(self, root: tk.Tk) -> None:
-        self.root = root
-        self.root.title("Re:Zero 双子系统")
-        self.root.geometry("720x560")
-        self.root.configure(bg="#fafafa")
-        self.root.minsize(560, 400)
+from local import ReZeroTwinSystem
+from shared.state import StoryArc
+from shared.memory_store import MemoryStore
 
-        # 记忆存储（frozen → EXE 同级 data/；源码 → 项目根 data/）
-        self.store = MemoryStore()
+
+class BubbleLabel(QLabel):
+    """聊天气泡标签。"""
+
+    def __init__(self, text: str, is_user: bool = False, parent=None) -> None:
+        super().__init__(parent)
+        self.setWordWrap(True)
+        self.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self.setFont(QFont("Microsoft YaHei", 11))
+        self.setContentsMargins(12, 8, 12, 8)
+
+        if is_user:
+            bg = "#95ec69"
+            fg = "#1a1a1a"
+        else:
+            bg = "#ffffff"
+            fg = "#1a1a1a"
+
+        self.setStyleSheet(
+            f"""
+            QLabel {{
+                background-color: {bg};
+                color: {fg};
+                border-radius: 10px;
+                padding: 8px 12px;
+            }}
+        """
+        )
+        self.setText(text)
+
+
+class ChatMessageWidget(QWidget):
+    """一条聊天消息：头像 + 气泡。"""
+
+    def __init__(self, sender: str, text: str, is_user: bool = False, parent=None) -> None:
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(10, 6, 10, 6)
+        layout.setSpacing(10)
+
+        avatar = QLabel(sender[:2])
+        avatar.setAlignment(Qt.AlignCenter)
+        avatar.setFixedSize(36, 36)
+        avatar.setFont(QFont("Microsoft YaHei", 12, QFont.Bold))
+        avatar.setStyleSheet(
+            f"""
+            QLabel {{
+                background-color: {'#07c160' if is_user else '#ff6b9d'};
+                color: white;
+                border-radius: 18px;
+            }}
+        """
+        )
+
+        bubble = BubbleLabel(text, is_user=is_user)
+        bubble.setMaximumWidth(520)
+
+        if is_user:
+            layout.addStretch()
+            layout.addWidget(bubble)
+            layout.addWidget(avatar)
+        else:
+            layout.addWidget(avatar)
+            layout.addWidget(bubble)
+            layout.addStretch()
+
+
+class TwinChatApp(QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("Re:Zero 双子系统")
+        self.setMinimumSize(880, 640)
+        self.resize(960, 720)
+
+        self.store = MemoryStore(_PROJECT_ROOT)
         mem = self.store.load()
 
-        # LLM 异步回复队列与等待标记
-        self._reply_queue = queue.Queue()
-        self._waiting_reply = False
-
-        # 模式选择：local 或 llm
         self.mode = mem.get("mode", "llm")
+        self.bot = self._create_bot(mem)
+
+        self._setup_ui()
+        self._apply_theme()
+        self._load_history(mem)
+
+    def _create_bot(self, mem: dict):
         if self.mode == "llm":
             try:
                 from llm import ReZeroLLMBridge
 
                 api_key = os.getenv("DEEPSEEK_API_KEY")
-                self.bot = ReZeroLLMBridge(
+                bot = ReZeroLLMBridge(
                     api_key=api_key,
                     base_url="https://api.deepseek.com",
                     model_name="deepseek-chat",
                     arc=StoryArc(mem.get("arc", "mansion_era")),
                     max_history=8,
                 )
-                self.bot.engine.favor = mem.get("favor", 15)
-                self.bot.engine.ram_favor = mem.get("ram_favor", 8)
-                self.bot.engine.independence = mem.get("independence", 0.25)
-                self.bot.engine.recovery = mem.get("recovery", 1.0)
-                self.bot.engine.events = mem.get("events", [])
-                self.bot.engine.user_name = mem.get("user_name")
+                bot.engine.favor = mem.get("favor", 15)
+                bot.engine.ram_favor = mem.get("ram_favor", 8)
+                bot.engine.independence = mem.get("independence", 0.25)
+                bot.engine.recovery = mem.get("recovery", 1.0)
+                return bot
             except Exception as e:
-                # 缺少 API Key / 依赖时提示并回退本地模板模式，避免无声闪退
-                from tkinter import messagebox
-
-                messagebox.showwarning(
+                QMessageBox.warning(
+                    self,
                     "LLM 模式不可用",
                     f"{e}\n\n请将包含 DEEPSEEK_API_KEY 的 .env 放到程序同目录。\n"
                     "本次启动将使用本地模板模式。",
                 )
                 self.mode = "local"
-        if self.mode != "llm":
-            self.bot = ReZeroTwinSystem()
-            self.bot.rem.engine.favor = mem.get("favor", 15)
-            self.bot.rem.engine.ram_favor = mem.get("ram_favor", 8)
-            self.bot.rem.engine.independence = mem.get("independence", 0.25)
-            self.bot.rem.engine.recovery = mem.get("recovery", 1.0)
-            self.bot.rem.engine.events = mem.get("events", [])
-            self.bot.rem.engine.user_name = mem.get("user_name")
-            try:
-                self.bot.set_arc(StoryArc(mem.get("arc", "mansion_era")))
-            except ValueError:
-                self.bot.set_arc(StoryArc.MANSION_ERA)
 
-        # 字体
-        self.font_role = tkfont.Font(family="Microsoft YaHei", size=10, weight="bold")
-        self.font_text = tkfont.Font(family="Microsoft YaHei", size=11)
-        self.font_input = tkfont.Font(family="Microsoft YaHei", size=11)
+        bot = ReZeroTwinSystem()
+        bot.rem.engine.favor = mem.get("favor", 15)
+        bot.rem.engine.ram_favor = mem.get("ram_favor", 8)
+        bot.rem.engine.independence = mem.get("independence", 0.25)
+        bot.rem.engine.recovery = mem.get("recovery", 1.0)
+        try:
+            bot.set_arc(StoryArc(mem.get("arc", "mansion_era")))
+        except ValueError:
+            bot.set_arc(StoryArc.MANSION_ERA)
+        return bot
 
-        # 顶部标题
-        header = tk.Frame(root, bg="#4a90e2", height=48)
-        header.pack(side=tk.TOP, fill=tk.X)
-        header.pack_propagate(False)
-        title = tk.Label(
-            header,
-            text="Re:Zero 双子系统",
-            font=("Microsoft YaHei", 14, "bold"),
-            bg="#4a90e2",
-            fg="white",
+    def _setup_ui(self) -> None:
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QVBoxLayout(central)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setSpacing(0)
+
+        # 顶部标题栏
+        header = QFrame()
+        header.setFixedHeight(60)
+        header_layout = QHBoxLayout(header)
+        header_layout.setContentsMargins(20, 0, 20, 0)
+
+        title = QLabel("Re:Zero 双子系统")
+        title.setFont(QFont("Microsoft YaHei", 16, QFont.Bold))
+        header_layout.addWidget(title)
+
+        header_layout.addStretch()
+
+        self.status_label = QLabel(f"模式: {self.mode.upper()} | 篇章: {self._arc_name()}")
+        self.status_label.setFont(QFont("Microsoft YaHei", 10))
+        header_layout.addWidget(self.status_label)
+
+        main_layout.addWidget(header)
+
+        # 聊天区域
+        self.scroll = QScrollArea()
+        self.scroll.setWidgetResizable(True)
+        self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll.setFrameShape(QFrame.NoFrame)
+
+        self.chat_container = QWidget()
+        self.chat_layout = QVBoxLayout(self.chat_container)
+        self.chat_layout.setAlignment(Qt.AlignTop)
+        self.chat_layout.addStretch()
+
+        self.scroll.setWidget(self.chat_container)
+        main_layout.addWidget(self.scroll, 1)
+
+        # 输入区域
+        input_frame = QFrame()
+        input_frame.setFixedHeight(120)
+        input_layout = QVBoxLayout(input_frame)
+        input_layout.setContentsMargins(16, 10, 16, 16)
+        input_layout.setSpacing(10)
+
+        input_row = QHBoxLayout()
+        input_row.setSpacing(10)
+
+        self.input_box = QTextEdit()
+        self.input_box.setPlaceholderText("输入消息，按 Enter 发送，Shift+Enter 换行...")
+        self.input_box.setFont(QFont("Microsoft YaHei", 11))
+        self.input_box.setFixedHeight(80)
+        self.input_box.installEventFilter(self)
+        input_row.addWidget(self.input_box, 1)
+
+        self.send_btn = QPushButton("发送")
+        self.send_btn.setFixedSize(80, 80)
+        self.send_btn.setFont(QFont("Microsoft YaHei", 12, QFont.Bold))
+        self.send_btn.setCursor(Qt.PointingHandCursor)
+        self.send_btn.clicked.connect(self._send_message)
+        input_row.addWidget(self.send_btn)
+
+        input_layout.addLayout(input_row)
+        main_layout.addWidget(input_frame)
+
+        # 底部状态栏
+        footer = QFrame()
+        footer.setFixedHeight(30)
+        footer_layout = QHBoxLayout(footer)
+        footer_layout.setContentsMargins(16, 0, 16, 0)
+
+        self.footer_label = QLabel("就绪")
+        self.footer_label.setFont(QFont("Microsoft YaHei", 9))
+        footer_layout.addWidget(self.footer_label)
+        footer_layout.addStretch()
+
+        main_layout.addWidget(footer)
+
+    def _apply_theme(self) -> None:
+        self.setStyleSheet(
+            """
+            QMainWindow {
+                background-color: #f5f5f5;
+            }
+            QFrame#header, QFrame {
+                background-color: #ffffff;
+                border: none;
+            }
+            QTextEdit {
+                border: 1px solid #e0e0e0;
+                border-radius: 8px;
+                padding: 8px;
+                background-color: #ffffff;
+            }
+            QPushButton {
+                background-color: #07c160;
+                color: white;
+                border: none;
+                border-radius: 8px;
+            }
+            QPushButton:hover {
+                background-color: #06ad56;
+            }
+            QPushButton:pressed {
+                background-color: #059a4c;
+            }
+            QScrollArea {
+                border: none;
+                background-color: #f5f5f5;
+            }
+        """
         )
-        title.pack(side=tk.LEFT, padx=15, pady=8)
 
-        # 聊天记录区
-        self.chat_area = scrolledtext.ScrolledText(
-            root,
-            wrap=tk.WORD,
-            font=self.font_text,
-            bg="#ffffff",
-            fg="#333333",
-            padx=12,
-            pady=12,
-            state="disabled",
-            relief="flat",
-            borderwidth=0,
-        )
-        self.chat_area.pack(side=tk.TOP, fill=tk.BOTH, expand=True, padx=10, pady=(10, 5))
+    def _arc_name(self) -> str:
+        try:
+            return self.bot.engine.arc.value
+        except AttributeError:
+            return self.bot.rem.engine.arc.value
 
-        # 标签样式
-        self.chat_area.tag_config("role", font=self.font_role, spacing1=4, spacing3=2)
-        self.chat_area.tag_config("user", foreground="#2c3e50", spacing3=6)
-        self.chat_area.tag_config("rem", foreground="#e91e63", spacing3=6)
-        self.chat_area.tag_config("ram", foreground="#9c27b0", spacing3=6)
-        self.chat_area.tag_config("system", foreground="#7f8c8d", spacing3=6)
+    def _load_history(self, mem: dict) -> None:
+        for item in mem.get("chat_history", [])[-20:]:
+            sender = item.get("sender", "未知")
+            text = item.get("text", "")
+            self._append_message(sender, text, is_user=(sender == "你"))
 
-        # 输入区
-        input_frame = tk.Frame(root, bg="#fafafa")
-        input_frame.pack(side=tk.BOTTOM, fill=tk.X, padx=10, pady=(0, 10))
+    def _append_message(self, sender: str, text: str, is_user: bool = False) -> None:
+        msg = ChatMessageWidget(sender, text, is_user=is_user)
+        self.chat_layout.insertWidget(self.chat_layout.count() - 1, msg)
+        QTimer.singleShot(50, self._scroll_to_bottom)
 
-        self.input_box = tk.Text(
-            input_frame,
-            height=3,
-            font=self.font_input,
-            wrap=tk.WORD,
-            relief="solid",
-            borderwidth=1,
-            bg="white",
-            fg="#333333",
-            padx=8,
-            pady=6,
-        )
-        self.input_box.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
-        self.input_box.focus_set()
+    def _scroll_to_bottom(self) -> None:
+        vsb = self.scroll.verticalScrollBar()
+        vsb.setValue(vsb.maximum())
 
-        self.send_btn = tk.Button(
-            input_frame,
-            text="发送",
-            command=self.on_send,
-            font=("Microsoft YaHei", 11),
-            bg="#4a90e2",
-            fg="white",
-            activebackground="#357abd",
-            relief="flat",
-            width=8,
-        )
-        self.send_btn.pack(side=tk.RIGHT, padx=(8, 0), fill=tk.Y)
-
-        # 回车发送，Shift+回车换行
-        self.input_box.bind("<Return>", self.on_enter)
-        self.input_box.bind("<Shift-Return>", self.on_shift_enter)
-
-        # 状态栏
-        self.status_var = tk.StringVar(value="本地模板模式 | 宅邸篇")
-        status_bar = tk.Label(
-            root,
-            textvariable=self.status_var,
-            bd=1,
-            relief=tk.SUNKEN,
-            anchor=tk.W,
-            font=("Microsoft YaHei", 9),
-            bg="#f0f0f0",
-        )
-        status_bar.pack(side=tk.BOTTOM, fill=tk.X)
-
-        self.load_history()
-        self.update_status()
-
-    def append_message(self, role: str, content: str, tag: str = "") -> None:
-        self.chat_area.config(state="normal")
-        self.chat_area.insert(tk.END, f"{role}\n", "role")
-        self.chat_area.insert(tk.END, f"{content}\n\n", tag if tag else "normal")
-        self.chat_area.config(state="disabled")
-        self.chat_area.see(tk.END)
-
-    def load_history(self) -> None:
-        history = self.store.get("chat_history", [])
-        for item in history[-50:]:
-            role = item.get("role", "系统")
-            content = item.get("content", "")
-            if role == "你":
-                self.append_message(role, content, "user")
-            elif role in ("蕾姆", "拉姆"):
-                self.append_message(role, content, "rem" if role == "蕾姆" else "ram")
-            else:
-                self.append_message(role, content, "system")
-        if not history:
-            self.append_message(
-                "系统",
-                "欢迎来到 Re:Zero 双子系统。\n输入消息开始和蕾姆、拉姆对话。\n输入 /status 查看状态，/empire /mansion /late 切换篇章，/llm /local 切换模式，/quit 退出。",
-                "system",
-            )
-
-    def on_enter(self, event: tk.Event) -> str:
-        self.on_send()
-        return "break"
-
-    def on_shift_enter(self, event: tk.Event) -> None:
-        # 允许默认换行行为
-        pass
-
-    def on_send(self) -> None:
-        if self._waiting_reply:
-            return
-        text = self.input_box.get("1.0", tk.END).strip()
+    def _send_message(self) -> None:
+        text = self.input_box.toPlainText().strip()
         if not text:
             return
-        self.input_box.delete("1.0", tk.END)
-        self.append_message("你", text, "user")
-        self.store.append_chat("你", text)
 
-        lowered = text.lower()
-        if lowered in ("/quit", "quit", "退出"):
-            self.root.destroy()
-            return
-        if lowered == "/status":
-            reply = self.bot.status()
-            self.append_message("系统", reply, "system")
-            return
-        if lowered == "/empire":
-            self.bot.set_arc(StoryArc.EMPIRE_ERA)
-            self.store.set("arc", StoryArc.EMPIRE_ERA.value)
-            self.append_message("系统", "→ 已切换至帝国篇（失忆）", "system")
-            self.update_status()
-            return
-        if lowered == "/mansion":
-            self.bot.set_arc(StoryArc.MANSION_ERA)
-            self.store.set("arc", StoryArc.MANSION_ERA.value)
-            self.append_message("系统", "→ 已切换回宅邸篇", "system")
-            self.update_status()
-            return
-        if lowered == "/late":
-            self.bot.set_arc(StoryArc.LATE_ARC)
-            self.store.set("arc", StoryArc.LATE_ARC.value)
-            self.append_message("系统", "→ 已切换至后期篇章", "system")
-            self.update_status()
-            return
-        if lowered.startswith("/recover"):
-            parts = text.split()
-            try:
-                p = float(parts[1]) if len(parts) > 1 else 1.0
-            except ValueError:
-                p = 1.0
-            self.bot.recover(p)
-            self.store.set("recovery", p)
-            self.append_message("系统", f"→ 记忆恢复进度设为 {p}", "system")
-            self.update_status()
-            return
-        if lowered in ("/llm", "/local"):
-            self._switch_mode("llm" if lowered == "/llm" else "local")
-            return
+        self.input_box.clear()
+        self._append_message("你", text, is_user=True)
+        self.footer_label.setText("双子正在思考...")
+        self.send_btn.setEnabled(False)
 
-        if self.mode == "llm":
-            # LLM 网络调用放入后台线程，避免阻塞 Tkinter 主线程
-            self._set_waiting(True)
-            threading.Thread(
-                target=self._fetch_llm_reply, args=(text,), daemon=True
-            ).start()
-            self.root.after(100, self._poll_reply)
-            return
+        QTimer.singleShot(100, lambda: self._get_reply(text))
 
+    def _get_reply(self, text: str) -> None:
         try:
-            raw_reply = self.bot.interact(text)
-        except Exception as e:
-            raw_reply = f"【系统】调用失败：{e}"
-        self._handle_reply(raw_reply)
-
-    def _fetch_llm_reply(self, text: str) -> None:
-        """后台线程：调用 LLM 并把结果放入队列（线程内不触碰任何 Tkinter 控件）。"""
-        try:
-            reply = self.bot.chat(text)
-        except Exception as e:
-            reply = f"【系统】调用失败：{e}"
-        self._reply_queue.put(reply)
-
-    def _poll_reply(self) -> None:
-        """主线程轮询回复队列，收到后交 _handle_reply 处理。"""
-        try:
-            reply = self._reply_queue.get_nowait()
-        except queue.Empty:
-            self.root.after(100, self._poll_reply)
-            return
-        self._set_waiting(False)
-        self._handle_reply(reply)
-
-    def _set_waiting(self, waiting: bool) -> None:
-        """等待 LLM 回复期间禁用输入，防止并发发送。"""
-        self._waiting_reply = waiting
-        state = "disabled" if waiting else "normal"
-        self.input_box.config(state=state)
-        self.send_btn.config(state=state)
-        if waiting:
-            self.status_var.set("LLM 桥接模式 | 等待双子回复…")
-        else:
-            self.input_box.focus_set()
-
-    def _handle_reply(self, raw_reply: str) -> None:
-        """解析双子回复并持久化状态（local / llm 共用）。"""
-        lines = raw_reply.strip().split("\n")
-        for line in lines:
-            line = line.strip()
-            if line.startswith("【蕾姆】:"):
-                content = line[len("【蕾姆】:"):].strip().strip('"')
-                self.append_message("蕾姆", content, "rem")
-                self.store.append_chat("蕾姆", content)
-            elif line.startswith("【拉姆】:"):
-                content = line[len("【拉姆】:"):].strip().strip('"')
-                self.append_message("拉姆", content, "ram")
-                self.store.append_chat("拉姆", content)
+            if self.mode == "llm":
+                reply = self.bot.chat(text)
             else:
-                if line:
-                    self.append_message("系统", line, "system")
-                    self.store.append_chat("系统", line)
+                reply = self.bot.interact(text)
+        except Exception as e:
+            reply = f"【系统】出错了：{e}"
 
-        # 持久化当前状态
-        if self.mode == "llm":
-            engine = self.bot.engine
-        else:
-            engine = self.bot.rem.engine
-        self.store.set("favor", engine.favor)
-        self.store.set("ram_favor", engine.ram_favor)
-        self.store.set("independence", engine.independence)
-        self.store.set("recovery", engine.recovery)
-        self.store.set("events", engine.events)
-        self.store.set("user_name", engine.user_name)
-        self.store.set("mode", self.mode)
-        self.update_status()
+        self._append_message("双子", reply, is_user=False)
+        self._save_state()
+        self.footer_label.setText("就绪")
+        self.send_btn.setEnabled(True)
 
-    def _current_engine(self):
-        """返回当前 bot 的硬状态引擎（两种模式统一取值）。"""
-        return self.bot.engine if self.mode == "llm" else self.bot.rem.engine
-
-    def _switch_mode(self, target: str) -> None:
-        """切换 local / llm 模式，并迁移硬状态（v9.4.0）。"""
-        if target == self.mode:
-            self.append_message("系统", f"当前已是{'LLM 桥接' if target == 'llm' else '本地模板'}模式。", "system")
-            return
-        old = self._current_engine()
+    def _save_state(self) -> None:
         try:
-            if target == "llm":
-                from llm import ReZeroLLMBridge
-
-                new_bot = ReZeroLLMBridge(
-                    api_key=os.getenv("DEEPSEEK_API_KEY"),
-                    base_url="https://api.deepseek.com",
-                    model_name="deepseek-chat",
-                    arc=old.arc,
-                    max_history=8,
-                )
-                new_engine = new_bot.engine
-            else:
-                new_bot = ReZeroTwinSystem()
-                new_bot.set_arc(old.arc)
-                new_engine = new_bot.rem.engine
-            # 状态迁移（在 set_arc 之后覆盖，避免被篇章默认值重置）
-            new_engine.favor = old.favor
-            new_engine.ram_favor = old.ram_favor
-            new_engine.independence = old.independence
-            new_engine.recovery = old.recovery
-            new_engine.locked = old.locked
-            new_engine.user_name = old.user_name
-            new_engine.events = old.events
-            self.bot = new_bot
-            self.mode = target
-            self.store.set("mode", target)
-            self.append_message(
-                "系统",
-                f"→ 已切换至{'LLM 桥接' if target == 'llm' else '本地模板'}模式（好感/独立度/记忆/共同经历已迁移）",
-                "system",
+            engine = self.bot.engine if self.mode == "llm" else self.bot.rem.engine
+            self.store.save(
+                {
+                    "mode": self.mode,
+                    "arc": engine.arc.value,
+                    "favor": engine.favor,
+                    "ram_favor": engine.ram_favor,
+                    "independence": engine.independence,
+                    "recovery": engine.recovery,
+                }
             )
         except Exception as e:
-            self.append_message("系统", f"切换失败：{e}", "system")
-        self.update_status()
+            self.footer_label.setText(f"保存状态失败: {e}")
 
-    def update_status(self) -> None:
-        if self.mode == "llm":
-            state = self.bot.engine.snapshot()
-        else:
-            state = self.bot.rem.engine.snapshot()
-        mode_text = "本地模板模式" if self.mode == "local" else "LLM 桥接模式"
-        self.status_var.set(
-            f"{mode_text} | 篇章：{state.arc.value} | "
-            f"蕾姆好感：{state.favor}/100 | 拉姆：{state.ram_stage.value} | "
-            f"独立度：{state.independence:.2f}"
-        )
+    def eventFilter(self, source, event) -> bool:
+        from PySide6.QtCore import QEvent
+        if source is self.input_box and event.type() == QEvent.KeyPress:
+            if event.key() == Qt.Key_Return and not event.modifiers() & Qt.ShiftModifier:
+                self._send_message()
+                return True
+        return super().eventFilter(source, event)
+
+    def closeEvent(self, event) -> None:
+        self._save_state()
+        event.accept()
 
 
 def main() -> None:
-    root = tk.Tk()
-    TwinChatApp(root)
-    root.mainloop()
+    app = QApplication(sys.argv)
+    app.setFont(QFont("Microsoft YaHei", 10))
+    window = TwinChatApp()
+    window.show()
+    sys.exit(app.exec())
 
 
 if __name__ == "__main__":
