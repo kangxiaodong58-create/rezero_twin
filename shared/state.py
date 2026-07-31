@@ -395,6 +395,11 @@ class HardStateEngine:
             self.witch_scent = min(5, self.witch_scent + 2)
             self.ram_favor = max(0, self.ram_favor - 6)
             self.profile.context.last_drop_reason = "高风险越界"
+        # 小额冒犯档（v9.5.0）：边界试探但未命中高危词 -> 小幅扣分
+        # （DEAR/BELOVED/锁定下会被 _safe_add_favor 既有豁免层拦截）
+        elif intent == Intent.BOUNDARY_TEST:
+            self._safe_add_favor(-3)
+            self.profile.context.last_drop_reason = "轻度冒犯"
 
         # 鬼化 / 危机
         if any(k in text for k in ["解放鬼角", "鬼化", "角解放", "变成鬼", "失控"]) or intent == Intent.DANGER:
@@ -433,24 +438,31 @@ class HardStateEngine:
         is_praise = any(k in text for k in self.PRAISE_KEYWORDS)
         if is_praise or intent == Intent.FROM_ZERO:
             self._safe_add_favor(3 if intent == Intent.FROM_ZERO else 2)
-            self.independence = min(1.0, self.independence + 0.03)
+            # v9.5.0：表扬对独立度的带动降为 +0.01（独立度主线回归身份肯定）
+            self.independence = min(1.0, self.independence + 0.01)
             self.ram_favor = min(100, self.ram_favor + 1)
         elif intent not in (Intent.VENT, Intent.SELF_DOUBT, Intent.BOUNDARY_TEST, Intent.DANGER) \
                 and self._contains_unnegated(text, self.WARM_KEYWORDS):
             # 温情小档：无明确表扬词的温和正面表达，给小幅好感反馈
             self._safe_add_favor(1)
 
+        # 主动关心拉姆（v9.5.0）：提及拉姆本人 +1（攻击语境除外）
+        if intent == Intent.MENTION_RAM and "替代品" not in text and "不如姐姐" not in text:
+            self.ram_favor = min(100, self.ram_favor + 1)
+
         # 替代品 / 姐姐比较 -> 独立度变化（含肯定句识别）
         if "不如姐姐" in text:
             self.independence = max(0.0, self.independence - 0.04)
+            self._safe_add_favor(-1)  # v9.5.0：人格攻击追加小幅好感代价
             self.profile.context.add_emotion("自卑")
         elif "替代品" in text:
             if self._is_negated(text, "替代品"):
-                # 「你不是替代品」式肯定 -> 独立度上升
-                self.independence = min(1.0, self.independence + 0.04)
+                # 「你不是替代品」式肯定 -> 独立度上升（v9.5.0 权重提升）
+                self.independence = min(1.0, self.independence + 0.06)
                 self.profile.context.add_emotion("被肯定")
             else:
                 self.independence = max(0.0, self.independence - 0.04)
+                self._safe_add_favor(-1)  # v9.5.0：人格攻击追加小幅好感代价
                 self.profile.context.add_emotion("自卑")
 
         # 名字提取

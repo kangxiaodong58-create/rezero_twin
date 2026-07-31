@@ -210,6 +210,42 @@ def test_local_convergence_v940() -> None:
     assert solo.favor() == 10, "未绑定 RamAI 旧行为被破坏"
 
 
+def test_value_channels_v950() -> None:
+    """v9.5.0：小额冒犯档、独立度解耦、拉姆成长通道。"""
+    from shared.state import Intent
+    # 小额冒犯（边界试探未命中高危词）→ -3
+    e = HardStateEngine()
+    e.update("这就是恶搞吧。")
+    assert e.profile.session.last_intent == Intent.BOUNDARY_TEST
+    assert e.favor == 12, f"小额冒犯应 -3，实际 {e.favor}"
+    # DEAR 下小额冒犯被既有豁免层拦截
+    e2 = HardStateEngine()
+    e2.favor = 85
+    e2.update("这就是恶搞吧。")
+    assert e2.favor == 85, f"DEAR 应豁免小额冒犯，实际 {e2.favor}"
+    # 替代品攻击：favor -1 且独立度 -0.04；且提及拉姆不触发 +1（攻击语境）
+    e3 = HardStateEngine()
+    e3.update("你只是拉姆的替代品。")
+    assert e3.favor == 14, f"替代品攻击应 -1，实际 {e3.favor}"
+    assert abs(e3.independence - 0.21) < 1e-9
+    assert e3.ram_favor == 8, f"攻击语境提及拉姆不应 +1，实际 {e3.ram_favor}"
+    # 表扬独立度新速率 +0.01
+    e4 = HardStateEngine()
+    e4.update("谢谢你")
+    assert abs(e4.independence - 0.26) < 1e-9, f"表扬独立度应为 0.26: {e4.independence}"
+    # 肯定句独立度新速率 +0.06
+    e5 = HardStateEngine()
+    e5.update("你不是替代品。")
+    assert abs(e5.independence - 0.31) < 1e-9, f"肯定句独立度应为 0.31: {e5.independence}"
+    # 提及拉姆 +1；提及 + 表扬叠加 +2
+    e6 = HardStateEngine()
+    e6.update("拉姆，你今天心情不错？")
+    assert e6.ram_favor == 9, f"提及拉姆应 +1，实际 {e6.ram_favor}"
+    e7 = HardStateEngine()
+    e7.update("拉姆，谢谢你。")
+    assert e7.ram_favor == 10, f"提及+表扬应 +2，实际 {e7.ram_favor}"
+
+
 def test_local_interact() -> None:
     """本地模板模式一轮对话。"""
     twin = ReZeroTwinSystem()
@@ -232,6 +268,7 @@ def main() -> int:
         ("长期事件记忆 v9.3.0", test_event_memory_v930),
         ("意图误判修复 v9.3.1", test_intent_affirm_v931),
         ("本地真源收敛 v9.4.0", test_local_convergence_v940),
+        ("数值通道精细化 v9.5.0", test_value_channels_v950),
         ("本地模式对话", test_local_interact),
     ]
     failed = 0
