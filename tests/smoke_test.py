@@ -170,6 +170,19 @@ def test_event_memory_v930() -> None:
         assert store2.get("user_name") == "小东", "user_name 未持久化"
 
 
+def test_intent_affirm_v931() -> None:
+    """v9.3.1：肯定句不再误判 SELF_DOUBT，攻击句仍正确归类。"""
+    from shared.state import Intent
+    e = HardStateEngine()
+    e.update("你不是任何人的替代品。你就是你。")
+    assert e.profile.session.last_intent != Intent.SELF_DOUBT, "肯定句被误判 SELF_DOUBT"
+    assert e.consecutive_negative == 0, f"肯定句误累积连续负面: {e.consecutive_negative}"
+    e2 = HardStateEngine()
+    e2.update("我只是个替代品，什么都做不好。")
+    assert e2.profile.session.last_intent == Intent.SELF_DOUBT
+    assert e2.consecutive_negative == 1
+
+
 def test_local_interact() -> None:
     """本地模板模式一轮对话。"""
     twin = ReZeroTwinSystem()
@@ -190,6 +203,7 @@ def main() -> int:
         ("关键词判定 v9.2.6", test_keyword_judgment_v926),
         ("失忆防备指令 v9.2.7", test_amnesia_prompt_v927),
         ("长期事件记忆 v9.3.0", test_event_memory_v930),
+        ("意图误判修复 v9.3.1", test_intent_affirm_v931),
         ("本地模式对话", test_local_interact),
     ]
     failed = 0

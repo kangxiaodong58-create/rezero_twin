@@ -6,6 +6,13 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.3.1] - 2026-07-31 (Bug Fix)
+
+### Fixed
+- 肯定句（「你不是替代品」）不再被意图分类误判为 SELF_DOUBT：「替代品」词从 SELF_DOUBT 词表拆出并加否定免疫，避免误累积连续负面计数导致错误触发轻推
+
+---
+
 ## [V9.3.0] - 2026-07-31 (Feature)
 
 ### Added

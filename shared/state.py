@@ -360,7 +360,10 @@ class HardStateEngine:
             return Intent.DANGER
         if any(k in text for k in ["狮子王", "王国", "无名之星", "星的光芒"]):
             return Intent.WORLD_LATE
-        if any(k in text for k in ["放弃", "做不到", "一无所有", "不配", "废物", "替代品"]):
+        if any(k in text for k in ["放弃", "做不到", "一无所有", "不配", "废物"]):
+            return Intent.SELF_DOUBT
+        # 「替代品」需排除否定语境（「你不是替代品」是肯定句，v9.3.1）
+        if "替代品" in text and not self._is_negated(text, "替代品"):
             return Intent.SELF_DOUBT
         if any(k in text for k in ["明天再说", "以后再做", "好麻烦", "不想做", "算了吧", "拖延"]):
             return Intent.PROCRASTINATE
