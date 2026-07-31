@@ -6,6 +6,14 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V9.2.4] - 2026-07-31 (Chore)
+
+### Added
+- `requirements.txt`：`openai` / `python-dotenv` / `pyinstaller` 一键安装
+- `tests/smoke_test.py`：无框架冒烟测试（`python tests/smoke_test.py`），覆盖引擎好感与风控、篇章切换、记忆恢复重逢、snapshot 无副作用、MemoryStore 读写、PromptBuilder 约束字段、本地模式对话，共 7 项；不调用 LLM、不产生 API 费用，MemoryStore 用临时目录隔离
+
+---
+
 ## [V9.2.3] - 2026-07-31 (Bug Fix)
 
 ### Fixed

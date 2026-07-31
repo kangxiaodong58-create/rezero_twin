@@ -1,0 +1,11 @@
+# Re:Zero 双子系统依赖
+# 安装：pip install -r requirements.txt
+
+# LLM 桥接模式（DeepSeek / OpenAI 兼容接口）
+openai>=1.0
+
+# .env 配置加载
+python-dotenv>=1.0
+
+# 打包 EXE（仅构建时需要，运行不需要）
+pyinstaller>=6.0
