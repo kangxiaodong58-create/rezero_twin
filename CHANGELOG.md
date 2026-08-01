@@ -6,6 +6,89 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V10.3.0] - 2026-07-31 (Feature)
+
+### Added
+- **世界状态持久化**：`WorldState` 新增 `save_dict()` / `load_or_create()`，GUI 启动时从 `memory.json` 恢复世界状态，退出自动保存；跨天时天气自然过渡
+- **Opening Vignette 开场引言**：LLM 模式首次启动（无历史对话）时异步生成文学性场景描写，显示"✨ 正在感知宅邸的氛围…"占位，失败回退默认描述
+
+### Fixed
+- 天气改为按日期确定性生成（`_weather_for_date(date_str)`），同一日期重启不再与历史记录矛盾
+
+---
+
+## [V10.2.2] - 2026-07-31 (Bug Fix)
+
+### Fixed
+- **LLMWorker `finished` 信号修复**：此前仅在流式输出为空时发射，导致角色回复不入库、双子气泡不拆分、第二轮起卡死在"双子正在回复中"；改为始终发射
+
+---
+
+## [V10.2.1] - 2026-07-31 (Bug Fix + Feature)
+
+### Fixed
+- **流式线程安全**：`_streaming_active` 守卫防并发发送；发送前清理旧线程（quit/wait/terminate）并断开旧信号；跨线程信号统一 `Qt.QueuedConnection`——修复快速连发导致的 EXE 崩溃
+
+### Added
+- **历史搜索栏**：顶部搜索框调用 `ConversationStore.search()`（FTS5 全文检索），结果以气泡形式展示
+
+---
+
+## [V10.2.0] - 2026-07-31 (Refactor + Feature)
+
+### Added
+- **SQLite ConversationStore**（`shared/conversation_store.py`）：对话历史从 JSON 迁移至 SQLite + FTS5，GUI 分页读取、全文搜索；旧 JSON chat_history 首次启动自动迁移，之后 JSON 只存硬状态
+- **StructuredProfile 结构化画像**：从引擎事件提取重要承诺/关键时刻，`PromptBuilder.build(state, world, profile)` 新增「结构化画像（长期记忆）」小节
+
+### Changed
+- 三级记忆映射成型：L1 结构化画像（~150 token）/ L2 长期事件（~200）/ L3 滑动窗口 8 轮（~800）
+
+---
+
+## [V10.1.0] - 2026-07-31 (Feature + Bug Fix)
+
+### Fixed
+- **流式双气泡拆分**：流式期间用临时气泡预览，完成后按【蕾姆】/【拉姆】拆分为独立气泡（蓝/粉），此前两人台词灌入同一气泡
+
+### Added
+- **WorldState 世界事件系统**：时段（7 段）+ 天气（5 种，日夜差异化描写）注入 Prompt「当前世界状态」小节；底部状态栏显示时段与天气
+
+### Performance
+- `MAX_VISIBLE_WIDGETS = 80` 防 widget 泄漏；chat_history 上限 300 条、LLM history 上限 8 轮；LLM 模式强制流式不阻塞 UI
+
+---
+
+## [V10.0.2] - 2026-07-31 (Build Fix)
+
+### Fixed
+- **PyInstaller 打包**：spec 改用 `collect_all('openai')` 递归收集子模块与 `pydantic_core` C 扩展，修复 EXE 运行时 ImportError；构建环境统一切换至运行时同一 venv（EXE 66MB → 76MB）
+
+---
+
+## [V10.0.1] - 2026-07-31 (Bug Fix)
+
+### Fixed
+- **openai 懒加载**：导入从模块顶层移入 `ReZeroLLMBridge.__init__()`，`from llm import ReZeroLLMBridge` 不再依赖 openai 是否可用；修复打包环境下本地 → LLM 切换被误阻断
+- 移除 `llm/bridge.py` 冗余 `sys.path` 操作（frozen 下可能解析到错误路径）
+
+---
+
+## [V10.0.0] - 2026-07-31 (Major UI Rewrite)
+
+### Added
+- **PySide6 宅邸 × VN 融合 UI**：`gui.py` 完全重写（Tkinter → PySide6，~1100 行），三栏布局（蕾姆面板 / 聊天区 / 拉姆面板）
+- **角色立绘**：`assets/rem_sprite.jpg`、`assets/ram_sprite.jpg`，自动缩放，缺失时 emoji 占位
+- **樱花飘落动画**：`SakuraOverlay` 透明叠加层，35 花瓣粒子，30fps
+- **流式输出**：`ReZeroLLMBridge.chat_stream()`，逐 token 更新气泡，首 token 识别角色
+
+### Fixed
+- chat_history 双格式兼容、双子回复拆分解析、LLM 调用移入 QThread、补回全部快捷命令
+
+### Notes
+- EXE 体积约 56.8MB（Qt 库所致）；宅邸和纸色 + 深棕木色 + 双子蓝粉主题
+
+---
+
 ## [V9.5.2] - 2026-07-31 (Docs, Open Source Ready)
 
 ### Added
