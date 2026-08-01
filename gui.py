@@ -21,7 +21,7 @@ _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
-from shared.config import load_env
+from shared.config import load_env, get_data_dir
 load_env()
 
 from PySide6.QtCore import Qt, QTimer, Signal, QObject, QThread
@@ -37,7 +37,10 @@ from shared.state import StoryArc
 from shared.memory_store import MemoryStore
 from shared.conversation_store import ConversationStore
 
-_LOG_PATH = os.path.join(_PROJECT_ROOT, "data", "gui.log")
+# 日志与持久化统一走 get_data_dir()：
+# frozen 时指向 EXE 同级 data/，源码时指向项目根 data/。
+# 切勿用 _PROJECT_ROOT（frozen 下是 _MEIPASS 临时目录，退出即丢）。
+_LOG_PATH = os.path.join(get_data_dir(), "gui.log")
 
 
 def _log(msg: str) -> None:
@@ -488,16 +491,18 @@ class SakuraOverlay(QWidget):
 class TwinChatApp(QMainWindow):
     def __init__(self) -> None:
         super().__init__()
-        _log("TwinChatApp.__init__ 开始 (gui V10.0.1, lazy-import bridge)")
+        _log("TwinChatApp.__init__ 开始 (gui V10.4.0, frozen-safe data dir)")
         self.setWindowTitle("❄ Re:Zero 双子系统 — Rem × Ram")
         self.setMinimumSize(1000, 650)
         self.resize(1100, 750)
 
         # 记忆存储（JSON — 硬状态）+ 对话流水（SQLite — 完整历史）
-        self.store = MemoryStore(_PROJECT_ROOT)
+        # MemoryStore() 无参：统一走 get_data_dir()（frozen → EXE 同级 data/）
+        # 禁止传 _PROJECT_ROOT：frozen 下指向 _MEIPASS，world_state 会丢
+        self.store = MemoryStore()
         self.mem = self.store.load()
         self.conv_store = ConversationStore()
-        _log(f"记忆加载: mode={self.mem.get('mode')} arc={self.mem.get('arc')}")
+        _log(f"记忆加载: mode={self.mem.get('mode')} arc={self.mem.get('arc')} data={self.store.path}")
 
         # 迁移旧 JSON chat_history → SQLite（仅首次）
         old_history = self.mem.get("chat_history", [])
