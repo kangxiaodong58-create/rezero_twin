@@ -18,6 +18,8 @@ a = Analysis(
         'shared.state',
         'shared.prompts',
         'shared.memory_store',
+        'shared.conversation_store',
+        'shared.vignette',
         'llm.bridge',
         'local.rem_ai',
         'local.twin_system',

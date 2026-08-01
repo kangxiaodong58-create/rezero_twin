@@ -276,8 +276,8 @@ def test_world_state_v1040() -> None:
     assert ws2.weather_seed != 42 or ws2.weather_last_change, "种子未演进"
     ws2b = WorldState._determine_weather(ws2.current_time[:10], ws2.period, ws2.weather_seed)
     assert ws2b == ws2.weather, "推演后天气不满足确定性"
-    # last_interaction_ts 驱动真实离线天数
-    old3 = dict(old, last_interaction_ts=_time.time() - 5 * 86400)
+    # last_interaction_ts 驱动真实离线天数（+2h 余量避免浮点边界抖动）
+    old3 = dict(old, last_interaction_ts=_time.time() - 5 * 86400 - 7200)
     assert WorldState.load_or_create(old3).days_since_last == 5
     # mark_interaction：清零天数并刷新时间戳
     ws3 = WorldState.load_or_create(old3)
