@@ -893,7 +893,12 @@ class TwinChatApp(QMainWindow):
     # ── 开场引言 ────────────────────────────
 
     def _generate_vignette(self) -> None:
-        """生成开场氛围段（异步，不阻塞 UI）。"""
+        """生成开场氛围段（异步，不阻塞 UI）。
+
+        v10.4 起走 shared.vignette 的 L0-L3 多级生成：
+        L0 缓存 → L1 LLM(重试+校验) → L2 动态模板 → L3 静态兜底。
+        引言为 View-Only 数据，绝不写入对话历史（save=False + 不进 messages）。
+        """
         if self.mode != "llm" or not hasattr(self.bot, 'world'):
             self._append_parsed_message(
                 "系统", "欢迎回到罗兹瓦尔宅邸。输入消息开始对话。", "system", save=False
@@ -902,26 +907,7 @@ class TwinChatApp(QMainWindow):
 
         self._append_parsed_message("系统", "✨ 正在感知宅邸的氛围…", "system", save=False)
 
-        system_text = (
-            "你正在为《Re:Zero》双子女仆系统撰写一段开场引言（类似轻小说章节开头的氛围描写）。"
-            "不要对用户说话，只需用第三人称描写场景。"
-        )
-        user_text = (
-            f"当前世界状态：\n"
-            f"- 时间：{self.world.period}\n"
-            f"- 天气：{self.world.weather}\n"
-            f"- 地点：罗兹瓦尔宅邸\n"
-            f"- 蕾姆好感：{self.bot.engine.favor}/100\n"
-            f"- 拉姆评价：{self.bot.engine._get_ram_stage().value}\n"
-            f"\n"
-            f"请用第三人称、略带文学性的笔调描写当前场景。"
-            f"自然融入蕾姆和拉姆正在做的事情，以及她们对环境/时间的细微感受。"
-            f"不要直接对用户说话，不要总结，不要解释。控制在 100 字以内。"
-            f"语气符合原著氛围，可带一点淡淡的温情或寂静感。"
-            f"只输出引言本身，不加任何标记。"
-        )
-
-        def _on_done(reply: str):
+        def _on_done(clean: str):
             # 移除旧的"正在感知"消息
             count = self.chat_layout.count()
             if count >= 2:
@@ -930,28 +916,35 @@ class TwinChatApp(QMainWindow):
                     w = item.widget()
                     w.setParent(None)
                     w.deleteLater()
-            clean = reply.strip()
-            if clean.startswith("（") and clean.endswith("）"):
-                clean = f"宅邸的轮廓在{self.world.period}的{self.world.weather}中若隐若现。"
             self._append_parsed_message("系统", f"━━  ✦  ━━\n{clean}\n━━  ✦  ━━", "system", save=False)
 
         # 用 raw_completion 绕过角色 system prompt
         class VignetteWorker(QObject):
             finished = Signal(str)
             error = Signal(str)
-            def __init__(self, bot, system_p, user_p):
+            def __init__(self, bot, world):
                 super().__init__()
-                self.bot = bot; self.sp = system_p; self.up = user_p
+                self.bot = bot; self.world = world
             def run(self):
                 try:
-                    r = self.bot.raw_completion(self.sp, self.up)
-                    self.finished.emit(r)
+                    from shared.vignette import VignetteGenerator
+                    engine = self.bot.engine
+                    gen = VignetteGenerator(llm_callable=self.bot.raw_completion)
+                    text = gen.generate(
+                        self.world,
+                        rem_favor_level=engine._get_favor_level().name,
+                        independence=engine.independence,
+                        ram_stage=engine._get_ram_stage().value,
+                    )
+                    self.finished.emit(text)
                 except Exception as e:
                     self.error.emit(str(e))
 
-        worker = VignetteWorker(self.bot, system_text, user_text)
+        worker = VignetteWorker(self.bot, self.world)
         worker.finished.connect(_on_done)
-        worker.error.connect(lambda e: _on_done(f"（{e}）"))
+        worker.error.connect(
+            lambda e: _on_done(f"宅邸的轮廓在{self.world.period}的{self.world.weather}中若隐若现。")
+        )
         thread = QThread()
         worker.moveToThread(thread)
         thread.started.connect(worker.run)
@@ -1057,6 +1050,10 @@ class TwinChatApp(QMainWindow):
         if lowered in ("/llm", "/local", "/toggle"):
             self._switch_mode()
             return
+
+        # 有效对话：刷新世界状态的最后互动时间戳（v10.4）
+        if hasattr(self, 'world'):
+            self.world.mark_interaction()
 
         self.footer_label.setText("双子思考中…")
         self.send_btn.setEnabled(False)

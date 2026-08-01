@@ -6,6 +6,33 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V10.4.0] - 2026-08-01 (Feature + Bug Fix)
+
+对接外部《代码实现》方案（世界状态持久化 + Opening Vignette 生产级增强）的落地版本。
+
+### Fixed
+- **天气确定性实质修复**：`_weather_for_date` 此前使用内置 `hash()`（字符串带进程级随机盐），每次重启天气都会变——v10.3 声称的确定性并未真正生效；改为 `hashlib.md5(日期_时段_种子)`，跨进程稳定
+- **离线天数死字段激活**：`days_since_last` 此前只读写存档从不计算，prompt 中「距离您上次来访约 N 天」永远显示陈旧值；现由新增的 `last_interaction_ts` 在启动时真实计算
+
+### Added
+- **天气自然推演**：≥8 小时未启动时种子演进（`weather_seed`），天气按新种子确定性变化；8 小时内重启保持不变
+- **`WorldState.mark_interaction()`**：用户有效对话时刷新互动时间戳并清零离线天数（GUI 已接入，命令不触发）
+- **`WorldState.character_actions`**：蕾姆/拉姆当前动作槽位，供开场引言使用
+- **Vignette L0-L3 多级生成网络**（新文件 `shared/vignette.py`）：
+  - L0 会话缓存 + 持久化 LRU 缓存（`data/vignette_cache.json`，按 时段|天气|离开天数桶|蕾姆等级|拉姆阶段 分桶，上限 40 条），相同状态重启零 API 成本
+  - L1 LLM 重试 ≤3 次、温度 0.78→0.65 衰减、输出清洗校验（80~180 字、违禁词、括号错误回包、禁止直接对用户发问）
+  - L2 动态槽位模板（时段/天气/双子动作文学母板）、L3 静态兜底
+- `tests/smoke_test.py` 新增 2 项测试（总计 15 项，零 API）
+
+### Changed
+- `gui.py._generate_vignette` 改走 `VignetteGenerator`（经 `bridge.raw_completion`，保持 QThread 异步与"✨ 正在感知宅邸的氛围…"占位）；引言仍为 View-Only 数据，绝不写入对话历史
+- `save_dict()` 新增 4 个字段；旧 `memory.json` 无新字段时按默认值无缝兼容
+
+### Notes
+- 设计裁剪：未新建独立 `world_state.json`（沿用 `memory.json` 持久化管线，避免双持久化路径）；生成器不直接持有 OpenAI client（复用 bridge 抽象，保护 v10.0.1 懒加载修复）
+
+---
+
 ## [V10.3.0] - 2026-07-31 (Feature)
 
 ### Added

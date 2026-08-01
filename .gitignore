@@ -31,3 +31,6 @@ data/conversations.db*
 
 # WorkBuddy workspace metadata
 .workbuddy/
+
+# Vignette cache (v10.4+)
+data/vignette_cache.json

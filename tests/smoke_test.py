@@ -255,6 +255,86 @@ def test_local_interact() -> None:
     assert "篇章" in status and "蕾姆好感" in status
 
 
+def test_world_state_v1040() -> None:
+    """v10.4.0：天气 MD5 跨进程确定性、8h 推演、真实离线天数、mark_interaction。"""
+    import time as _time
+    from shared.state import WorldState
+    # MD5 确定性：同输入永远同结果（内置 hash() 带进程随机盐，已弃用）
+    w1 = WorldState._determine_weather("2026-08-01", "上午", 42)
+    w2 = WorldState._determine_weather("2026-08-01", "上午", 42)
+    assert w1 == w2 and w1 in WorldState.WEATHERS
+    # 旧存档兼容：无新字段时按原样恢复
+    old = {"current_time": "2026-07-20 22:10", "period": "夜晚",
+           "days_since_last": 3, "weather": "小雨",
+           "last_real_ts": _time.time() - 3600}
+    ws = WorldState.load_or_create(old)
+    assert ws.weather == "小雨" and ws.days_since_last == 3
+    assert ws.character_actions["rem"], "默认角色动作缺失"
+    # ≥8 小时未启动：种子演进、天气重算；同一天同参数结果稳定
+    old2 = dict(old, last_real_ts=_time.time() - 9 * 3600, weather_seed=42)
+    ws2 = WorldState.load_or_create(old2)
+    assert ws2.weather_seed != 42 or ws2.weather_last_change, "种子未演进"
+    ws2b = WorldState._determine_weather(ws2.current_time[:10], ws2.period, ws2.weather_seed)
+    assert ws2b == ws2.weather, "推演后天气不满足确定性"
+    # last_interaction_ts 驱动真实离线天数
+    old3 = dict(old, last_interaction_ts=_time.time() - 5 * 86400)
+    assert WorldState.load_or_create(old3).days_since_last == 5
+    # mark_interaction：清零天数并刷新时间戳
+    ws3 = WorldState.load_or_create(old3)
+    ws3.mark_interaction()
+    assert ws3.days_since_last == 0 and ws3.last_interaction_ts > 0
+    # save_dict 含全部新字段，且可无损往返
+    ws4 = WorldState.load_or_create(ws3.save_dict())
+    assert ws4.weather_seed == ws3.weather_seed
+
+
+def test_vignette_v1040() -> None:
+    """v10.4.0：Vignette 校验规则、L0 缓存链、L1→L2 降级（零 API，假 LLM）。"""
+    from shared import vignette as V
+    from shared.state import WorldState
+    V.time.sleep = lambda s: None  # 测试不等重试间隔
+    # 缓存路径重定向到临时目录，不污染真实 data/
+    _tmp = tempfile.TemporaryDirectory()
+    V._get_cache_path = lambda: os.path.join(_tmp.name, "vignette_cache.json")
+    ws = WorldState.now()
+    # 校验：违禁词 / 过短 / 括号错误回包 / 直接对话
+    assert not V.sanitize_and_validate_vignette("作为AI，我无法完成。")[0]
+    assert not V.sanitize_and_validate_vignette("短")[0]
+    assert not V.sanitize_and_validate_vignette("（Connection Error）")[0]
+    assert not V.sanitize_and_validate_vignette(
+        "您今天过得好吗？需要蕾姆陪您聊聊吗？拉姆也在等您回来呢。" * 3)[0]
+    good = ("夜雨细密地落在宅邸的屋檐上，客厅的灯只开了一半，光线偏暖而安静。"
+            "蕾姆坐在窗边整理餐具，偶尔抬头看一眼被雨水打湿的玻璃。"
+            "拉姆靠在沙发扶手上，闭着眼却并没有真的睡着，呼吸平稳。")
+    assert V.sanitize_and_validate_vignette(good)[0]
+    # L0 缓存链：LLM 只调一次，会话缓存与持久化缓存均命中
+    calls = {"n": 0}
+    def fake_llm(system, user, temperature=0.8, max_tokens=200):
+        calls["n"] += 1
+        return good
+    key_ws = WorldState.now()
+    g = V.VignetteGenerator(llm_callable=fake_llm)
+    assert g.generate(key_ws, force_refresh=True) == good and calls["n"] == 1
+    assert g.generate(key_ws) == good and calls["n"] == 1
+    g2 = V.VignetteGenerator(llm_callable=fake_llm)
+    assert g2.generate(key_ws) == good and calls["n"] == 1, "持久化缓存未命中"
+    # 缓存 key 按离开天数分桶
+    k0 = V.build_cache_key(key_ws, "DEAR", "勉强认可")
+    key_ws.days_since_last = 1
+    k1 = V.build_cache_key(key_ws, "DEAR", "勉强认可")
+    key_ws.days_since_last = 2
+    assert V.build_cache_key(key_ws, "DEAR", "勉强认可") == k1
+    key_ws.days_since_last = 5
+    assert V.build_cache_key(key_ws, "DEAR", "勉强认可") not in (k0, k1)
+    # L1 垃圾输出重试耗尽 → L2 动态模板兜底
+    g3 = V.VignetteGenerator(llm_callable=lambda *a, **k: "作为AI，无法完成。")
+    t = g3.generate(WorldState.now(), force_refresh=True)
+    assert "蕾姆" in t or "拉姆" in t, f"L2 兜底不含角色: {t}"
+    # 无 LLM（本地模式）→ 直接 L2
+    t2 = V.VignetteGenerator(llm_callable=None).generate(WorldState.now())
+    assert len(t2) >= 30
+
+
 def main() -> int:
     tests = [
         ("引擎好感与风控", test_engine_favor_and_risk),
@@ -270,6 +350,8 @@ def main() -> int:
         ("本地真源收敛 v9.4.0", test_local_convergence_v940),
         ("数值通道精细化 v9.5.0", test_value_channels_v950),
         ("本地模式对话", test_local_interact),
+        ("世界状态增强 v10.4.0", test_world_state_v1040),
+        ("开场引言生成器 v10.4.0", test_vignette_v1040),
     ]
     failed = 0
     for name, fn in tests:

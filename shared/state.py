@@ -90,13 +90,18 @@ class ContextSummary:
 #  世界状态（时间 / 天气）
 # ═══════════════════════════════════════════════
 
+import hashlib
 from dataclasses import dataclass, field
 from datetime import datetime as _dt
 
 
 @dataclass
 class WorldState:
-    """世界状态：时间 + 天气。持久化保存，天气按日期确定性生成。"""
+    """世界状态：时间 + 天气。持久化保存，天气确定性生成（MD5，跨进程稳定）。
+
+    v10.4：种子演进（≥8 小时未交互时天气自然推演）、last_interaction_ts
+    驱动的真实「距离上次来访天数」、双子当前动作（供开场引言槽位）。
+    """
 
     current_time: str = ""
     period: str = "上午"
@@ -104,67 +109,108 @@ class WorldState:
     weather: str = "晴朗"
     active_event: str = ""          # 当前活跃事件（如"花园的花开了"）
     last_real_ts: float = 0.0       # 上次保存的现实时间戳
+    weather_seed: int = 42          # 天气确定性种子（随时间推演）
+    weather_last_change: str = ""   # 天气上次变化时间（ISO 分钟）
+    last_interaction_ts: float = 0.0  # 用户上次有效对话时间戳
+    character_actions: Dict[str, str] = field(default_factory=lambda: {
+        "rem": "在整理房间",
+        "ram": "靠在一旁休息",
+    })
+
+    # 天气连续多少小时不变后开始推演
+    WEATHER_CHANGE_HOURS: float = 8.0
 
     PERIODS = [
         ("清晨", 5, 7), ("上午", 7, 11), ("午后", 11, 14),
         ("下午", 14, 17), ("傍晚", 17, 19), ("夜晚", 19, 23), ("深夜", 23, 5),
     ]
     WEATHERS = ["晴朗", "多云", "小雨", "大雨", "阴沉"]
+    # 权重与 v10.3 文档化分布一致（晴 40 / 多云 25 / 小雨 17 / 大雨 11 / 阴 7）
+    WEATHER_WEIGHTS = {"晴朗": 40, "多云": 25, "小雨": 17, "大雨": 11, "阴沉": 7}
 
     @classmethod
     def now(cls, days_since_last: int = 0) -> "WorldState":
         now = _dt.now()
         hour = now.hour
-        period = "深夜"
-        for name, start, end in cls.PERIODS:
-            if start <= hour < end or (start > end and (hour >= start or hour < end)):
-                period = name
-                break
+        period = cls._period_for_hour(hour)
+        date_str = now.strftime("%Y-%m-%d")
+        seed = int(now.timestamp()) % 100000
         return cls(
             current_time=now.strftime("%Y-%m-%d %H:%M"),
             period=period,
             days_since_last=days_since_last,
-            weather=cls._weather_for_date(now.strftime("%Y-%m-%d")),
+            weather=cls._determine_weather(date_str, period, seed),
             last_real_ts=now.timestamp(),
+            weather_seed=seed,
+            weather_last_change=now.isoformat(timespec="minutes"),
+            last_interaction_ts=now.timestamp(),
         )
 
     @classmethod
+    def _determine_weather(cls, system_date: str, period: str, seed: int) -> str:
+        """确定性天气：相同 (日期, 时段, 种子) 输入永远得到相同结果。
+
+        使用 hashlib.md5——跨进程稳定（内置 hash() 带进程随机盐，不可用）。
+        """
+        raw = f"{system_date}_{period}_{seed}".encode("utf-8")
+        point = int(hashlib.md5(raw).hexdigest()[:8], 16) % sum(cls.WEATHER_WEIGHTS.values())
+        cumulative = 0
+        for weather, weight in cls.WEATHER_WEIGHTS.items():
+            cumulative += weight
+            if point < cumulative:
+                return weather
+        return "多云"
+
+    @classmethod
     def _weather_for_date(cls, date_str: str) -> str:
-        """确定性天气：同一日期始终返回相同天气。"""
-        seed = hash(date_str + "roswaal") % 100
-        if seed < 40:
-            return "晴朗"
-        elif seed < 65:
-            return "多云"
-        elif seed < 82:
-            return "小雨"
-        elif seed < 93:
-            return "大雨"
-        else:
-            return "阴沉"
+        """兼容旧接口：按日期取默认时段/种子的确定性天气。"""
+        return cls._determine_weather(date_str, "全天", 42)
 
     @classmethod
     def load_or_create(cls, saved: Optional[Dict[str, Any]] = None) -> "WorldState":
-        """从存档恢复或新建。"""
+        """从存档恢复或新建；启动时推演时段、离线天数与自然天气变化。"""
         now = _dt.now()
+        now_ts = now.timestamp()
+        period = cls._period_for_hour(now.hour)
         if saved and saved.get("weather"):
-            # 检查是否跨天了——跨天则天气自然过渡
-            saved_date = saved.get("current_time", "")[:10]
-            today = now.strftime("%Y-%m-%d")
-            if saved_date != today:
-                # 跨天了，用今天的确定性天气
-                new_weather = cls._weather_for_date(today)
+            seed = int(saved.get("weather_seed", 42))
+            weather = saved["weather"]
+            weather_last_change = saved.get("weather_last_change", "")
+            last_ts = float(saved.get("last_real_ts", 0.0) or 0.0)
+            hours_passed = (now_ts - last_ts) / 3600.0 if last_ts > 0 else float("inf")
+            # ≥8 小时未启动：种子演进，天气按新种子确定性推演（同一天也保持不变）
+            if hours_passed >= cls.WEATHER_CHANGE_HOURS:
+                seed = (seed + int(hours_passed * 10)) % 100000
+                weather = cls._determine_weather(now.strftime("%Y-%m-%d"), period, seed)
+                weather_last_change = now.isoformat(timespec="minutes")
+            # 距离上次来访天数：v10.4 起由真实时间戳计算；旧存档回退到存档值
+            last_interaction = float(saved.get("last_interaction_ts", 0.0) or 0.0)
+            if last_interaction > 0:
+                days_away = max(0, int((now_ts - last_interaction) // 86400))
             else:
-                new_weather = saved["weather"]
+                days_away = int(saved.get("days_since_last", 0))
+            actions = saved.get("character_actions")
+            if not isinstance(actions, dict) or not actions:
+                actions = {"rem": "在整理房间", "ram": "靠在一旁休息"}
             return cls(
                 current_time=now.strftime("%Y-%m-%d %H:%M"),
-                period=cls._period_for_hour(now.hour),
-                days_since_last=saved.get("days_since_last", 0),
-                weather=new_weather,
+                period=period,
+                days_since_last=days_away,
+                weather=weather,
                 active_event=saved.get("active_event", ""),
-                last_real_ts=now.timestamp(),
+                last_real_ts=now_ts,
+                weather_seed=seed,
+                weather_last_change=weather_last_change,
+                last_interaction_ts=last_interaction,
+                character_actions=actions,
             )
         return cls.now()
+
+    def mark_interaction(self) -> None:
+        """用户产生有效对话时调用：刷新最后互动时间戳并清零离线天数。"""
+        now_ts = _dt.now().timestamp()
+        self.last_interaction_ts = now_ts
+        self.days_since_last = 0
 
     @staticmethod
     def _period_for_hour(hour: int) -> str:
@@ -181,6 +227,10 @@ class WorldState:
             "weather": self.weather,
             "active_event": self.active_event,
             "last_real_ts": self.last_real_ts or _dt.now().timestamp(),
+            "weather_seed": self.weather_seed,
+            "weather_last_change": self.weather_last_change,
+            "last_interaction_ts": self.last_interaction_ts,
+            "character_actions": dict(self.character_actions),
         }
 
     def to_prompt_text(self) -> str:
