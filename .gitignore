@@ -25,3 +25,9 @@ Thumbs.db
 
 # Old/temp files
 test_mode.py
+
+# Runtime SQLite (v10.2+)
+data/conversations.db*
+
+# WorkBuddy workspace metadata
+.workbuddy/

@@ -86,6 +86,125 @@ class ContextSummary:
         return " | ".join(parts) if parts else "无"
 
 
+# ═══════════════════════════════════════════════
+#  世界状态（时间 / 天气）
+# ═══════════════════════════════════════════════
+
+from dataclasses import dataclass, field
+from datetime import datetime as _dt
+
+
+@dataclass
+class WorldState:
+    """世界状态：时间 + 天气。持久化保存，天气按日期确定性生成。"""
+
+    current_time: str = ""
+    period: str = "上午"
+    days_since_last: int = 0
+    weather: str = "晴朗"
+    active_event: str = ""          # 当前活跃事件（如"花园的花开了"）
+    last_real_ts: float = 0.0       # 上次保存的现实时间戳
+
+    PERIODS = [
+        ("清晨", 5, 7), ("上午", 7, 11), ("午后", 11, 14),
+        ("下午", 14, 17), ("傍晚", 17, 19), ("夜晚", 19, 23), ("深夜", 23, 5),
+    ]
+    WEATHERS = ["晴朗", "多云", "小雨", "大雨", "阴沉"]
+
+    @classmethod
+    def now(cls, days_since_last: int = 0) -> "WorldState":
+        now = _dt.now()
+        hour = now.hour
+        period = "深夜"
+        for name, start, end in cls.PERIODS:
+            if start <= hour < end or (start > end and (hour >= start or hour < end)):
+                period = name
+                break
+        return cls(
+            current_time=now.strftime("%Y-%m-%d %H:%M"),
+            period=period,
+            days_since_last=days_since_last,
+            weather=cls._weather_for_date(now.strftime("%Y-%m-%d")),
+            last_real_ts=now.timestamp(),
+        )
+
+    @classmethod
+    def _weather_for_date(cls, date_str: str) -> str:
+        """确定性天气：同一日期始终返回相同天气。"""
+        seed = hash(date_str + "roswaal") % 100
+        if seed < 40:
+            return "晴朗"
+        elif seed < 65:
+            return "多云"
+        elif seed < 82:
+            return "小雨"
+        elif seed < 93:
+            return "大雨"
+        else:
+            return "阴沉"
+
+    @classmethod
+    def load_or_create(cls, saved: Optional[Dict[str, Any]] = None) -> "WorldState":
+        """从存档恢复或新建。"""
+        now = _dt.now()
+        if saved and saved.get("weather"):
+            # 检查是否跨天了——跨天则天气自然过渡
+            saved_date = saved.get("current_time", "")[:10]
+            today = now.strftime("%Y-%m-%d")
+            if saved_date != today:
+                # 跨天了，用今天的确定性天气
+                new_weather = cls._weather_for_date(today)
+            else:
+                new_weather = saved["weather"]
+            return cls(
+                current_time=now.strftime("%Y-%m-%d %H:%M"),
+                period=cls._period_for_hour(now.hour),
+                days_since_last=saved.get("days_since_last", 0),
+                weather=new_weather,
+                active_event=saved.get("active_event", ""),
+                last_real_ts=now.timestamp(),
+            )
+        return cls.now()
+
+    @staticmethod
+    def _period_for_hour(hour: int) -> str:
+        for name, start, end in WorldState.PERIODS:
+            if start <= hour < end or (start > end and (hour >= start or hour < end)):
+                return name
+        return "深夜"
+
+    def save_dict(self) -> Dict[str, Any]:
+        return {
+            "current_time": self.current_time,
+            "period": self.period,
+            "days_since_last": self.days_since_last,
+            "weather": self.weather,
+            "active_event": self.active_event,
+            "last_real_ts": self.last_real_ts or _dt.now().timestamp(),
+        }
+
+    def to_prompt_text(self) -> str:
+        daytime = {
+            "小雨": "屋檐传来轻柔的滴水声", "大雨": "雨水猛烈地敲打着窗户",
+            "阴沉": "天空灰蒙蒙的，空气有些沉闷", "晴朗": "阳光温暖地洒进宅邸",
+            "多云": "云层遮住了部分阳光，天气还算舒适",
+        }
+        nighttime = {
+            "晴朗": "月光透过窗户洒在走廊上", "多云": "云层遮住了星光，夜色深沉",
+            "小雨": "夜雨轻轻敲打着窗棂", "大雨": "夜雨中宅邸显得格外安静",
+            "阴沉": "乌云遮蔽了月光，夜色格外深沉",
+        }
+        detail = nighttime.get(self.weather, daytime.get(self.weather, "")) \
+            if self.period in ("夜晚", "深夜") else daytime.get(self.weather, "")
+        lines = [
+            f"- 时间：{self.period}",
+            f"- 天气：{self.weather}" + (f"（{detail}）" if detail else ""),
+        ]
+        if self.days_since_last > 0:
+            lines.append(f"- 距离您上次来访：约 {self.days_since_last} 天")
+        return "\n".join(lines)
+
+
 class SessionState:
     def __init__(self) -> None:
         self.recent_mood: str = "neutral"
@@ -577,3 +696,67 @@ class HardStateEngine:
 
     def mark_breaker_triggered(self) -> None:
         self.breaker_triggered = True
+
+
+# ═══════════════════════════════════════════════
+#  结构化画像（StructuredProfile）
+# ═══════════════════════════════════════════════
+
+@dataclass
+class StructuredProfile:
+    """从引擎状态中提取的结构化画像，注入 Prompt 第一层记忆。
+
+    与 TwinState 的区别：
+    - TwinState 是瞬时快照（本轮数值）
+    - StructuredProfile 是长期累积的稳定画像（关键承诺/里程碑）
+    """
+
+    user_name: str = ""
+    important_promises: List[str] = field(default_factory=list)
+    rem_favor: int = 15
+    independence: float = 0.25
+    locked: bool = False
+    ram_stage: str = "可疑"
+    ram_favor: int = 8
+    current_arc: str = "mansion_era"
+    key_moments: List[str] = field(default_factory=list)
+
+    @classmethod
+    def from_engine(cls, engine: "HardStateEngine") -> "StructuredProfile":
+        """从引擎提取画像。"""
+        profile = cls(
+            user_name=engine.user_name or "",
+            rem_favor=engine.favor,
+            independence=engine.independence,
+            locked=engine.locked,
+            ram_stage=engine._get_ram_stage().value,
+            ram_favor=engine.ram_favor,
+            current_arc=engine.arc.value,
+        )
+        # 从事件记忆中提取关键里程碑
+        for ev in engine.events:
+            etype = ev.get("type", "")
+            if etype in ("locked", "reunion", "breaker"):
+                profile.key_moments.append(ev.get("summary", ""))
+            if etype == "affirm":
+                profile.important_promises.append(ev.get("summary", ""))
+        return profile
+
+    def to_prompt_text(self) -> str:
+        lines = ["### 结构化画像（长期记忆）", ""]
+        if self.user_name:
+            lines.append(f"- 用户称呼：{self.user_name}")
+        lines.append(f"- 蕾姆好感：{self.rem_favor}/100{'（🔒忠诚锁定）' if self.locked else ''}")
+        lines.append(f"- 蕾姆人格独立度：{self.independence:.2f}")
+        lines.append(f"- 拉姆评价阶段：{self.ram_stage}")
+        if self.key_moments:
+            lines.append("- 关键里程碑：")
+            for m in self.key_moments[-5:]:
+                lines.append(f"  · {m}")
+        if self.important_promises:
+            lines.append("- 重要承诺：")
+            for p in self.important_promises[-3:]:
+                lines.append(f"  · {p}")
+        lines.append("")
+        lines.append("以上是你的长期记忆。请自然融入对话，不要生硬复述列表。")
+        return "\n".join(lines)

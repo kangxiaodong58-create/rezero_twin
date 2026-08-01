@@ -8,15 +8,28 @@ from __future__ import annotations
 
 from typing import Dict, Optional
 
-from .state import FavorLevel, OniStage, RamStage, StoryArc, TwinState
+from .state import FavorLevel, OniStage, RamStage, StoryArc, TwinState, WorldState, StructuredProfile
 
 
 class PromptBuilder:
     """根据当前 TwinState 构建给 LLM 的高约束 system prompt。"""
 
     @staticmethod
-    def build(state: TwinState) -> str:
+    def build(state: TwinState, world: Optional[WorldState] = None, profile: Optional[StructuredProfile] = None) -> str:
         name = state.user_name or "客人大人"
+
+        # 世界状态
+        world_section = ""
+        if world:
+            world_section = (
+                "\n### 当前世界状态\n\n" + world.to_prompt_text() +
+                "\n\n角色应自然地感知这些环境信息，融入对话而非生硬播报。\n"
+            )
+
+        # 结构化画像
+        profile_section = ""
+        if profile:
+            profile_section = "\n" + profile.to_prompt_text() + "\n"
 
         if state.independence < 0.4:
             ind_desc = "仍有明显的「替代品」自我认知，容易自卑，语气更怯懦依赖。"
@@ -91,7 +104,7 @@ class PromptBuilder:
 - 拉姆好感：{state.ram_favor}/100
 - 上下文摘要：{state.context_summary}
 - 特殊状态：{special_str}
-{events_section}
+{profile_section}{world_section}{events_section}
 ### 角色扮演核心要求
 
 **蕾姆**：
