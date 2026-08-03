@@ -6,6 +6,43 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V12.1] - 2026-08-03 (对话回合视觉分组：同角色紧 · 换人松 · 阵营段落)
+
+> 用最小布局参数做出「对话回合感」：同一 speaker 连续消息收紧、换人略松、角色↔用户有段落感。不改文案、不改解析、不动效主逻辑。
+
+### Added
+- **回合间距 helper**（`_turn_top_margin` / `_apply_turn_rhythm`）：`chat_layout` 基线 spacing 由 `md(12)` 下调至 `xs(4)`，回合关系由**本条外层 top margin** 表达（只动 widget 外层 margins，不碰 Bubble 内部）。判定顺序（O(1) 回看 `itemAt(count-2)`，最多跳过 8 个 streaming 临时泡）：
+
+| 关系 | top margin | 总间距 |
+|---|---|---|
+| 首条 / 无上一条 | `sm`(8) | ≈17px |
+| 涉 system / vignette（中性） | `sm`(8) | ≈17px |
+| 同 speaker 连续（rem→rem / ram→ram / user→user） | `xs`(4) | ≈13px |
+| 阵营切换（角色↔user） | `lg`(16) | ≈25px |
+| 角色换人（rem↔ram） | `md`(12) | ≈21px |
+
+- **streaming 时序无缝**：临时泡加 `objectName="__streaming_temp__"` 标记；临时泡插入即带正确间距；正式泡插入时**跳过临时泡**判定（顶替时 top margin 与临时泡一致 → 删临时泡零跳变）；多临时泡草稿之间按标准换气。
+- **历史回放自动应用**：`_load_history` 走 `_append_parsed_message` 单点，30 条批量自动带回合节奏（与 V12.0 `animate=False` 正交：margins 是布局层、opacity 是渲染层）。
+
+### Changed
+- `_setup_ui`：`chat_layout.setSpacing(SPACING['md'] → SPACING['xs'])`
+- `_append_parsed_message`：插入前调用 `_apply_turn_rhythm`（**插入后调用会误把刚插入的 widget 当作上一条**——该 bug 在离屏用例中被捕获并修复，临时泡因 objectName 跳过逻辑恰好免疫）
+- `_insert_streaming_bubble`：objectName 标记 + 插入前计算间距
+
+### 不变项
+- HardStateEngine / Prompt / Validator / 场景冷却零改动
+- `parse_twin_segments` / `_streaming_segments` 分段规则零改动
+- HistoryOverlay 业务逻辑零改动；BubbleWidget 内部结构零改动
+- V12.0 四件套（描边说话态 / 气泡入场 / 状态栏呼吸 / `REZERO_DISABLE_UI_MOTION` 开关）行为不变
+- 回合间距是布局属性，**不受动效开关控制**（关动效后回合感仍在）
+
+### 验收
+1. 离屏用例 17/17：首条/同角色/换人/阵营/system 中性各档 top margin、临时泡标记、正式泡跳过临时泡判定、顶替零跳变、删临时泡后不变、多临时泡换气、上限裁剪（85 条→≤80）后判定仍正确
+2. 冒烟回归 34/34 通过
+3. 人工验收（真机）：连续蕾姆两段更紧、蕾姆→拉姆明显换气、用户↔角色有段落感、幕间卡不打断节奏、流式全程无间距跳变
+
+---
+
 ## [V12.0] - 2026-08-03 (视觉第一波：头像说话态 · 气泡轻入场 · 状态栏呼吸)
 
 > 本阶段从「话正确」转向「看起来活着」，但保持克制：只做三类可感知、可回滚的表现增强，不引入新 UI 框架、不重做布局与 Design Tokens。

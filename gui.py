@@ -1704,7 +1704,7 @@ class TwinChatApp(QMainWindow):
         self.chat_container = QWidget()
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setAlignment(Qt.AlignTop)
-        self.chat_layout.setSpacing(SPACING['md'])  # V10.14：消息间距显式设定
+        self.chat_layout.setSpacing(SPACING['xs'])  # V12.1：回合间距 — 基线降到 xs，关系由本条 top margin 表达
         self.chat_layout.setContentsMargins(0, SPACING['sm'], 0, SPACING['sm'])  # V10.14：上下留白
         self.chat_layout.addStretch()
         self.scroll.setWidget(self.chat_container)
@@ -2083,6 +2083,55 @@ class TwinChatApp(QMainWindow):
 
     MAX_VISIBLE_WIDGETS = 80  # 最多保留 80 条消息 widget
 
+    # ── V12.1 回合间距（Conversation Turn Rhythm）────────────────
+
+    def _turn_top_margin(self, role: str) -> int:
+        """V12.1：按「最近正式消息」的 role 计算本条 top margin（O(1) 回看）。
+
+        跳过 streaming 临时泡（objectName=="__streaming_temp__"，最多回看 8 个），
+        使正式泡顶替临时泡时间距一致（删临时泡零跳变）。
+        判定顺序：首条→sm / 涉 system→sm / 同 speaker→xs / 涉 user→lg / 其余→md。
+        全部 try/except，异常兜底 sm。
+        """
+        try:
+            i = self.chat_layout.count() - 2  # stretch 前最后一条
+            steps = 0
+            while i >= 0 and steps < 8:
+                item = self.chat_layout.itemAt(i)
+                w = item.widget() if item is not None else None
+                if w is None:
+                    break
+                if w.objectName() == "__streaming_temp__":
+                    i -= 1
+                    steps += 1
+                    continue
+                prev_role = getattr(w, "role", "system")
+                if prev_role == "system" or role == "system":
+                    return SPACING['sm']
+                if role == prev_role:
+                    return SPACING['xs']
+                if role == "user" or prev_role == "user":
+                    return SPACING['lg']
+                return SPACING['md']
+            return SPACING['sm']  # 无正式上一条 / 回看越界
+        except Exception:
+            return SPACING['sm']
+
+    def _apply_turn_rhythm(self, msg, role: str) -> None:
+        """V12.1：按上一条 role 设置本条外层 margins（只动 top，不碰 Bubble 内部）。
+
+        ChatMessageWidget 基线 (12,5,12,5)；SystemLabelWidget 基线 (16,4,16,4)；
+        与各自构造处硬编码保持一致。
+        """
+        try:
+            top = self._turn_top_margin(role)
+            if isinstance(msg, ChatMessageWidget):
+                msg.layout().setContentsMargins(12, top, 12, 5)
+            else:
+                msg.layout().setContentsMargins(16, top, 16, 4)
+        except Exception:
+            pass
+
     def _append_parsed_message(self, sender: str, text: str, role: str, save: bool = True, transient: bool = False, message_id: Optional[int] = None, force_center: bool = False, highlight: bool = False, variant: str = "system", animate: bool = True) -> Optional[QWidget]:
         """添加消息 widget。超出上限时移除最早的。
 
@@ -2102,6 +2151,9 @@ class TwinChatApp(QMainWindow):
         else:
             msg = ChatMessageWidget(sender, text, role=role, message_id=message_id,
                                     variant="highlight" if highlight else "normal")
+        # V12.1：回合间距 — 插入前计算（此时 layout 最后一条才是真正的上一条）
+        self._apply_turn_rhythm(msg, role)
+
         insert_index = self.chat_layout.count() - 1  # 在 stretch 之前插入
         self.chat_layout.insertWidget(insert_index, msg)
 
@@ -2137,6 +2189,8 @@ class TwinChatApp(QMainWindow):
         """
         sender = "蕾 姆" if role == "rem" else ("拉 姆" if role == "ram" else role)
         msg = ChatMessageWidget(sender, "", role=role, variant="streaming")
+        msg.setObjectName("__streaming_temp__")  # V12.1：临时泡标记（回合间距跳过用）
+        self._apply_turn_rhythm(msg, role)  # V12.1：插入前计算（上一条 = 布局当前最后一条）
         insert_index = self.chat_layout.count() - 1
         self.chat_layout.insertWidget(insert_index, msg)
         QTimer.singleShot(30, self._scroll_to_bottom)
