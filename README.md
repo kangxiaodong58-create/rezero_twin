@@ -76,6 +76,10 @@ Mermaid 版架构图见 [docs/architecture.md](docs/architecture.md)。
 | V9.5 | 数值通道精细化 | 负反馈单层、增速耦合 | 既有豁免层 + 小额扣分源 = 自然分层 |
 | V10.0~V10.3 | PySide6 宅邸 UI + 世界状态 | Tkinter 视觉上限、存储耦合、天气重启跳变 | UI 线程安全纪律；世界状态注入 prompt |
 | V10.4 | 天气确定性实质修复 + Vignette L0-L3 | hash() 进程随机盐、引言无缓存无校验 | 确定性算法必须跨进程稳定（MD5）；生成型功能配多级兜底网 |
+| V10.5 | LLM 上下文恢复 + ResponseValidator 收口 | 重启后上下文丢失、LLM 偶发越界输出 | 对话历史由 ConversationStore 统一恢复；生成后校验应尽早介入 |
+| V10.6 | 最小世界事件系统 | `active_event` 长期为空、世界氛围缺少变化 | 轻量确定性事件池 + TTL，不侵入硬状态 |
+| V10.7.0 | PromptBuilder 最小拆分 | `build()` 单体方法过长 | 私有静态小节方法，签名与输出不变 |
+| V10.7.1 | 活跃事件可见化 + 测试补强 | 事件仅进 Prompt，GUI 不可见；校验边界未覆盖 | 状态栏只读展示；红队边界用例补强 |
 
 ---
 
@@ -125,7 +129,7 @@ python gui.py
 python tests/smoke_test.py
 ```
 
-13 项零 API 回归（引擎数值、事件记忆、持久化、prompt 约束、本地对话）。
+23 项零 API 回归（引擎数值、事件记忆、持久化、prompt 约束、PromptBuilder 小节、本地对话、天气确定性、Vignette 校验、上下文恢复、ResponseValidator、活跃事件等）。
 
 ---
 
@@ -134,7 +138,7 @@ python tests/smoke_test.py
 ```text
 rezero_twin/
 ├── main.py               # CLI 入口（--mode local|llm）
-├── gui.py                # Tkinter GUI（/llm /local 可切换）
+├── gui.py                # PySide6 GUI（/llm /local 可切换）
 ├── requirements.txt
 ├── ReZeroTwin.spec       # PyInstaller 打包配置
 ├── shared/               # 共享核心
@@ -144,7 +148,7 @@ rezero_twin/
 │   └── config.py         # .env 与数据目录解析（frozen/源码双模式）
 ├── llm/bridge.py         # LLM 桥接（DeepSeek 等）
 ├── local/                # 本地模板模式（RemAI + 双子总控）
-├── tests/smoke_test.py   # 冒烟测试（13 项，零 API）
+├── tests/smoke_test.py   # 冒烟测试（23 项，零 API）
 └── docs/
     ├── devlog/           # 开发日志（全部版本记录）
     ├── evaluation/       # 测试案例库与评估报告
@@ -166,6 +170,8 @@ pyinstaller ReZeroTwin.spec --clean
 打包完成后，`dist\ReZeroTwin.exe` 会生成。**v9.2.0 起 `.env` 不再打包进 EXE**：请把包含 `DEEPSEEK_API_KEY` 的 `.env` 复制到 `ReZeroTwin.exe` 同目录，再双击运行。缺少 `.env` 时程序会弹窗提示并回退到本地模板模式，不会闪退。窗口标题为 **"Re:Zero 双子系统"**，状态栏显示当前模式与状态。
 
 **数据保存位置（v9.2.3 起）**：好感度、聊天记录、共同经历等持久化数据保存在 EXE 同级 `data\` 目录（源码运行时为项目根 `data\`），删除该目录即可重置记忆。若 EXE 所在目录不可写（如 Program Files），会自动改存 `%APPDATA%\ReZeroTwin\data\`。
+
+**重启后上下文保留（v10.5.0+）**：LLM 模式下，最近 8 轮对话会自动从 `data\conversations.db` 恢复到 LLM 上下文，重启程序后双子仍能引用上一轮内容。本地模板模式不受影响。
 
 > 注意：PyInstaller 输出末尾的 `Process exited with code 1` 不影响 EXE 正常生成，属于已知现象。
 
@@ -196,7 +202,7 @@ pip install -r requirements.txt
 
 ---
 
-## 状态一览（V9.5+）
+## 状态一览（V10.7+）
 
 - 蕾姆好感 + 忠诚锁定（分级豁免：小额冒犯低关系生效、深爱豁免）
 - 人格独立度（身份肯定驱动，影响自卑与主体性）
@@ -207,6 +213,11 @@ pip install -r requirements.txt
 - 结构化上下文摘要
 - 轻推与拖延检测
 - 破局者彩蛋（低频高重量）
+- LLM 对话上下文恢复（v10.5.0+）：最近 8 轮从 SQLite 恢复到 LLM 上下文
+- ResponseValidator 生成后校验（v10.5.1+）：拦截 OOC、第一人称、格式崩溃、好感暴露
+- 世界状态活跃事件（v10.6.0+）：宅邸日常氛围事件注入开场与 Prompt
+- PromptBuilder 模块化拆分（v10.7.0+）：`build()` 内部按小节拆分为私有静态方法，输出不变
+- GUI 状态栏活跃事件可见化（v10.7.1+）：底部状态栏只读展示当前事件摘要
 
 ---
 
@@ -231,7 +242,7 @@ pip install -r requirements.txt
 
 ## 未来可能方向
 
-- [ ] 流式输出支持
+- [x] 流式输出支持（V10.0.0 起 `chat_stream()` 已实现）
 - [ ] 更细粒度的 post-generation 校验（防止 LLM 偶尔越界）
 - [ ] 多轮上下文摘要的向量化记忆
 - [ ] 拉姆与蕾姆的独立短期目标
@@ -239,6 +250,17 @@ pip install -r requirements.txt
 - [ ] 支持更多原著后期篇章锚点
 
 ---
+
+## 已知遗留问题
+
+以下问题已识别，但不在本阶段修复范围内：
+
+- **PromptBuilder 小节方法为私有静态**：`build()` 已在 V10.7.0 拆分为 6 个 `_build_*` 私有静态方法，签名与输出不变；若后续需跨类复用或单测小节，可提升可见性或抽取独立类，当前保持最小拆分。
+- **长期事件语义召回仍较弱**：事件按类型与摘要注入 prompt，缺乏基于语义的动态召回；大模型仍可能引用不相关经历。
+- **GUI 体积与启动性能**：PySide6 + 全量 openai 依赖使 EXE 偏大，后续可考虑按需延迟加载或剥离非运行时依赖。
+- **打包验证依赖完整 GUI 环境**：本环境未安装 PySide6 / PyInstaller，EXE 构建与 GUI 启动验证尚未执行。
+- **流式输出校验滞后**：ResponseValidator 在完整回复生成后校验，流式失败时用户可能已看到部分内容，这是当前设计下的已知行为。
+- **活跃事件中途不刷新**：事件仅在 `WorldState.load_or_create()` 时生成/过期，长会话中途不会切换，符合 V10.6 最小范围定义。
 
 ## 致谢与声明
 
@@ -249,4 +271,4 @@ pip install -r requirements.txt
 ---
 
 **维护者**：小东 & K 🦊  
-**最后更新**：2026-07-31
+**最后更新**：2026-08-01

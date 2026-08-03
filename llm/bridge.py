@@ -6,6 +6,7 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any, Dict, List, Optional
 
@@ -16,6 +17,8 @@ load_env()
 from shared.state import StoryArc, WorldState, StructuredProfile
 from shared.prompts import PromptBuilder
 from shared.state import HardStateEngine
+from shared.conversation_store import ConversationStore
+from shared.validators import ResponseValidator
 
 
 _DEFAULT_KEY = "your-api-key-here"
@@ -45,6 +48,7 @@ class ReZeroLLMBridge:
         model_name: str = "deepseek-chat",
         arc: StoryArc = StoryArc.MANSION_ERA,
         max_history: int = 8,
+        conversation_store: Optional[ConversationStore] = None,
     ) -> None:
         key = api_key or os.getenv("DEEPSEEK_API_KEY") or _DEFAULT_KEY
         if not key or key == _DEFAULT_KEY:
@@ -59,18 +63,214 @@ class ReZeroLLMBridge:
         self.history: List[Dict[str, str]] = []
         self.max_history = max_history
         self.world: Optional[WorldState] = None  # 可由 GUI 注入持久化世界状态
+        self.conversation_store = conversation_store
+        self.validator = ResponseValidator()
+        self._first_round_atmosphere: Optional[str] = None  # v10.8.1：首轮氛围（View-Only）
+        self._active_scene_id: Optional[str] = None  # V11.10.0：本轮情感场景 ID
+        self._restore_history_from_store()
+
+    def set_opening_atmosphere(self, text: str) -> None:
+        """注入开场引言氛围，仅首轮 _build_messages 生效，chat 成功后自动清空。
+
+        铁律：氛围文本绝不进入 history / ConversationStore（View-Only Data）。
+        """
+        if not text or not isinstance(text, str):
+            return
+        self._first_round_atmosphere = text[:300] + "…" if len(text) > 300 else text
+
+    def _restore_history_from_store(self, limit: Optional[int] = None) -> None:
+        """从 ConversationStore 恢复最近 N 轮对话到 bridge.history。
+
+        映射规则：
+        - 'user' / 'assistant' → 直接映射为同 role
+        - 'rem' / 'ram' → 合并为一条 assistant 消息，前缀补回【蕾姆】/【拉姆】
+        - 'system' / 其它 → 跳过，避免污染 LLM 上下文
+
+        取数时多取若干行以抵消 system 消息和 rem/ram 拆分带来的膨胀，
+        映射完成后再截取最后 limit 条。
+
+        恢复失败时不抛异常，仅记录警告并保留空 history，确保 Bridge 能正常启动。
+        """
+        if self.conversation_store is None:
+            return
+
+        try:
+            limit = self.max_history if limit is None else limit
+            if limit <= 0:
+                self.history = []
+                return
+
+            # 多取一些行，确保在存在 system 和 rem/ram 拆分时仍能凑够 limit 条有效消息
+            fetch_limit = max(limit * 4, 20)
+            rows = self.conversation_store.get_recent(limit=fetch_limit)
+
+            restored: List[Dict[str, str]] = []
+            assistant_buffer: List[str] = []
+
+            def _flush_assistant() -> None:
+                nonlocal assistant_buffer
+                if assistant_buffer:
+                    restored.append({"role": "assistant", "content": "\n".join(assistant_buffer)})
+                    assistant_buffer = []
+
+            for row in rows:
+                role = row.get("role", "")
+                content = (row.get("content") or "").strip()
+                if not content:
+                    continue
+                if role == "user":
+                    _flush_assistant()
+                    restored.append({"role": "user", "content": content})
+                elif role == "assistant":
+                    _flush_assistant()
+                    restored.append({"role": "assistant", "content": content})
+                elif role == "rem":
+                    assistant_buffer.append(f"【蕾姆】{content}")
+                elif role == "ram":
+                    assistant_buffer.append(f"【拉姆】{content}")
+                # system 及其它角色跳过
+            _flush_assistant()
+
+            self.history = restored[-limit:]
+        except Exception as e:
+            logging.warning("从 ConversationStore 恢复 LLM 历史失败: %s", e)
+            self.history = []
 
     def _build_messages(self, user_input: str) -> List[Dict[str, Any]]:
         state = self.engine.update(user_input)
         world = self.world or WorldState.now()
         profile = StructuredProfile.from_engine(self.engine)
-        system_prompt = PromptBuilder.build(state, world=world, profile=profile)
+        # V11.10.0：情感场景检测（在 Prompt 构建前）
+        scene_id, ram_witness = self._detect_scene(user_input, state, world)
+        self._active_scene_id = scene_id
+        system_prompt = PromptBuilder.build(state, world=world, profile=profile,
+                                            scene_id=scene_id, ram_witness=ram_witness)
+        # v10.8.1：首轮氛围注入（View-Only，不进 history，不写 ConversationStore）
+        if not self.history and self._first_round_atmosphere:
+            system_prompt += (
+                "\n\n### 开场氛围（仅本轮参考，请自然融入回复的情境感，"
+                "不要复述或引用这段文字）\n"
+                + self._first_round_atmosphere
+                + "\n"
+            )
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": system_prompt}
         ]
         messages.extend(self.history[-self.max_history:])
         messages.append({"role": "user", "content": user_input})
         return messages, state
+
+    # ── V11.10.0：情感场景检测 ──
+
+    SCENE_KEYWORDS = {
+        "hug_accept": ["抱", "拥抱", "抱住", "抱抱"],
+        "headpat_comfort": ["摸头", "抚头", "摸摸头", "摸摸"],
+        "identity_affirm": ["你是蕾姆", "不是影子", "你就是蕾姆"],
+    }
+    SCENE_FAVOR_MIN = {
+        "hug_accept": 3,       # FavorLevel.DEAR
+        "headpat_comfort": 2,  # FavorLevel.CLOSE
+        "identity_affirm": 2,  # FavorLevel.CLOSE
+        "breaker_promise": 3,  # FavorLevel.DEAR
+    }
+    SCENE_COOLDOWN_HOURS = 24
+
+    def _detect_scene(self, user_input: str, state, world) -> tuple:
+        """检测本轮情感场景，返回 (scene_id | None, ram_witness: bool)。
+
+        优先级（互斥）：breaker > identity > hug > headpat。
+        复用 engine._is_negated 检测「不是替代品」式肯定句。
+        """
+        text = user_input
+        favor_level = int(state.favor_level)
+        ram_witness = state.ram_stage.value in ("观察中", "还算守规矩", "勉强认可", "真正承认")
+
+        # breaker_promise：「替代品」被否定 或 「蕾姆就是蕾姆」
+        is_breaker = (
+            ("替代品" in text and self.engine._is_negated(text, "替代品"))
+            or "蕾姆就是蕾姆" in text
+        )
+        if is_breaker and favor_level >= self.SCENE_FAVOR_MIN["breaker_promise"]:
+            if not self._is_cooled_down("breaker_promise", world):
+                return "breaker_promise", ram_witness
+
+        # identity_affirm
+        if any(k in text for k in self.SCENE_KEYWORDS["identity_affirm"]):
+            if favor_level >= self.SCENE_FAVOR_MIN["identity_affirm"]:
+                if not self._is_cooled_down("identity_affirm", world):
+                    return "identity_affirm", ram_witness
+
+        # hug_accept
+        if any(k in text for k in self.SCENE_KEYWORDS["hug_accept"]):
+            if favor_level >= self.SCENE_FAVOR_MIN["hug_accept"]:
+                if not self._is_cooled_down("hug_accept", world):
+                    return "hug_accept", ram_witness
+
+        # headpat_comfort
+        if any(k in text for k in self.SCENE_KEYWORDS["headpat_comfort"]):
+            if favor_level >= self.SCENE_FAVOR_MIN["headpat_comfort"]:
+                if not self._is_cooled_down("headpat_comfort", world):
+                    return "headpat_comfort", ram_witness
+
+        return None, False
+
+    def _is_cooled_down(self, scene_id: str, world) -> bool:
+        """检查场景是否在冷却期内（24h）。"""
+        from datetime import datetime, timedelta
+        last = (world.scene_cooldowns or {}).get(scene_id, "")
+        if not last:
+            return False
+        try:
+            last_dt = datetime.fromisoformat(last)
+            return datetime.now() - last_dt < timedelta(hours=self.SCENE_COOLDOWN_HOURS)
+        except Exception:
+            return False
+
+    def _write_scene_cooldown(self, world) -> None:
+        """成功生成后写入场景冷却时间戳。"""
+        if self._active_scene_id and world is not None:
+            from datetime import datetime
+            if not hasattr(world, 'scene_cooldowns') or world.scene_cooldowns is None:
+                world.scene_cooldowns = {}
+            world.scene_cooldowns[self._active_scene_id] = datetime.now().isoformat(timespec="seconds")
+
+    def _fallback_reply(self) -> str:
+        """校验彻底失败时的安全兜底回复。"""
+        return (
+            '【蕾姆】: "……刚才的话，蕾姆不太确定。请再说一次，好吗？"\n'
+            '【拉姆】: "哼。刚才那段，拉姆也当作没听见。你重新说。"'
+        )
+
+    def _generate_validated(
+        self,
+        user_input: str,
+        messages: List[Dict[str, Any]],
+        temperature: float,
+        max_tokens: int,
+    ) -> str:
+        """调用 LLM 并校验回复；失败时重试 1 次，仍失败返回安全 fallback。
+
+        返回的文本保证已经过校验，可直接写入 history。
+        """
+        for attempt in range(2):
+            current_temp = temperature if attempt == 0 else max(0.1, temperature - 0.25)
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                temperature=current_temp,
+                max_tokens=max_tokens,
+            )
+            reply = response.choices[0].message.content.strip()
+            result = self.validator.validate(reply)
+            if result.ok:
+                return result.cleaned or reply
+            logging.warning(
+                "LLM 回复校验失败 (attempt %d): %s | raw: %s",
+                attempt + 1,
+                result.reason,
+                reply[:200],
+            )
+        return self._fallback_reply()
 
     def chat(
         self,
@@ -81,21 +281,30 @@ class ReZeroLLMBridge:
     ) -> str:
         messages, _state = self._build_messages(user_input)
         try:
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=messages,
-                temperature=temperature,
-                max_tokens=max_tokens,
+            reply = self._generate_validated(
+                user_input, messages, temperature, max_tokens
             )
-            reply = response.choices[0].message.content.strip()
         except Exception as e:
-            return f"【系统】API 调用失败：{e}"
+            logging.warning("chat API 调用失败: %s", e)
+            # V11.10.0：错误返回角色格式，不写【系统】（避免被解析器误分类）
+            self._active_scene_id = None
+            return '【蕾姆】: "……蕾姆好像没听清。请再说一次好吗？"'
         self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": reply})
+        self._first_round_atmosphere = None  # v10.8.1：首轮氛围一次性消费
+        # V11.10.0：成功生成后写入场景冷却
+        if self.world is not None:
+            self._write_scene_cooldown(self.world)
+            self.world.mark_interaction()
+        else:
+            self._write_scene_cooldown(None)
         return reply
 
     def chat_stream(self, user_input: str, *, temperature: float = 0.65, max_tokens: int = 600):
-        """流式聊天：返回 (generator, state_snapshot)。"""
+        """流式聊天：返回 (generator, state_snapshot)。
+
+        完整生成结束后进行后验校验；校验失败的内容不会写入 history。
+        """
         messages, state = self._build_messages(user_input)
         try:
             stream = self.client.chat.completions.create(
@@ -113,13 +322,34 @@ class ReZeroLLMBridge:
                     if delta:
                         full += delta
                         yield delta
-                self.history.append({"role": "user", "content": user_input})
-                self.history.append({"role": "assistant", "content": full})
+
+                # 流式完整输出结束后校验；失败仅记录日志，不污染 history
+                result = self.validator.validate(full)
+                if result.ok:
+                    final = result.cleaned or full
+                    self.history.append({"role": "user", "content": user_input})
+                    self.history.append({"role": "assistant", "content": final})
+                    self._first_round_atmosphere = None  # v10.8.1：首轮氛围一次性消费
+                    # V11.10.0：成功生成后写入场景冷却
+                    if self.world is not None:
+                        self._write_scene_cooldown(self.world)
+                        self.world.mark_interaction()
+                else:
+                    logging.warning(
+                        "流式 LLM 回复校验失败，跳过写入 history: %s | input: %s | full: %s",
+                        result.reason,
+                        user_input[:50],
+                        full[:200],
+                    )
+                    self._active_scene_id = None
 
             return _generator(), state
         except Exception as e:
+            logging.warning("chat_stream API 调用失败: %s", e)
+            self._active_scene_id = None
             def _err():
-                yield f"【系统】API 调用失败：{e}"
+                # V11.10.0：错误返回角色格式，不写【系统】（避免被解析器误分类）
+                yield '【蕾姆】: "……蕾姆好像没听清。请再说一次好吗？"'
             return _err(), state
 
     def status(self) -> str:

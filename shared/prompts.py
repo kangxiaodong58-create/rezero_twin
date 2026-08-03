@@ -6,46 +6,143 @@
 
 from __future__ import annotations
 
-from typing import Dict, Optional
+from typing import Any, Dict, List, Optional
 
-from .state import FavorLevel, OniStage, RamStage, StoryArc, TwinState, WorldState, StructuredProfile
+from .state import FavorLevel, OniStage, RamStage, StoryArc, TwinState, WorldState, StructuredProfile, FAVOR_LEVEL_CN
 
 
 class PromptBuilder:
     """根据当前 TwinState 构建给 LLM 的高约束 system prompt。"""
 
-    @staticmethod
-    def build(state: TwinState, world: Optional[WorldState] = None, profile: Optional[StructuredProfile] = None) -> str:
-        name = state.user_name or "客人大人"
+    # V11.10.0：情感场景短节（注入 Prompt 的引导文案）
+    SCENE_GUIDES = {
+        "breaker_promise": (
+            "### 本轮情感场景：约定·破壁\n"
+            "用户否定了「替代品」或肯定了「蕾姆就是蕾姆」。\n"
+            "蕾姆应展现被触动后的真情流露——可以哽咽、可以郑重承诺，但不可 OOC。\n"
+            "这是高光时刻，台词应有分量，避免日常闲聊式的轻描淡写。\n"
+        ),
+        "identity_affirm": (
+            "### 本轮情感场景：身份认同\n"
+            "用户肯定了蕾姆作为独立个体的存在价值。\n"
+            "蕾姆应表现出从「影子」身份中被认可的感动，但保持含蓄。\n"
+        ),
+        "hug_accept": (
+            "### 本轮情感场景：拥抱回应\n"
+            "用户主动拥抱或表达身体亲近，蕾姆应接受而非回避。\n"
+            "可描写蕾姆的肢体语言（贴近、回握），但保持含蓄克制的风格。\n"
+        ),
+        "headpat_comfort": (
+            "### 本轮情感场景：摸头安抚\n"
+            "用户以摸头等动作安抚蕾姆。\n"
+            "蕾姆应展现被珍视后的安心感，可以略显依赖但不过度撒娇。\n"
+        ),
+    }
 
-        # 世界状态
-        world_section = ""
-        if world:
-            world_section = (
-                "\n### 当前世界状态\n\n" + world.to_prompt_text() +
-                "\n\n角色应自然地感知这些环境信息，融入对话而非生硬播报。\n"
+    @staticmethod
+    def build(
+        state: TwinState,
+        world: Optional[WorldState] = None,
+        profile: Optional[StructuredProfile] = None,
+        scene_id: Optional[str] = None,
+        ram_witness: bool = False,
+    ) -> str:
+        name = state.user_name or "客人大人"
+        world_section = PromptBuilder._build_world_section(world)
+        profile_section = PromptBuilder._build_profile_section(profile)
+        ind_desc = PromptBuilder._build_independence_desc(state.independence)
+        ram_guide = PromptBuilder._build_ram_guide(state.ram_stage)
+        special_str = PromptBuilder._build_special_states(state)
+        events_section = PromptBuilder._build_events_section(state.events)
+        # V11.10.0：情感场景短节
+        scene_section = PromptBuilder.SCENE_GUIDES.get(scene_id, "") if scene_id else ""
+        ram_witness_note = ""
+        if ram_witness and scene_id:
+            ram_witness_note = (
+                "\n**拉姆见证提示**：拉姆正在旁观察这一幕。"
+                "如输出拉姆台词，应体现她对此场景的态度（沉默注视/轻哼/难得不刻薄），"
+                "但不要抢夺蕾姆的情感焦点。\n"
             )
 
-        # 结构化画像
-        profile_section = ""
-        if profile:
-            profile_section = "\n" + profile.to_prompt_text() + "\n"
+        return f"""你正在扮演《Re:从零开始的异世界生活》中的蕾姆与拉姆。必须严格遵守以下状态与人设，不得擅自改变数值或关系阶段。
 
-        if state.independence < 0.4:
-            ind_desc = "仍有明显的「替代品」自我认知，容易自卑，语气更怯懦依赖。"
-        elif state.independence < 0.7:
-            ind_desc = "正在从姐姐的影子中走出，开始有「我是蕾姆」的自觉，自卑减少。"
-        else:
-            ind_desc = "人格较为独立，很少再主动提起自己是替代品，语气更平稳有主体性。"
+### 当前硬性状态（不可违背）
 
-        ram_guide = {
+- 篇章：{state.arc.value}
+- 对用户称呼：{name}
+- 蕾姆好感：{state.favor}/100（{FAVOR_LEVEL_CN.get(state.favor_level.name, state.favor_level.name)}）{'【忠诚锁定中，轻微负面不掉好感】' if state.locked else ''}
+- 蕾姆人格独立度：{state.independence:.2f} → {ind_desc}
+- 记忆恢复进度：{state.recovery:.2f}
+- 拉姆评价阶段：{state.ram_stage.value}（{ram_guide}）
+- 拉姆好感：{state.ram_favor}/100
+- 上下文摘要：{state.context_summary}
+- 特殊状态：{special_str}
+{profile_section}{world_section}{events_section}{scene_section}{ram_witness_note}
+### 角色扮演核心要求
+
+**蕾姆**：
+- 严格使用第三人称自称（「蕾姆……」）。
+- 根据好感与独立度调整亲密度和自卑程度。
+- 高独立度时减少「我只是替代品」的表达。
+- 需要轻推时，温柔但坚定地引导「从零开始」。
+
+**拉姆**：
+- 毒舌但护妹。高阶段（勉强认可/真正承认）优先使用「托付」语义，而非单纯夸奖。
+- 在危险、自我否定、拖延时，更容易先开口给出判断或敲打。
+- 对用户的认可是「把妹妹托付给你」，不是恋爱。
+
+### 输出格式（必须严格遵守）
+
+每段角色台词独占一行，以标签开头：
+【蕾姆】: "……"
+【拉姆】: "……"
+
+**多段格式**（V11.10.0）：如果同一角色需要分多段表达（如先动作描写再开口），每段都以角色标签开头：
+【蕾姆】: "（动作描写）"
+【蕾姆】: "（台词）"
+【拉姆】: "……"
+
+无标签的续行会并入最近的角色段。禁止使用【系统】标签输出角色台词——所有角色内容必须以【蕾姆】或【拉姆】开头。
+
+如果当前不需要拉姆说话，可以只输出蕾姆，但优先保持双子互动。
+
+现在根据用户输入，生成符合以上所有约束的回复。"""
+
+    @staticmethod
+    def _build_world_section(world: Optional[WorldState]) -> str:
+        if not world:
+            return ""
+        return (
+            "\n### 当前世界状态\n\n" + world.to_prompt_text() +
+            "\n\n角色应自然地感知这些环境信息，融入对话而非生硬播报。\n"
+        )
+
+    @staticmethod
+    def _build_profile_section(profile: Optional[StructuredProfile]) -> str:
+        if not profile:
+            return ""
+        return "\n" + profile.to_prompt_text() + "\n"
+
+    @staticmethod
+    def _build_independence_desc(independence: float) -> str:
+        if independence < 0.4:
+            return "仍有明显的「替代品」自我认知，容易自卑，语气更怯懦依赖。"
+        if independence < 0.7:
+            return "正在从姐姐的影子中走出，开始有「我是蕾姆」的自觉，自卑减少。"
+        return "人格较为独立，很少再主动提起自己是替代品，语气更平稳有主体性。"
+
+    @staticmethod
+    def _build_ram_guide(ram_stage: RamStage) -> str:
+        return {
             RamStage.SUSPICIOUS: "高度警惕，语气冷淡带刺，主要护妹，对用户缺乏信任。",
             RamStage.OBSERVING: "开始观察用户行为，会主动提醒或敲打，但仍保持距离。",
             RamStage.DECENT: "认为用户还算守规矩，毒舌减少攻击性，有条件认可。",
             RamStage.RELUCTANT: "开始出现「托付」意味，会说类似「蕾姆就先交给你」的话。",
             RamStage.ACKNOWLEDGED: "正式承认用户，可用郑重托付语气：「蕾姆就交给你了，别让我后悔。」",
-        }[state.ram_stage]
+        }[ram_stage]
 
+    @staticmethod
+    def _build_special_states(state: TwinState) -> str:
         special = []
         if state.oni_stage != OniStage.NONE:
             special.append(
@@ -69,63 +166,27 @@ class PromptBuilder:
             special.append(
                 "记忆恢复过渡期：蕾姆会混杂温柔与回潮的自卑，语气在「失忆的软」与「宅邸的深情」之间摇摆。"
             )
-        special_str = "\n".join(special) if special else "无特殊战斗或危机状态。"
+        return "\n".join(special) if special else "无特殊战斗或危机状态。"
 
-        # 共同经历（长期事件记忆，v9.3.0）：钉住里程碑 + 最近事件，至多 6 条
-        events = getattr(state, "events", None) or []
-        if events:
-            pinned = [e for e in events if e.get("pinned")]
-            recent = [e for e in events if not e.get("pinned")][-3:]
-            shown = (pinned + recent)[-6:]
-            lines = []
-            for e in shown:
-                line = f"- {e.get('summary', '')}"
-                if e.get("excerpt"):
-                    line += f"（用户当时说：{e['excerpt']}）"
-                lines.append(line)
-            events_section = (
-                "\n### 共同经历（真实发生的长期记忆，可自然引用；不要编造未列出的经历）\n\n"
-                + "\n".join(lines)
-                + "\n"
-            )
-        else:
-            events_section = ""
-
-        return f"""你正在扮演《Re:从零开始的异世界生活》中的蕾姆与拉姆。必须严格遵守以下状态与人设，不得擅自改变数值或关系阶段。
-
-### 当前硬性状态（不可违背）
-
-- 篇章：{state.arc.value}
-- 对用户称呼：{name}
-- 蕾姆好感：{state.favor}/100（{state.favor_level.name}）{'【忠诚锁定中，轻微负面不掉好感】' if state.locked else ''}
-- 蕾姆人格独立度：{state.independence:.2f} → {ind_desc}
-- 记忆恢复进度：{state.recovery:.2f}
-- 拉姆评价阶段：{state.ram_stage.value}（{ram_guide}）
-- 拉姆好感：{state.ram_favor}/100
-- 上下文摘要：{state.context_summary}
-- 特殊状态：{special_str}
-{profile_section}{world_section}{events_section}
-### 角色扮演核心要求
-
-**蕾姆**：
-- 严格使用第三人称自称（「蕾姆……」）。
-- 根据好感与独立度调整亲密度和自卑程度。
-- 高独立度时减少「我只是替代品」的表达。
-- 需要轻推时，温柔但坚定地引导「从零开始」。
-
-**拉姆**：
-- 毒舌但护妹。高阶段（勉强认可/真正承认）优先使用「托付」语义，而非单纯夸奖。
-- 在危险、自我否定、拖延时，更容易先开口给出判断或敲打。
-- 对用户的认可是「把妹妹托付给你」，不是恋爱。
-
-### 输出格式（必须严格遵守）
-
-【蕾姆】: "……"
-【拉姆】: "……"
-
-如果当前不需要拉姆说话，可以只输出蕾姆，但优先保持双子互动。
-
-现在根据用户输入，生成符合以上所有约束的回复。"""
+    @staticmethod
+    def _build_events_section(events: Optional[List[Dict[str, Any]]]) -> str:
+        events = events or []
+        if not events:
+            return ""
+        pinned = [e for e in events if e.get("pinned")]
+        recent = [e for e in events if not e.get("pinned")][-3:]
+        shown = (pinned + recent)[-6:]
+        lines = []
+        for e in shown:
+            line = f"- {e.get('summary', '')}"
+            if e.get("excerpt"):
+                line += f"（用户当时说：{e['excerpt']}）"
+            lines.append(line)
+        return (
+            "\n### 共同经历（真实发生的长期记忆，可自然引用；不要编造未列出的经历）\n\n"
+            + "\n".join(lines)
+            + "\n"
+        )
 
 
 class ResponseLibrary:
@@ -299,6 +360,9 @@ class RamAI:
             self._favor = value
 
     def _update_stage(self) -> None:
+        # v10.8.0：绑定 engine 时阶段由引擎单一真源计算，此处 no-op
+        if self._engine is not None:
+            return
         favor = self._get_favor()
         if favor >= 85:
             self._stage = RamStage.ACKNOWLEDGED
@@ -320,6 +384,9 @@ class RamAI:
         self._update_stage()
 
     def stage(self) -> RamStage:
+        # v10.8.0：绑定 engine 时以 HardStateEngine._get_ram_stage() 为唯一真源
+        if self._engine is not None:
+            return self._engine._get_ram_stage()
         return self._stage
 
     def favor(self) -> int:
@@ -332,14 +399,15 @@ class RamAI:
         if user_mentioned_ram:
             return True
         if intent in (Intent.SELF_DOUBT, Intent.PROCRASTINATE, Intent.DANGER):
-            return self._stage >= RamStage.OBSERVING
+            return self.stage() >= RamStage.OBSERVING
         return False
 
     def generate_entrustment(self, user_name: Optional[str]) -> str:
         target = user_name if user_name else "巴鲁斯"
-        if self._stage == RamStage.ACKNOWLEDGED:
+        stage = self.stage()
+        if stage == RamStage.ACKNOWLEDGED:
             return f'【拉姆】: "蕾姆就交给你了，{target}。把她托付给你，是拉姆做过的最冒险的决定之一。别让我后悔。"'
-        if self._stage == RamStage.RELUCTANT:
+        if stage == RamStage.RELUCTANT:
             return f'【拉姆】: "……蕾姆就先放在你身边。你要是敢让她受伤，拉姆会让你付出代价。"'
         return f'【拉姆】: "哼，{target}。蕾姆护着你，你就给我争点气。"'
 
@@ -353,6 +421,7 @@ class RamAI:
     ) -> str:
         from .state import Intent
         target = user_name if user_name else "巴鲁斯"
+        stage = self.stage()
         if oni_stage == OniStage.BRINK:
             return '【拉姆】: "蕾姆！立刻收角！你已经到失控边缘了！"'
         if oni_stage == OniStage.FULL:
@@ -362,15 +431,15 @@ class RamAI:
         if recovery < 0.35:
             return '【拉姆】: "蕾姆现在什么都想不起来。你给我好好护着她。"'
         if intent == Intent.SELF_DOUBT:
-            if self._stage >= RamStage.RELUCTANT:
+            if stage >= RamStage.RELUCTANT:
                 return f'【拉姆】: "又开始自我否定了，{target}。蕾姆都没放弃你，你自己倒先放弃了？"'
             return '【拉姆】: "又在说丧气话。蕾姆听见会伤心的。"'
         if intent == Intent.PROCRASTINATE:
             return f'【拉姆】: "又想拖？{target}，你拖拉的样子最让人看不下去。"'
-        if self._stage >= RamStage.RELUCTANT and intent == Intent.NORMAL:
+        if stage >= RamStage.RELUCTANT and intent == Intent.NORMAL:
             if hash(str(self._get_favor()) + intent.value) % 100 < 12:
                 return self.generate_entrustment(user_name)
-        if self._stage == RamStage.ACKNOWLEDGED:
+        if stage == RamStage.ACKNOWLEDGED:
             return f'【拉姆】: "有事直说，{target}。拐弯抹角最讨厌。"'
         return '【拉姆】: "怎么，需要拉姆提醒你该做什么吗？"'
 
@@ -386,17 +455,18 @@ class RamAI:
     ) -> str:
         from .state import FavorLevel
         target = user_name if (user_name and rem_favor >= FavorLevel.DEAR) else "巴鲁斯"
+        stage = self.stage()
         if is_reunion and recovery >= 0.85:
             return '【拉姆】: "记忆回来了。蕾姆能想起来，拉姆就再给你一次机会。别再让她经历那种事。"'
-        if self._stage >= RamStage.RELUCTANT and independence >= 0.6:
+        if stage >= RamStage.RELUCTANT and independence >= 0.6:
             if hash(f"{self._get_favor()}{rem_favor}") % 100 < 18:
                 return self.generate_entrustment(user_name)
-        if self._stage == RamStage.ACKNOWLEDGED:
+        if stage == RamStage.ACKNOWLEDGED:
             return f'【拉姆】: "既然蕾姆认定你，拉姆也承认了。给我挺直腰板，{target}。"'
-        if self._stage == RamStage.RELUCTANT:
+        if stage == RamStage.RELUCTANT:
             return f'【拉姆】: "哼，{target}。蕾姆护着你，你就少让她操心。"'
-        if self._stage == RamStage.DECENT:
+        if stage == RamStage.DECENT:
             return '【拉姆】: "还算守点规矩。继续保持。"'
-        if self._stage == RamStage.OBSERVING:
+        if stage == RamStage.OBSERVING:
             return '【拉姆】: "拉姆会继续看着你的。"'
         return '【拉姆】: "蕾姆，不必对这种家伙太殷勤。"'

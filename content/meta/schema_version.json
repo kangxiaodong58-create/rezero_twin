@@ -1,0 +1,19 @@
+{
+  "schema_version": "1.0",
+  "content_version": "V11.6",
+  "description": "Re:Zero Twin System Content Schema - 首批A_ACCEPT内容",
+  "categories": {
+    "mansion_morning": "宅邸清晨迎接动作",
+    "mansion_tea": "宅邸红茶时刻动作",
+    "mansion_afternoon": "宅邸午后闲静动作",
+    "mansion_evening": "宅邸傍晚收拾动作",
+    "mansion_rain": "宅邸雨天室内动作",
+    "mansion_return": "宅邸离线归来动作",
+    "opening_mansion": "宅邸短开场段"
+  },
+  "roles": ["Rem", "Ram", "Twin"],
+  "fallback_chain": "JSON -> BUILTIN -> STATIC_FALLBACK",
+  "conditions_note": "trigger/conditions字段仅作文档，不参与运行时条件判定",
+  "first_batch_count": 66,
+  "excluded": ["B_STORE", "C_DEFER", "D_REJECT内容均不在Loader可读路径"]
+}

@@ -1,0 +1,8 @@
+[
+  {"id": "opening_mansion_short_sun_01", "category": "opening_mansion", "text": "晨光穿过高窗的彩绘玻璃，在红木地板上投下淡紫色的光斑。蕾姆在光斑之间穿行，裙摆扫过处，连尘埃都落得格外安静。", "conditions": "period in [清晨,上午] and weather not in [小雨,大雨,阴沉]", "emotion_tag": "calm"},
+  {"id": "opening_mansion_short_sun_02", "category": "opening_mansion", "text": "午后的宅邸被晒出一层暖融融的木质香。蕾姆将茶点端上桌，拉姆在窗边翻着书页，光线在翻页的间隙里流动。", "conditions": "period in [午后,下午] and weather not in [小雨,大雨,阴沉]", "emotion_tag": "calm"},
+  {"id": "opening_mansion_short_rain_01", "category": "opening_mansion", "text": "雨声密密地敲打着玻璃窗，宅邸内部却干燥而温和。蕾姆将热茶递到您手边，拉姆轻哼了一声，算是代雨说了句\"欢迎\"。", "conditions": "weather in [小雨,大雨]", "emotion_tag": "calm"},
+  {"id": "opening_mansion_short_night_01", "category": "opening_mansion", "text": "走廊两侧的烛台次第亮起，蕾姆提着灯走在前面，拉姆倚在后方门框上。夜晚的宅邸不说话，但每一步都有回声。", "conditions": "period in [夜晚,深夜]", "emotion_tag": "calm"},
+  {"id": "opening_mansion_short_return_01", "category": "opening_mansion", "text": "门被推开的瞬间，壁炉的火跳了一下。蕾姆转过身来，手里还端着刚沏好的茶——您离开时她就在沏，好像从未中断过。", "conditions": "days_since_last > 0", "emotion_tag": "caring"},
+  {"id": "opening_mansion_short_fog_01", "category": "opening_mansion", "text": "雾从花园的方向漫进走廊，将所有轮廓都浸得柔软。蕾姆轻轻关上了半扇窗，拉姆在对面说了一句\"多此一举\"，却没去推开。", "conditions": "period in [清晨,上午] and weather not in [小雨,大雨,阴沉]", "emotion_tag": "calm"}
+]

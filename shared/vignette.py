@@ -19,11 +19,12 @@ import hashlib
 import json
 import os
 import random
+import sys
 import time
-from typing import Any, Callable, Dict, Optional, Tuple
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from shared.config import get_data_dir
-from shared.state import WorldState
+from shared.state import WorldState, FAVOR_LEVEL_CN
 
 # LLMCallable 协议：与 llm.bridge.ReZeroLLMBridge.raw_completion 签名一致
 LLMCallable = Callable[..., str]
@@ -84,18 +85,451 @@ EXTRA_ATMOSPHERE = [
 ]
 
 
-def fill_dynamic_template(ws: WorldState) -> str:
-    """L2 动态槽位填充模板（非死板文本，按世界状态组装）。"""
+# ═══════════════════════════════════════════════
+#  V11.5：双子状态驱动动作文案库
+#  动作本体不以「在」开头，模板统一「正在{动作本体}」
+# ═══════════════════════════════════════════════
+
+# ── Rem 动作文案 ──
+REM_DANGER = [
+    "紧绷着身体站在角落，目光警觉地扫过四周",
+    "握紧了拳头，鬼族的气息若隐若现",
+]
+REM_WITCH_SNIFF = [
+    "微微皱眉，似乎闻到了什么不安的气息",
+    "不自觉地握紧了裙角，神情凝重",
+]
+REM_FRAGILE = [
+    "神情恍惚，动作有些迟疑，像在努力回忆什么",
+    "迷茫地望着窗外，手指无意识地攥着围裙",
+]
+REM_LOCKED = [
+    "守在门扉的阴影里，像是一直在等谁回来",
+    "轻轻握着门把手，目光柔和而坚定",
+]
+REM_DEFAULT = [
+    "整理着房间里的摆设",
+    "擦拭着茶具，动作细致而安静",
+    "叠着桌布，神情平和",
+]
+REM_DEFAULT_NIGHT = [
+    "借着烛光缝补衣物",
+    "轻手轻脚地收拾着餐桌",
+]
+
+# ── Ram 动作文案 ──
+RAM_HORN_PAIN = [
+    "偶尔抬手按住额头，眉头微蹙",
+    "不动声色地揉着太阳穴，神情有些不适",
+]
+RAM_SISTER_PROTECT = [
+    "挡在蕾姆身前，神情严肃",
+    "警惕地注视着蕾姆的方向，随时准备上前",
+]
+RAM_SUSPECT = [
+    "冷眼打量着这边，嘴角微微下沉",
+    "抱臂靠在墙边，目光审视",
+]
+RAM_OBSERVE = [
+    "不动声色地观察着这边的动静",
+    "翻着书页，余光却始终没有离开",
+]
+RAM_ACKNOWLEDGE = [
+    "安心地翻着书，偶尔抬头看一眼",
+    "靠在窗边，神情舒展了许多",
+]
+RAM_DEFAULT = [
+    "靠在一旁休息",
+    "整理着书架上的旧书",
+]
+
+# ── 双子联动文案（日常双人同屏时启用）──
+# 动作本体不以「在」开头，避免与模板「正在{动作本体}」拼出「正在在」
+DUO_DEFAULT = [
+    ("整理着茶具", "递着杯碟配合"),              # 日常茶歇
+    ("擦拭着餐桌", "收拾着旁边的椅子"),            # 共同劳作
+]
+DUO_NIGHT = [
+    ("借着烛光缝补衣物", "整理着灯芯"),
+]
+
+
+# ═══════════════════════════════════════════════
+#  V11.6：ContentLoader + M1 内容池细分
+# ═══════════════════════════════════════════════
+
+class ContentLoader:
+    """内容资产加载器（懒加载 + 单例 + 三层回退）。
+
+    JSON → 内置常量 → STATIC_FALLBACK
+    单文件/条目失败隔离，错误日志输出到 console。
+    """
+    _instance = None
+
+    def __new__(cls):
+        if cls._instance is None:
+            cls._instance = super().__new__(cls)
+            cls._instance._initialized = False
+        return cls._instance
+
+    def _init(self) -> None:
+        if self._initialized:
+            return
+        self._initialized = True
+        self._actions: Dict[str, List[dict]] = {}
+        self._openings: Dict[str, List[dict]] = {}
+        self._load_all()
+
+    def _get_content_dir(self) -> str:
+        if getattr(sys, "frozen", False):
+            base = sys._MEIPASS  # type: ignore
+        else:
+            base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        return os.path.join(base, "content")
+
+    def _load_all(self) -> None:
+        content_dir = self._get_content_dir()
+        actions_dir = os.path.join(content_dir, "actions")
+        for fname in ("rem.json", "ram.json", "twin.json"):
+            self._load_json(os.path.join(actions_dir, fname), self._actions)
+        openings_dir = os.path.join(content_dir, "openings")
+        for fname in ("mansion.json",):
+            self._load_json(os.path.join(openings_dir, fname), self._openings)
+
+    def _load_json(self, path: str, target: Dict[str, list]) -> None:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            if not isinstance(data, list):
+                return
+            for entry in data:
+                if not isinstance(entry, dict):
+                    continue
+                cat = entry.get("category")
+                if not cat:
+                    continue
+                target.setdefault(cat, []).append(entry)
+        except Exception as e:
+            print(f"[ContentLoader] 加载失败 {path}: {e}")
+
+    def get(self, category: str, role: Optional[str] = None) -> list:
+        """获取动作文案池。可选按 role 过滤。"""
+        self._init()
+        pool = self._actions.get(category, [])
+        if role:
+            pool = [e for e in pool if e.get("role") == role]
+        return pool
+
+    def get_pairs(self, category: str) -> List[Tuple[str, str]]:
+        """获取 Twin 联动文案对。返回 [(rem_text, ram_text), ...]。"""
+        self._init()
+        pool = self._actions.get(category, [])
+        result: List[Tuple[str, str]] = []
+        for e in pool:
+            if e.get("role") == "Twin" and e.get("text") and e.get("text_pair"):
+                result.append((e["text"], e["text_pair"]))
+        return result
+
+    def get_openings(self, category: str) -> list:
+        """获取开场段文案池。"""
+        self._init()
+        return self._openings.get(category, [])
+
+
+def _pick_rem_mansion_action(period: str, weather: str, days_since_last: int) -> str:
+    """从 M1 内容池选择 Rem 日常动作，无命中回退内置常量。"""
+    loader = ContentLoader()
+    if days_since_last > 0:
+        pool = loader.get("mansion_return", role="Rem")
+        if pool:
+            return random.choice(pool)["text"]
+    if weather in ("小雨", "大雨", "阴沉"):
+        pool = loader.get("mansion_rain", role="Rem")
+        if pool:
+            return random.choice(pool)["text"]
+    if period in ("清晨", "上午"):
+        pool = loader.get("mansion_morning", role="Rem")
+        if pool:
+            return random.choice(pool)["text"]
+    if period in ("午后", "下午"):
+        pool = loader.get("mansion_afternoon", role="Rem")
+        if pool:
+            return random.choice(pool)["text"]
+    if period == "傍晚":
+        pool = loader.get("mansion_evening", role="Rem")
+        if pool:
+            return random.choice(pool)["text"]
+    pool = loader.get("mansion_tea", role="Rem")
+    if pool:
+        return random.choice(pool)["text"]
+    return random.choice(REM_DEFAULT)
+
+
+def _pick_ram_mansion_action(period: str, days_since_last: int) -> str:
+    """从 M1 内容池选择 Ram 日常动作，无命中回退内置常量。
+
+    注：雨天已在高优先级角痛桶处理，此处不接 mansion_rain。
+    """
+    loader = ContentLoader()
+    if days_since_last > 0:
+        pool = loader.get("mansion_return", role="Ram")
+        if pool:
+            return random.choice(pool)["text"]
+    if period in ("清晨", "上午"):
+        pool = loader.get("mansion_morning", role="Ram")
+        if pool:
+            return random.choice(pool)["text"]
+    if period in ("午后", "下午"):
+        pool = loader.get("mansion_afternoon", role="Ram")
+        if pool:
+            return random.choice(pool)["text"]
+    if period == "傍晚":
+        pool = loader.get("mansion_evening", role="Ram")
+        if pool:
+            return random.choice(pool)["text"]
+    pool = loader.get("mansion_tea", role="Ram")
+    if pool:
+        return random.choice(pool)["text"]
+    return random.choice(RAM_DEFAULT)
+
+
+def _pick_short_opening(period: str, weather: str, days_since_last: int) -> Optional[str]:
+    """尝试从内容池匹配短开场段。~30% 概率使用，无命中返回 None。"""
+    if random.random() > 0.3:
+        return None
+    loader = ContentLoader()
+    openings = loader.get_openings("opening_mansion")
+    if not openings:
+        return None
+    candidates = []
+    for op in openings:
+        op_id = op.get("id", "")
+        op_text = op.get("text", "")
+        if not op_text:
+            continue
+        if days_since_last > 0 and "return" in op_id:
+            candidates.append(op_text)
+        elif weather in ("小雨", "大雨") and "rain" in op_id:
+            candidates.append(op_text)
+        elif period in ("夜晚", "深夜") and "night" in op_id:
+            candidates.append(op_text)
+        elif period in ("清晨", "上午") and "sun_01" in op_id and weather not in ("小雨", "大雨", "阴沉"):
+            candidates.append(op_text)
+        elif period in ("午后", "下午") and "sun_02" in op_id and weather not in ("小雨", "大雨", "阴沉"):
+            candidates.append(op_text)
+        elif period in ("清晨", "上午") and "fog" in op_id:
+            candidates.append(op_text)
+    if candidates:
+        return random.choice(candidates)
+    return None
+
+
+def _pick_rem_action(
+    locked: bool = False,
+    recovery: float = 1.0,
+    oni_warning: bool = False,
+    witch_scent: int = 0,
+    period: str = "上午",
+    weather: str = "晴朗",
+    days_since_last: int = 0,
+) -> str:
+    """Rem 动作优先级选择（命中即停，返回动作本体，不带「在」前缀）。
+
+    V11.6：高优先级状态仍走 V11.5 真实字段桶；
+    仅 default 分支再按 period/weather/days_since_last 细分读 M1 池。
+    """
+    if oni_warning or witch_scent >= 3:
+        return random.choice(REM_DANGER)
+    if witch_scent >= 2:
+        return random.choice(REM_WITCH_SNIFF)
+    if recovery < 0.3:
+        return random.choice(REM_FRAGILE)
+    if locked:
+        return random.choice(REM_LOCKED)
+    if period in ("夜晚", "深夜"):
+        return random.choice(REM_DEFAULT_NIGHT)
+    # V11.6：default 分支 → M1 内容池细分（JSON → 内置常量回退）
+    return _pick_rem_mansion_action(period, weather, days_since_last)
+
+
+def _pick_ram_action(
+    ram_stage: str = "观察中",
+    oni_warning: bool = False,
+    witch_scent: int = 0,
+    weather: str = "晴朗",
+    period: str = "上午",
+    days_since_last: int = 0,
+) -> str:
+    """Ram 动作优先级选择（命中即停，返回动作本体，不带「在」前缀）。
+
+    V11.6：雨天先角痛桶（V11.5 真实字段），高等级状态仍走 V11.5；
+    仅 default 分支再按 period/days_since_last 细分读 M1 池。
+    """
+    if weather in ("小雨", "大雨", "阴沉"):
+        return random.choice(RAM_HORN_PAIN)
+    if oni_warning or witch_scent >= 3:
+        return random.choice(RAM_SISTER_PROTECT)
+    if ram_stage == "可疑":
+        return random.choice(RAM_SUSPECT)
+    if ram_stage == "观察中":
+        return random.choice(RAM_OBSERVE)
+    if ram_stage == "真正承认":
+        return random.choice(RAM_ACKNOWLEDGE)
+    # V11.6：default 分支 → M1 内容池细分（JSON → 内置常量回退）
+    return _pick_ram_mansion_action(period, days_since_last)
+
+
+def _try_duo_link(
+    locked: bool, recovery: float, oni_warning: bool, witch_scent: int,
+    ram_stage: str, weather: str, period: str, days_since_last: int = 0,
+) -> Optional[Tuple[str, str]]:
+    """尝试双子联动动作。仅当双方都落在日常优先级时启用，返回 (rem, ram) 或 None。
+
+    V11.6：优先从 M1 Twin 内容池读取 (rem_text, ram_text) 对；
+    无命中回退内置 DUO 常量。
+    """
+    # 高等级单人状态优先，不启用联动
+    if oni_warning or witch_scent >= 2:
+        return None
+    if recovery < 0.3 or locked:
+        return None
+    if ram_stage in ("可疑",) or weather in ("小雨", "大雨", "阴沉"):
+        return None
+    # V11.6：M1 Twin 内容池选择（JSON → 内置常量回退）
+    loader = ContentLoader()
+    cat = None
+    if days_since_last > 0:
+        cat = "mansion_return"
+    elif period in ("清晨", "上午"):
+        cat = "mansion_morning"
+    elif period in ("午后", "下午"):
+        cat = "mansion_afternoon"
+    elif period == "傍晚":
+        cat = "mansion_evening"
+    else:
+        cat = "mansion_tea"
+    pairs = loader.get_pairs(cat)
+    if pairs:
+        return random.choice(pairs)
+    # 回退内置常量
+    if period in ("夜晚", "深夜"):
+        return random.choice(DUO_NIGHT)
+    return random.choice(DUO_DEFAULT)
+
+
+# ── V11.0：离线归来感文案（按天数分桶）──
+
+def _pick_return_awareness(days: int) -> str:
+    """按离线天数分桶返回归来感文案，0 天返回空串。"""
+    if days <= 0:
+        return ""
+    if days == 1:
+        return random.choice([
+            "你离开不过一日，宅邸的节奏几乎没有变化。",
+        ])
+    if days == 2:
+        return random.choice([
+            "你离开了两天，蕾姆似乎一直在留意门口的动静。",
+        ])
+    if days <= 7:
+        return random.choice([
+            "几天不见，宅邸里似乎有些细微的变化。",
+            "你离开了有些日子了，蕾姆见到你时眼中闪过一丝安心。",
+        ])
+    return random.choice([
+        "你离开了很久。蕾姆站在门口，像是一直在等。",
+        "久别重逢，宅邸的空气都似乎轻快了一些。",
+    ])
+
+
+def _derive_location(active_event: str) -> str:
+    """从 active_event 描述推导地点短描述（V11.8）。
+
+    纯函数、无副作用。关键词启发式查表，无匹配回落「罗兹瓦尔宅邸」。
+    覆盖 EVENT_POOL 全部 8 条事件的地点词。
+    """
+    if not active_event:
+        return "罗兹瓦尔宅邸"
+    if "走廊" in active_event:
+        return "宅邸走廊"
+    if "花园" in active_event:
+        return "宅邸花园"
+    if "书库" in active_event:
+        return "宅邸书库"
+    if "庭院" in active_event:
+        return "宅邸庭院"
+    if "后院" in active_event:
+        return "宅邸后院"
+    if "大扫除" in active_event:
+        return "宅邸大厅"
+    if "窗" in active_event:
+        return "宅邸窗边"
+    if "地板" in active_event:
+        return "宅邸向阳处"
+    return "罗兹瓦尔宅邸"
+
+
+def fill_dynamic_template(
+    ws: WorldState,
+    locked: bool = False,
+    recovery: float = 1.0,
+    oni_warning: bool = False,
+    witch_scent: int = 0,
+    ram_stage: str = "观察中",
+) -> str:
+    """L2 动态槽位填充模板（V11.5：状态化动作 + 去「正在在」铁律）。
+
+    动作本体不以「在」开头，模板统一「正在{动作本体}」格式。
+    保留 V11.0 的归来感与 active_event 融入。
+    V11.6：~30% 概率优先使用短开场段（JSON 内容池），无命中回退模板。
+    """
+    # V11.6：尝试短开场段（~30% 概率，JSON → None 回退模板）
+    short_op = _pick_short_opening(ws.period, ws.weather, ws.days_since_last)
+    if short_op:
+        return short_op
+
     period_desc = random.choice(PERIOD_DESC.get(ws.period, ["时间悄然流过"]))
     weather_desc = random.choice(WEATHER_DESC.get(ws.weather, ["天气如常"]))
-    rem_action = ws.character_actions.get("rem", "做着手头的事")
-    ram_action = ws.character_actions.get("ram", "保持着一贯的姿态")
     extra = random.choice(EXTRA_ATMOSPHERE)
 
+    # V11.0：离线归来感（0 天返回空串，不插入）
+    return_desc = _pick_return_awareness(ws.days_since_last)
+
+    # V11.0：活跃事件氛围（EVENT_POOL 文案已文学化，直接作为独立短句）
+    event_part = f"{ws.active_event}。" if ws.active_event and ws.active_event.strip() else ""
+
+    # V11.5：双子联动判定——双方都在日常态时启用联动动作
+    duo = _try_duo_link(
+        locked, recovery, oni_warning, witch_scent,
+        ram_stage, ws.weather, ws.period, ws.days_since_last,
+    )
+    if duo is not None:
+        rem_action, ram_action = duo
+    else:
+        rem_action = _pick_rem_action(
+            locked=locked, recovery=recovery,
+            oni_warning=oni_warning, witch_scent=witch_scent,
+            period=ws.period, weather=ws.weather,
+            days_since_last=ws.days_since_last,
+        )
+        ram_action = _pick_ram_action(
+            ram_stage=ram_stage, oni_warning=oni_warning,
+            witch_scent=witch_scent, weather=ws.weather,
+            period=ws.period, days_since_last=ws.days_since_last,
+        )
+
+    # V11.8：回写选中动作到 WorldState，供下次 L1 prompt 展示真实动作
+    try:
+        ws.character_actions["rem"] = rem_action
+        ws.character_actions["ram"] = ram_action
+    except Exception:
+        pass  # 回写失败不影响引言生成
+
+    # V11.5：模板统一「正在{动作本体}」，彻底消灭「正在在」
     templates = [
-        f"{period_desc}，{weather_desc}。蕾姆{rem_action}，动作很轻。拉姆则{ram_action}。{extra}",
-        f"{period_desc}。{weather_desc}。蕾姆正在{rem_action}，拉姆{ram_action}，两人之间维持着熟悉的安静。{extra}",
-        f"{weather_desc}的{ws.period}，宅邸显得格外沉静。蕾姆{rem_action}。拉姆{ram_action}。{extra}",
+        f"{period_desc}，{weather_desc}。{event_part}蕾姆正在{rem_action}，动作很轻。拉姆正在{ram_action}。{return_desc}{extra}",
+        f"{period_desc}。{weather_desc}。{event_part}蕾姆正在{rem_action}，拉姆正在{ram_action}，两人之间维持着熟悉的安静。{return_desc}{extra}",
+        f"{weather_desc}的{ws.period}，宅邸显得格外沉静。{event_part}蕾姆正在{rem_action}。拉姆正在{ram_action}。{return_desc}{extra}",
     ]
     return random.choice(templates)
 
@@ -212,12 +646,12 @@ class VignetteGenerator:
 - 系统日期：{system_date} {hour_text}
 - 当前时段：{ws.period}
 - 天气：{ws.weather}
-- 地点：罗兹瓦尔宅邸
+- 地点：{_derive_location(ws.active_event)}
 - 距离用户上次到访：{ws.days_since_last} 天
 - 蕾姆当前动作：{rem_action}
 - 拉姆当前动作：{ram_action}
 - 最近事件：{event_desc}
-- 蕾姆关系阶段：{rem_level}，人格独立度：{independence:.2f}
+- 蕾姆关系阶段：{FAVOR_LEVEL_CN.get(rem_level, rem_level)}，人格独立度：{independence:.2f}
 - 拉姆评价阶段：{ram_stage}
 
 【写作要求】
@@ -249,8 +683,17 @@ class VignetteGenerator:
         independence: float = 0.5,
         ram_stage: str = "观察中",
         force_refresh: bool = False,
+        locked: bool = False,
+        recovery: float = 1.0,
+        oni_warning: bool = False,
+        witch_scent: int = 0,
     ) -> str:
-        """按 L0 → L1 → L2 → L3 顺序生成开场引言。"""
+        """按 L0 → L1 → L2 → L3 顺序生成开场引言。
+
+        V11.5：新增 locked/recovery/oni_warning/witch_scent 参数，
+        透传至 L2 fill_dynamic_template 用于状态化动作选择。
+        L1 _build_prompt 不使用这些参数（仍用 ws.character_actions 原始值）。
+        """
         # L0：会话级内存缓存
         if self._session_cache and not force_refresh:
             return self._session_cache
@@ -283,9 +726,16 @@ class VignetteGenerator:
                 time.sleep(0.4)
             print("[Vignette] LLM 路径尝试耗尽，降级至动态模板填充 (L2)")
 
-        # L2：动态模板
+        # L2：动态模板（V11.5：透传状态参数用于动作选择）
         try:
-            vignette = fill_dynamic_template(ws)
+            vignette = fill_dynamic_template(
+                ws,
+                locked=locked,
+                recovery=recovery,
+                oni_warning=oni_warning,
+                witch_scent=witch_scent,
+                ram_stage=ram_stage,
+            )
             if vignette:
                 self._session_cache = vignette
                 return vignette
@@ -313,3 +763,28 @@ def generate_opening_vignette(
         ram_stage=ram_stage,
         force_refresh=force_refresh,
     )
+
+
+def prepare_session_opening(
+    llm_callable: Optional[LLMCallable] = None,
+    rem_favor_level: str = "CLOSE",
+    independence: float = 0.5,
+    ram_stage: str = "观察中",
+) -> Tuple[WorldState, str]:
+    """应用启动标准单一入口（docx 兼容签名）。
+
+    加载/更新世界状态并生成开场引言；返回 (world_state, vignette)。
+    底层沿用 memory.json 单持久化管线，与现有 GUI 完全兼容。
+    """
+    from shared.world_state import load_world_state, update_world_state_on_startup
+
+    ws = load_world_state()
+    ws = update_world_state_on_startup(ws)
+    vignette = generate_opening_vignette(
+        ws,
+        rem_favor_level=rem_favor_level,
+        independence=independence,
+        ram_stage=ram_stage,
+        llm_callable=llm_callable,
+    )
+    return ws, vignette

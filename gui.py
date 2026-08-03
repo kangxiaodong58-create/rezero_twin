@@ -11,8 +11,37 @@
 
 from __future__ import annotations
 
+import ctypes
 import os
 import sys
+
+# ── PyInstaller windowed 模式 (console=False) 下 sys.stdout/stderr 为 None ──
+# PySide6 初始化或任何 print/logging 写入 None 会触发 0xC0000409 原生崩溃。
+# 三级兜底：EXE同级data/ → %APPDATA%/ReZeroTwin/data → os.devnull
+# 保证 stdout/stderr 永不为 None，不依赖 get_data_dir（它在此块之后才可用）。
+if getattr(sys, "frozen", False):
+    _redir_done = False
+    for _target_dir in (
+        os.path.join(
+            os.path.dirname(os.path.abspath(
+                sys.argv[0] if sys.argv else sys.executable)), "data"),
+        os.path.join(
+            os.environ.get("APPDATA", os.path.expanduser("~")),
+            "ReZeroTwin", "data"),
+    ):
+        try:
+            os.makedirs(_target_dir, exist_ok=True)
+            _fh = open(os.path.join(_target_dir, "console.log"), "a", encoding="utf-8")
+            sys.stdout = _fh
+            sys.stderr = _fh
+            _redir_done = True
+            break
+        except OSError:
+            continue
+    if not _redir_done:
+        sys.stdout = open(os.devnull, "w")
+        sys.stderr = sys.stdout
+
 import traceback
 from datetime import datetime
 from typing import Optional
@@ -24,16 +53,28 @@ if _PROJECT_ROOT not in sys.path:
 from shared.config import load_env, get_data_dir
 load_env()
 
-from PySide6.QtCore import Qt, QTimer, Signal, QObject, QThread
-from PySide6.QtGui import QFont, QFontMetrics, QPixmap
+# 历史浮层开关（V10.10.2）：环境变量 REZERO_DISABLE_HISTORY=1 可禁用浮层做二分排查
+_HISTORY_DISABLED = os.environ.get("REZERO_DISABLE_HISTORY", "") == "1"
+
+# 开场引言开关（V10.10.3）：环境变量 REZERO_DISABLE_VIGNETTE=1 可禁用引言做二分排查
+_VIGNETTE_DISABLED = os.environ.get("REZERO_DISABLE_VIGNETTE", "") == "1"
+
+# UI 动效开关（V12.0）：环境变量 REZERO_DISABLE_UI_MOTION=1 可整体关闭动效（验收对比/回滚）
+ENABLE_UI_MOTION = os.environ.get("REZERO_DISABLE_UI_MOTION", "") != "1"
+
+from PySide6.QtCore import (
+    Qt, QTimer, Signal, QObject, QThread, QSize,
+    QPropertyAnimation, QSequentialAnimationGroup, QAbstractAnimation, QEasingCurve,
+)
+from PySide6.QtGui import QFont, QFontMetrics, QIcon, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QLineEdit, QPushButton, QLabel, QFrame, QScrollArea,
-    QMessageBox, QSizePolicy, QSplitter,
+    QMessageBox, QSizePolicy, QSplitter, QProgressBar, QGraphicsOpacityEffect,
 )
 
 from local import ReZeroTwinSystem
-from shared.state import StoryArc
+from shared.state import StoryArc, OniStage, FAVOR_LEVEL_CN
 from shared.memory_store import MemoryStore
 from shared.conversation_store import ConversationStore
 
@@ -48,6 +89,8 @@ def _log(msg: str) -> None:
         os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
         with open(_LOG_PATH, "a", encoding="utf-8") as f:
             f.write(f"[{datetime.now().isoformat()}] {msg}\n")
+            f.flush()
+            os.fsync(f.fileno())
     except Exception:
         pass
 
@@ -56,26 +99,399 @@ _log(f"=== PySide6 GUI 启动 (python={sys.executable}) ===")
 
 
 # ═══════════════════════════════════════════════
-#  颜色方案
+#  Design Tokens（V10.9.0 暗色视觉基线）
 # ═══════════════════════════════════════════════
 COLORS = {
-    "bg_primary": "#f0ebe3",       # 米白背景（仿和纸）
-    "bg_secondary": "#ffffff",
-    "bg_header": "#3a2f28",        # 深棕顶栏（罗兹瓦尔宅邸木色）
-    "bg_sidebar": "#f5f0eb",
-    "rem_primary": "#5b9bd5",      # 蕾姆蓝
-    "rem_bubble": "#d6e4f0",       # 蕾姆气泡蓝
-    "rem_dark": "#3a7cc3",
-    "ram_primary": "#e982a5",      # 拉姆粉
-    "ram_bubble": "#fce4ec",       # 拉姆气泡粉
-    "ram_dark": "#d4687c",
-    "user_bubble": "#ffffff",
-    "text_primary": "#2c2416",
-    "text_secondary": "#6b5e4f",
-    "text_light": "#ffffff",
-    "border": "#d4c5b2",
-    "accent": "#c9a96e",           # 金色点缀
+    # ── 背景层级 ──
+    "bg_base":       "#121319",   # 全局底色
+    "bg_surface":    "#1a1b23",   # 面板/输入区表面
+    "bg_surface_2":  "#1e1f29",   # 气泡/卡片表面（略亮，区分层级）
+    "bg_header":     "#0f1015",   # 顶栏/底栏（更深，收束视觉）
+
+    # ── 边框（低对比细边） ──
+    "border_subtle": "rgba(255,255,255,0.08)",
+    "border_focus":  "rgba(255,255,255,0.15)",
+
+    # ── 文本层级 ──
+    "text_primary":   "#E2E8F0",  # 主文本（对话内容、角色名）
+    "text_secondary": "#94A3B8",  # 次要文本（状态、好感数值、提示语）
+    "text_muted":     "#64748B",  # 系统标签、占位符
+
+    # ── 角色主题色 ──
+    "rem_accent":    "#56CCF2",   # 蕾姆冰蓝
+    "rem_bubble":    "rgba(86,204,242,0.10)",
+    "rem_left":      "rgba(86,204,242,0.45)",
+    "ram_accent":    "#FF7EB3",   # 拉姆蔷薇粉
+    "ram_bubble":    "rgba(255,126,179,0.10)",
+    "ram_left":      "rgba(255,126,179,0.45)",
+
+    # ── 用户 ──
+    "user_bubble":   "rgba(99,102,241,0.16)",
+    "user_border":   "rgba(99,102,241,0.30)",
+
+    # ── 功能色 ──
+    "accent":        "#c9a96e",   # 金色点缀（发送按钮、章节标签）
+    "accent_hover":  "#d4b87a",
+    "accent_press":  "#b8964f",
+
+    # ── 系统标签 ──
+    "system_label_bg":  "rgba(255,255,255,0.04)",
+    "system_label_fg":  "#64748B",
+
+    # ── STATE（V10.15b：状态色，消除 disabled/高亮/遮罩硬编码）──
+    "btn_disabled_bg":  "#4a4a4a",               # 按钮 disabled 背景
+    "btn_disabled_fg":  "#888",                  # 按钮 disabled 文字
+    "locate_highlight": "rgba(255,215,0,0.15)",   # 定位高亮金色半透明
+    "overlay_mask":     "rgba(0,0,0,0.65)",       # 历史浮层遮罩
 }
+
+RADIUS = {
+    "xs":     4,    # 历史详情区（V10.15b 新增）
+    "sm2":    6,    # 历史项外框（V10.15b 新增，介于 xs 与 small 之间）
+    "large":  16,   # 气泡、立绘框
+    "medium": 12,   # 面板、输入框
+    "small":   8,   # 按钮
+    "pill":   20,   # 头像、标签
+}
+
+SPACING = {
+    "xs":  4,
+    "sm":  8,
+    "md":  12,
+    "lg":  16,
+    "xl":  24,
+}
+
+# ═══════════════════════════════════════════════
+#  Font Tokens（V10.15a：字体族 + 语义刻度，消除 30+ 处字面量）
+# ═══════════════════════════════════════════════
+FONT_FAMILY = {
+    "ui":    "Microsoft YaHei",   # 正文/UI
+    "emoji": "Segoe UI Emoji",    # 表情/立绘占位
+}
+
+FONT_SIZE = {
+    "caption":   8,   # 时间戳、最弱辅助
+    "small":     9,   # 角色名、按钮文字、状态栏
+    "body":     10,   # 历史正文、面板数值、搜索框、系统标签(长)
+    "body_lg":  11,   # 气泡正文、输入框、发送按钮
+    "title":    12,   # 浮层标题
+    "title_lg": 14,   # 顶栏标题、面板角色名
+    "emoji_sm": 20,   # 头像 emoji（AvatarLabel）
+    "emoji_md": 28,   # 情绪 emoji（历史面板）
+    "emoji_lg": 36,   # 情绪 emoji（CharacterPanel 主焦点）
+    "display":  48,   # 立绘占位 emoji
+}
+
+# ═══════════════════════════════════════════════
+#  角色色统一映射（V10.15a：消除三处分散定义）
+# ═══════════════════════════════════════════════
+ROLE_COLORS = {
+    "rem":    COLORS['rem_accent'],   # 蕾姆冰蓝
+    "ram":    COLORS['ram_accent'],   # 拉姆蔷薇粉
+    "user":   COLORS['text_primary'], # 用户（统一为 primary）
+    "system": COLORS['text_muted'],   # 系统弱化
+}
+
+# BubbleWidget 专用：角色 → 气泡底色/前景/边框 CSS
+ROLE_BUBBLE_STYLES = {
+    "rem": {
+        "bg": COLORS['rem_bubble'],
+        "fg": COLORS['text_primary'],
+        "border": f"border-left: 3px solid {COLORS['rem_left']};",
+        "hl_border": "border-left: 5px solid rgba(86,204,242,0.70);",
+        "hl_bg": "rgba(86,204,242,0.15)",
+        # V11.10.1：streaming 弱变体 — 底色降至 0.04，边线细 2px+弱 0.15，文字暗一档
+        "stream_bg": "rgba(86,204,242,0.04)",
+        "stream_border": "border-left: 2px solid rgba(86,204,242,0.15);",
+        "stream_fg": COLORS['text_secondary'],
+    },
+    "ram": {
+        "bg": COLORS['ram_bubble'],
+        "fg": COLORS['text_primary'],
+        "border": f"border-left: 3px solid {COLORS['ram_left']};",
+        "hl_border": "border-left: 5px solid rgba(255,126,179,0.70);",
+        "hl_bg": "rgba(255,126,179,0.15)",
+        "stream_bg": "rgba(255,126,179,0.04)",
+        "stream_border": "border-left: 2px solid rgba(255,126,179,0.15);",
+        "stream_fg": COLORS['text_secondary'],
+    },
+    "user": {
+        "bg": COLORS['user_bubble'],
+        "fg": COLORS['text_primary'],
+        "border": f"border: 1px solid {COLORS['user_border']};",
+    },
+}
+# system 兜底（实际不走 BubbleWidget，仅防御）
+ROLE_BUBBLE_FALLBACK = {
+    "bg": COLORS['bg_surface_2'],
+    "fg": COLORS['text_secondary'],
+    "border": f"border: 1px solid {COLORS['border_subtle']};",
+}
+
+# ═══════════════════════════════════════════════
+#  Surface Tint（V10.15b：表面叠加色，消除散落 rgba(255,255,255,0.0x)）
+# ═══════════════════════════════════════════════
+SURFACE_TINT = {
+    "detail": "rgba(255,255,255,0.03)",  # 历史详情区底色（弱叠加）
+    "hover":  "rgba(255,255,255,0.03)",  # 折叠态 hover 底色（弱叠加）
+    "active": "rgba(255,255,255,0.04)",  # 展开态外框底色（中叠加）
+    "input":  "rgba(255,255,255,0.06)",  # 搜索框底色 / 按钮强 hover
+}
+
+
+def _rgba_to_qcolor(rgba_str: str):
+    """解析 rgba(r,g,b,a) 字符串为 QColor，a 为 0-1 浮点。"""
+    s = rgba_str.strip()[5:-1]  # 去掉 "rgba(" 和 ")"
+    r, g, b, a = s.split(",")
+    from PySide6.QtGui import QColor
+    return QColor(int(r), int(g), int(b), int(float(a) * 255))
+
+# ═══════════════════════════════════════════════
+#  DIM 尺寸 token（V10.15c：布局尺寸唯一真源，消除魔法数）
+# ═══════════════════════════════════════════════
+DIM = {
+    # ── 结构高度 ──
+    "header_h":         54,   # 顶栏高度
+    "footer_h":         28,   # 底部状态栏高度
+    "input_frame_h":   130,   # 输入区域总高度
+    "input_box_h":      55,   # 输入框高度
+    "avatar_frame_h":  240,   # 角色面板立绘区域高度
+
+    # ── 结构宽度 ──
+    "panel_w":          180,  # 角色面板宽度
+    "history_card_w":   720,  # 历史浮层卡片宽度
+    "search_box_w":     160,  # 顶栏搜索框宽度
+
+    # ── 元素尺寸 ──
+    "avatar_size":       42,  # 头像直径
+    "bubble_max_w":     600,  # 气泡/系统标签最大宽度
+    "send_btn_w":        72,  # 发送按钮宽度
+    "send_btn_h":        55,  # 发送按钮高度（与 input_box_h 同值，语义独立）
+
+    # ── 方形图标按钮（28×28）──
+    "icon_btn":          28,  # 关闭/搜索按钮等方形图标按钮
+
+    # ── 顶栏控件高度（与 icon_btn 同值，语义独立）──
+    "search_box_h":      28,  # 顶栏搜索框高度
+    "history_btn_h":     28,  # 顶栏历史按钮高度
+
+    # ── 次级按钮 ──
+    "quick_btn_h":       26,  # 快捷按钮高度
+    "locate_btn":        22,  # 历史条目定位按钮直径
+
+    # ── 历史浮层子区域 ──
+    "history_header_h":  48,  # 历史浮层标题栏/搜索区高度
+}
+
+# ═══════════════════════════════════════════════
+#  显示层中文映射（V10.9.1）
+#  V11.7：FAVOR_LEVEL_CN 已迁移至 shared.state（唯一真源）
+#  ONI_STAGE_CN / ARC_CN 仅 GUI 使用，保留本地
+# ═══════════════════════════════════════════════
+ONI_STAGE_CN = {
+    "NONE": "无",
+    "EMERGING": "显现",
+    "FULL": "完全解放",
+    "BRINK": "失控边缘",
+}
+
+ARC_CN = {
+    "mansion_era": "宅邸篇",
+    "empire_era": "帝国篇（失忆）",
+    "late_arc": "后期篇",
+}
+
+# ── V11.9.1：日更问候模板表驱动 ──────────────────────
+# 骨架不含天气/其它时段词，天气由 WEATHER_CLAUSES 白名单注入。
+GREETING_TEMPLATES = {
+    "清晨": "早安。蕾姆已经备好了早餐。{weather_clause}{event_clause}",
+    "上午": "上午好。宅邸的走廊已经亮起来了。{weather_clause}{event_clause}",
+    "午后": "午安。刚泡好的红茶还冒着热气。{weather_clause}{event_clause}",
+    "下午": "下午好。宅邸很安静。{weather_clause}{event_clause}",
+    "傍晚": "傍晚了。天色渐暗，蕾姆点了灯。{weather_clause}{event_clause}",
+    "夜晚": "晚上好。夜风有些凉。{weather_clause}{event_clause}",
+    "深夜": "这么晚了还没休息吗。{weather_clause}{event_clause}",
+}
+
+# 天气从句白名单：覆盖 WorldState.WEATHERS 全部 5 种，未知天气中性兜底。
+WEATHER_CLAUSES = {
+    "晴朗": "窗外天气晴朗。",
+    "多云": "云层遮住了部分天空。",
+    "小雨": "窗外飘着小雨。",
+    "大雨": "雨下得很大，宅邸的屋檐传来急促的滴水声。",
+    "阴沉": "天空阴沉沉的。",
+}
+
+# 天气 ↔ active_event 语义冲突关键词：命中则跳过 event 拼接并打日志。
+WEATHER_EVENT_CONFLICT = {
+    "大雨": ["花园", "盛开", "晒", "阳光", "晾晒", "白布", "温暖"],
+    "阴沉": ["阳光", "晒", "晴朗", "盛开", "晾晒", "白布", "温暖"],
+    "小雨": ["晒", "阳光", "晾晒"],
+}
+
+# 时段关键词：event 含这些词且与当前 period 不一致 → 语义冲突。
+# "入夜" 视为 "夜晚"/"深夜" 的别名，不与这两个时段冲突。
+PERIOD_KEYWORDS = ["清晨", "上午", "午后", "下午", "傍晚", "夜晚", "深夜", "入夜"]
+
+
+def event_compatible(period: str, weather: str, event: str) -> bool:
+    """V11.9.2：检查 active_event 是否与当前 period/weather 语义相容。
+
+    统一冲突检测，供 _show_daily_greeting / _show_ambient_line / _update_status_bar 共用。
+    返回 True 表示可拼接；False 表示应跳过 event 段。
+    """
+    if not event:
+        return False
+
+    # 天气冲突：event 含当前天气的冲突关键词
+    conflict_kws = WEATHER_EVENT_CONFLICT.get(weather, [])
+    if any(kw in event for kw in conflict_kws):
+        return False
+
+    # 时段冲突：event 含其它时段词
+    for kw in PERIOD_KEYWORDS:
+        if kw in event:
+            # "入夜" 是 "夜晚"/"深夜" 的别名
+            if kw == "入夜" and period in ("夜晚", "深夜"):
+                continue
+            # 时段词与当前 period 一致则不冲突
+            if kw == period:
+                continue
+            return False
+
+    return True
+
+
+def match_speaker_tag(line: str) -> tuple:
+    """V11.11：行首说话人标签匹配（parse_twin_segments 与 _streaming_segments 共用）。
+
+    Returns: (tag_type, content)
+    - tag_type: "rem" | "ram" | "system" | "unknown" | None
+    - content: 标签后提取的文本（strip 引号）；无标签时返回原 line
+    """
+    if line.startswith("【蕾姆】") or line.startswith("【蕾姆】:"):
+        content = line.split(":", 1)[1].strip().strip('"') if ":" in line else line[4:].strip()
+        return "rem", content
+    elif line.startswith("【拉姆】") or line.startswith("【拉姆】:"):
+        content = line.split(":", 1)[1].strip().strip('"') if ":" in line else line[4:].strip()
+        return "ram", content
+    elif line.startswith("【系统】") or line.startswith("【系统】:"):
+        content = line.split(":", 1)[1].strip().strip('"') if ":" in line else line[4:].strip()
+        return "system", content
+    elif line.startswith("【"):
+        return "unknown", ""
+    else:
+        return None, line
+
+
+def _streaming_segments(buffer: str) -> list:
+    """V11.11：流式分段，与 parse_twin_segments 语义一致，处理不完整末行。
+
+    末行规则：
+    - 以【开头且未出现】→ 标签不完整，跳过该行（等后续 token 补全）
+    - 其他 → 正常处理（标签可能完整，或无标签）
+
+    返回的段是 parse_twin_segments(buffer) 的子集（最多缺少末行）。
+    流式过程中可能暂时为空，不做兜底（与 parse_twin_segments 的兜底不同）。
+    """
+    segments = []
+    current_speaker = None
+    current_buffer = []
+
+    def _flush():
+        nonlocal current_speaker, current_buffer
+        if current_buffer:
+            text = "\n".join(current_buffer).strip()
+            if text:
+                segments.append((current_speaker or "rem", text))
+            current_buffer = []
+
+    lines = buffer.split("\n")
+    for i, line in enumerate(lines):
+        line = line.strip()
+        if not line:
+            continue
+        is_last = (i == len(lines) - 1)
+        # 末行标签不完整：跳过，等后续 token 补全
+        if is_last and line.startswith("【") and "】" not in line:
+            break
+
+        tag_type, content = match_speaker_tag(line)
+        if tag_type in ("rem", "ram"):
+            _flush()
+            current_speaker = tag_type
+            if content:
+                current_buffer.append(content)
+        elif tag_type == "system":
+            # LLM 来源的【系统】不落 system，提取内容按无前缀行处理
+            if content:
+                if current_speaker is None:
+                    current_speaker = "rem"
+                current_buffer.append(content)
+        elif tag_type == "unknown":
+            # 未知【XX】标签，跳过
+            continue
+        else:  # None
+            # 无前缀行：继承当前 speaker（默认 rem）
+            if current_speaker is None:
+                current_speaker = "rem"
+            current_buffer.append(content)
+
+    _flush()
+    return segments
+
+
+def parse_twin_segments(reply: str) -> list:
+    """V11.10.0：解析双子回复为段列表 [(speaker, text), ...]。
+
+    缓冲+flush 模型，speaker 继承，禁止 LLM 台词降级 system。
+    V11.11：标签匹配抽至 match_speaker_tag，与 _streaming_segments 共用，行为不变。
+    """
+    segments = []
+    current_speaker = None
+    current_buffer = []
+
+    def _flush():
+        nonlocal current_speaker, current_buffer
+        if current_buffer:
+            text = "\n".join(current_buffer).strip()
+            if text:
+                segments.append((current_speaker or "rem", text))
+            current_buffer = []
+
+    for line in reply.strip().split("\n"):
+        line = line.strip()
+        if not line:
+            continue
+
+        tag_type, content = match_speaker_tag(line)
+        if tag_type in ("rem", "ram"):
+            _flush()
+            current_speaker = tag_type
+            if content:
+                current_buffer.append(content)
+        elif tag_type == "system":
+            # LLM 来源的【系统】不落 system，提取内容按无前缀行处理
+            if content:
+                if current_speaker is None:
+                    current_speaker = "rem"
+                current_buffer.append(content)
+        elif tag_type == "unknown":
+            # 未知【XX】标签，跳过
+            continue
+        else:  # None
+            # 无前缀行：继承当前 speaker（默认 rem）
+            if current_speaker is None:
+                current_speaker = "rem"
+            current_buffer.append(content)
+
+    _flush()
+
+    if not segments:
+        segments.append(("rem", reply.strip() or "……"))
+
+    return segments
 
 
 class LLMWorker(QObject):
@@ -122,7 +538,7 @@ def _asset_path(filename: str) -> str:
 class AvatarLabel(QLabel):
     """圆形头像。支持 emoji 文字或 PNG 图片。"""
     
-    SIZE = 42
+    SIZE = DIM['avatar_size']  # V10.15c：走 token
 
     def __init__(self, emoji: str = "", parent=None):
         super().__init__(parent)
@@ -130,12 +546,12 @@ class AvatarLabel(QLabel):
         self._pixmap_path: Optional[str] = None
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setAlignment(Qt.AlignCenter)
-        self.setFont(QFont("Segoe UI Emoji", 20))
+        self.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['emoji_sm']))
         self.setStyleSheet(f"""
             QLabel {{
-                background-color: {COLORS['bg_secondary']};
+                background-color: {COLORS['bg_surface_2']};
                 border-radius: {self.SIZE // 2}px;
-                border: 2px solid {COLORS['border']};
+                border: 1px solid {COLORS['border_subtle']};
             }}
         """)
         self.setText(emoji)
@@ -151,66 +567,196 @@ class AvatarLabel(QLabel):
 
 
 class BubbleWidget(QFrame):
-    """聊天气泡。"""
+    """聊天气泡（V10.9.0 暗色差异化）。V11.10.0 加 highlight 变体，V11.10.1 加 streaming 弱变体。"""
 
-    def __init__(self, text: str, role: str, parent=None):
+    def __init__(self, text: str, role: str, variant: str = "normal", parent=None):
         super().__init__(parent)
         self.setObjectName("bubble")
 
-        # 配色
-        if role == "rem":
-            bg = COLORS["rem_bubble"]
-            fg = COLORS["text_primary"]
-            border_color = COLORS["rem_primary"]
-        elif role == "ram":
-            bg = COLORS["ram_bubble"]
-            fg = COLORS["text_primary"]
-            border_color = COLORS["ram_primary"]
-        elif role == "user":
-            bg = COLORS["user_bubble"]
-            fg = COLORS["text_primary"]
-            border_color = COLORS["accent"]
+        # V10.15a：角色色统一走 ROLE_BUBBLE_STYLES 字典
+        style = ROLE_BUBBLE_STYLES.get(role, ROLE_BUBBLE_FALLBACK)
+
+        # V11.10.0：highlight 变体 — 角色色不变，左边线加粗 + 底色增强
+        # V11.10.1：streaming 变体 — 底色极淡 + 边线细弱 + 文字暗一档 + 「生成中…」标签
+        if variant == "highlight":
+            bg = style.get("hl_bg", style["bg"])
+            border_css = style.get("hl_border", style["border"])
+            fg = style["fg"]
+        elif variant == "streaming":
+            bg = style.get("stream_bg", style["bg"])
+            border_css = style.get("stream_border", style["border"])
+            fg = style.get("stream_fg", style["fg"])
         else:
-            bg = COLORS["bg_secondary"]
-            fg = COLORS["text_secondary"]
-            border_color = COLORS["border"]
+            bg = style["bg"]
+            border_css = style["border"]
+            fg = style["fg"]
+
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(0)
+
+        # 高光顶部弱标签（角色色浅字，非系统金灰）
+        if variant == "highlight":
+            tag = QLabel("约定")
+            tag.setObjectName("bubble_tag")
+            tag.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['caption']))
+            tag.setStyleSheet(
+                f"color: {ROLE_COLORS.get(role, COLORS['text_muted'])};"
+                f" background: transparent; border: none; padding: 0 16px;"
+            )
+            layout.addWidget(tag)
+
+        # V11.10.1：streaming 顶部「生成中…」弱标签（text_muted 灰）
+        if variant == "streaming":
+            tag = QLabel("生成中…")
+            tag.setObjectName("bubble_tag")
+            tag.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['caption']))
+            tag.setStyleSheet(
+                f"color: {COLORS['text_muted']};"
+                f" background: transparent; border: none; padding: 0 16px;"
+            )
+            layout.addWidget(tag)
 
         label = QLabel(text)
+        label.setObjectName("bubble_text")
         label.setWordWrap(True)
         label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        label.setFont(QFont("Microsoft YaHei", 11))
-        label.setContentsMargins(14, 10, 14, 10)
+        label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg']))
+        label.setContentsMargins(0, 0, 0, 0)  # V10.14：去除双重 padding，统一由 QSS 控制
         label.setStyleSheet(f"""
             QLabel {{
                 background-color: {bg};
                 color: {fg};
-                border: 1px solid {border_color};
-                border-radius: 12px;
-                padding: 10px 14px;
+                {border_css}
+                border-radius: {RADIUS['large']}px;
+                padding: 12px 16px;
             }}
         """)
-
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(0, 0, 0, 0)
         layout.addWidget(label)
 
     def set_text(self, text: str) -> None:
         """更新气泡文本（流式追加用）。"""
+        label = self.findChild(QLabel, "bubble_text")
+        if label:
+            label.setText(text)
+
+
+class SystemLabelWidget(QWidget):
+    """系统消息：居中轻标签，无气泡，弱化显示（V10.9.0）。
+
+    普通系统提示 9pt；较长文本（如引言）自动换行，字号 10pt。
+    V10.9.2：transient 模式支持自动消失 + 点击关闭。
+    V11.12：variant="vignette" 幕间卡变体 — 金色 accent 派生淡底 + 细金边，
+    视觉强于 system 灰条、弱于 streaming 草稿泡与正式角色泡。
+    """
+
+    def __init__(self, text: str, transient: bool = False, auto_dismiss_ms: int = 15000, force_center: bool = False, variant: str = "system", parent=None):
+        super().__init__(parent)
+        self._transient = transient
+        self._dismissed = False
+
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(SPACING['lg'], SPACING['xs'], SPACING['lg'], SPACING['xs'])
+        layout.setSpacing(0)
+
+        is_multiline = '\n' in text
+        # 较长或多行文本用 10pt，短提示用 9pt
+        font_size = 10 if len(text) > 40 or is_multiline else 9
+
+        label = QLabel(text)
+        label.setWordWrap(True)
+        # force_center 时强制居中（日更问候多行）；默认多行左对齐、单行居中
+        if force_center:
+            label.setAlignment(Qt.AlignCenter)
+        else:
+            label.setAlignment(Qt.AlignLeft if is_multiline else Qt.AlignCenter)
+        label.setFont(QFont(FONT_FAMILY['ui'], font_size))  # V10.15a：字体族走 token，字号保留动态逻辑
+        label.setMaximumWidth(DIM['bubble_max_w'])
+
+        # transient 模式：鼠标穿透 label 到父 widget，手型光标
+        if transient:
+            label.setAttribute(Qt.WA_TransparentForMouseEvents, True)
+            self.setCursor(Qt.PointingHandCursor)
+        else:
+            label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+
+        # 多行用中等圆角，单行用 pill
+        radius = RADIUS['medium'] if is_multiline else RADIUS['pill']
+        # V11.12：vignette 幕间卡 — 中性金色（非角色色，避免与双子台词混淆），
+        # 色值由 accent #c9a96e 派生，内联写法与 stream_bg 既有先例一致。
+        if variant == "vignette":
+            fg = COLORS['text_secondary']
+            bg = "rgba(201,169,110,0.06)"
+            border_css = "border: 1px solid rgba(201,169,110,0.18);"
+            radius = RADIUS['medium']
+            pad_v, pad_h = 10, 20
+        else:
+            fg = COLORS['system_label_fg']
+            bg = COLORS['system_label_bg']
+            border_css = ""
+            pad_v, pad_h = 6, SPACING['lg']
+        label.setStyleSheet(f"""
+            QLabel {{
+                color: {fg};
+                background-color: {bg};
+                {border_css}
+                border-radius: {radius}px;
+                padding: {pad_v}px {pad_h}px;
+            }}
+        """)
+
+        layout.addStretch()
+        layout.addWidget(label)
+        layout.addStretch()
+
+        # transient 自动消失定时器
+        if transient:
+            self._timer = QTimer(self)
+            self._timer.setSingleShot(True)
+            self._timer.timeout.connect(self._dismiss)
+            self._timer.start(auto_dismiss_ms)
+
+    def _dismiss(self) -> None:
+        """从布局中移除自身并销毁（防重入）。"""
+        if self._dismissed:
+            return
+        self._dismissed = True
+        parent_layout = self.parent().layout() if self.parent() else None
+        if parent_layout:
+            parent_layout.removeWidget(self)
+        self.setParent(None)
+        self.deleteLater()
+
+    def mousePressEvent(self, event) -> None:
+        """transient 模式下点击关闭。"""
+        if self._transient:
+            self._dismiss()
+        else:
+            super().mousePressEvent(event)
+
+    def set_text(self, text: str) -> None:
+        """更新标签文本（流式追加兼容）。"""
         label = self.findChild(QLabel)
         if label:
             label.setText(text)
 
 
 class ChatMessageWidget(QWidget):
-    """一条聊天消息：头像 + 发送者名 + 气泡。"""
+    """一条聊天消息：头像 + 发送者名 + 气泡。
 
-    def __init__(self, sender: str, text: str, role: str, parent=None):
+    V10.12：新增 message_id 属性，用于历史浮层点击定位。
+    """
+
+    def __init__(self, sender: str, text: str, role: str, message_id: Optional[int] = None, variant: str = "normal", parent=None):
         """
         role: "rem" | "ram" | "user" | "system"
+        message_id: 对应 ConversationStore 中的记录 id，None 表示不参与定位
+        variant: "normal" | "highlight"（V11.10.0）
         """
         super().__init__(parent)
         self.role = role
         self.sender = sender
+        self.message_id = message_id  # V10.12：DB 记录 id，供定位查找
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 5, 12, 5)
@@ -230,19 +776,13 @@ class ChatMessageWidget(QWidget):
 
         # 名字标签
         name_label = QLabel(sender)
-        name_label.setFont(QFont("Microsoft YaHei", 9, QFont.Bold))
-        if role == "rem":
-            name_label.setStyleSheet(f"color: {COLORS['rem_dark']};")
-        elif role == "ram":
-            name_label.setStyleSheet(f"color: {COLORS['ram_dark']};")
-        elif role == "user":
-            name_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        else:
-            name_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        name_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))  # V10.14：去 Bold，弱化角色名层级
+        # V10.15a：角色色统一走 ROLE_COLORS 字典
+        name_label.setStyleSheet(f"color: {ROLE_COLORS.get(role, COLORS['text_muted'])};")
 
         # 气泡
-        bubble = BubbleWidget(text, role=role)
-        bubble.setMaximumWidth(600)
+        bubble = BubbleWidget(text, role=role, variant=variant)
+        bubble.setMaximumWidth(DIM['bubble_max_w'])
         bubble.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self._bubble = bubble
 
@@ -278,31 +818,37 @@ class ChatMessageWidget(QWidget):
 # ═══════════════════════════════════════════════
 
 class CharacterPanel(QFrame):
-    """角色状态面板：立绘区域 + 好感条 + 状态标签。"""
+    """角色状态面板（V11.0：沉浸化信息分层）。
+
+    布局：立绘 → 名字 → 放大表情 → 好感数字+简条 → 阶段引号弱化 → 条件标记。
+    鬼化/残香不进面板术语，仅通过表情传达。
+    """
 
     def __init__(self, name: str, emoji: str, color: str, sprite_path: str = "", parent=None):
         super().__init__(parent)
+        self._color = color
+        self._speaking = False  # V12.0：说话态描边状态（幂等）
         self.setObjectName("character_panel")
-        self.setFixedWidth(180)
+        self.setFixedWidth(DIM['panel_w'])
         self.setStyleSheet(f"""
             QFrame#character_panel {{
-                background-color: {COLORS['bg_sidebar']};
-                border-left: 1px solid {COLORS['border']};
+                background-color: {COLORS['bg_surface']};
+                border-left: 1px solid {COLORS['border_subtle']};
             }}
         """)
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 16, 10, 16)
-        layout.setSpacing(12)
+        layout.setSpacing(8)
 
-        # 立绘区域
+        # ── 立绘区域（不动）──
         self.avatar_frame = QFrame()
-        self.avatar_frame.setFixedHeight(240)
+        self.avatar_frame.setFixedHeight(DIM['avatar_frame_h'])
         self.avatar_frame.setStyleSheet(f"""
             QFrame {{
-                background-color: {COLORS['bg_secondary']};
-                border: 2px solid {color if sprite_path else 'dashed ' + color};
-                border-radius: 12px;
+                background-color: {COLORS['bg_surface_2']};
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: {RADIUS['large']}px;
             }}
         """)
         avatar_inner = QVBoxLayout(self.avatar_frame)
@@ -319,65 +865,119 @@ class CharacterPanel(QFrame):
                 self.avatar_image.setPixmap(scaled)
             else:
                 self.avatar_image.setText(emoji)
-                self.avatar_image.setFont(QFont("Segoe UI Emoji", 48))
+                self.avatar_image.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['display']))
                 self.avatar_image.setAlignment(Qt.AlignCenter)
         else:
             self.avatar_image.setText(emoji)
-            self.avatar_image.setFont(QFont("Segoe UI Emoji", 48))
+            self.avatar_image.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['display']))
             self.avatar_image.setAlignment(Qt.AlignCenter)
             placeholder = QLabel("立绘区域\n拖入 PNG 图片")
             placeholder.setAlignment(Qt.AlignCenter)
-            placeholder.setStyleSheet(f"color: {COLORS['text_secondary']}; font-size: 10px;")
+            placeholder.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
             avatar_inner.addWidget(placeholder)
 
         avatar_inner.addWidget(self.avatar_image)
         layout.addWidget(self.avatar_frame)
 
-        # 角色名
+        # ── ① 主信息：角色名 ──
         name_label = QLabel(name)
-        name_label.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
+        name_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['title_lg'], QFont.Bold))
         name_label.setAlignment(Qt.AlignCenter)
         name_label.setStyleSheet(f"color: {color};")
         layout.addWidget(name_label)
 
-        # 好感度标签
-        self.favor_label = QLabel("好感：--/100")
-        self.favor_label.setFont(QFont("Microsoft YaHei", 10))
-        self.favor_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.favor_label)
-
-        # 阶段标签
-        self.stage_label = QLabel("阶段：--")
-        self.stage_label.setFont(QFont("Microsoft YaHei", 10))
-        self.stage_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
-        self.stage_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(self.stage_label)
-
-        # 情绪标签
+        # ── ② 主信息：放大表情（视觉焦点）──
         self.emotion_label = QLabel("😊")
-        self.emotion_label.setFont(QFont("Segoe UI Emoji", 28))
+        self.emotion_label.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['emoji_lg']))
         self.emotion_label.setAlignment(Qt.AlignCenter)
         layout.addWidget(self.emotion_label)
 
-        # 锁定标记
-        self.locked_label = QLabel("")
-        self.locked_label.setFont(QFont("Microsoft YaHei", 9, QFont.Bold))
-        self.locked_label.setAlignment(Qt.AlignCenter)
-        self.locked_label.setStyleSheet(f"color: {COLORS['accent']};")
-        layout.addWidget(self.locked_label)
+        # ── ③ 主信息：好感数字 + 简条 ──
+        self.favor_label = QLabel("好感 --/100")
+        self.favor_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
+        self.favor_label.setAlignment(Qt.AlignCenter)
+        self.favor_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        layout.addWidget(self.favor_label)
+
+        self.favor_bar = QProgressBar()
+        self.favor_bar.setRange(0, 100)
+        self.favor_bar.setTextVisible(False)
+        self.favor_bar.setFixedHeight(4)
+        self.favor_bar.setStyleSheet(f"""
+            QProgressBar {{
+                background-color: {COLORS['bg_surface_2']};
+                border: none;
+                border-radius: {RADIUS['xs']}px;
+            }}
+            QProgressBar::chunk {{
+                background-color: {color};
+                border-radius: {RADIUS['xs']}px;
+            }}
+        """)
+        layout.addWidget(self.favor_bar)
+
+        # ── ④ 次信息：阶段引号弱化 ──
+        self.stage_label = QLabel("「--」")
+        self.stage_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
+        self.stage_label.setAlignment(Qt.AlignCenter)
+        self.stage_label.setStyleSheet(f"color: {COLORS['text_muted']};")
+        layout.addWidget(self.stage_label)
+
+        # ── ⑤ 条件标记：互斥（记忆模糊 > 锁定 > 独立）──
+        self.mark_label = QLabel("")
+        self.mark_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small'], QFont.Bold))
+        self.mark_label.setAlignment(Qt.AlignCenter)
+        self.mark_label.setStyleSheet(f"color: {COLORS['accent']};")
+        layout.addWidget(self.mark_label)
 
         layout.addStretch()
 
-    def update_state(self, favor: int, stage: str, emotion: str, locked: bool = False, independence: float = 0.0) -> None:
-        self.favor_label.setText(f"好感：{favor}/100")
-        self.stage_label.setText(f"阶段：{stage}")
+    def update_state(self, favor: int, stage: str, emotion: str,
+                     locked: bool = False, independence: float = 0.0,
+                     recovery: float = 1.0) -> None:
+        """更新面板状态。
+
+        鬼化/残香仅通过 emotion 传达，不在此处显示术语。
+        条件标记互斥优先级：记忆模糊 > 锁定 > 独立。
+        """
+        self.favor_label.setText(f"好感 {favor}/100")
+        self.favor_bar.setValue(favor)
+        self.stage_label.setText(f"「{stage}」")
         self.emotion_label.setText(emotion)
-        if locked:
-            self.locked_label.setText("🔒 忠诚锁定")
+
+        # 互斥标记
+        if recovery < 0.5:
+            self.mark_label.setText("⚠ 记忆模糊")
+            self.mark_label.setStyleSheet(f"color: {COLORS['text_muted']};")
+        elif locked:
+            self.mark_label.setText("🔒 忠诚锁定")
+            self.mark_label.setStyleSheet(f"color: {COLORS['accent']};")
         elif independence >= 0.6:
-            self.locked_label.setText("✨ 独立人格")
+            self.mark_label.setText("✨ 独立人格")
+            self.mark_label.setStyleSheet(f"color: {COLORS['accent']};")
         else:
-            self.locked_label.setText("")
+            self.mark_label.setText("")
+
+    def set_speaking(self, speaking: bool) -> None:
+        """V12.0：说话态描边（幂等，状态未变不刷 QSS）。
+
+        空闲 = border_subtle 1px；说话 = 角色色 2px。
+        仅改 avatar_frame 边框，背景/圆角保持原样；任何异常只记日志。
+        """
+        if speaking == self._speaking:
+            return
+        self._speaking = speaking
+        try:
+            border = f"2px solid {self._color}" if speaking else f"1px solid {COLORS['border_subtle']}"
+            self.avatar_frame.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {COLORS['bg_surface_2']};
+                    border: {border};
+                    border-radius: {RADIUS['large']}px;
+                }}
+            """)
+        except Exception as e:
+            _log(f"set_speaking 异常: {e}")
 
 
 # ═══════════════════════════════════════════════
@@ -389,11 +989,11 @@ class SakuraOverlay(QWidget):
 
     PETAL_COUNT = 35
     COLORS_PINK = [
-        (255, 183, 197, 180),   # 淡粉
-        (255, 154, 162, 160),   # 樱粉
-        (255, 204, 188, 140),   # 浅桃
-        (255, 175, 188, 170),   # 中粉
-        (252, 157, 172, 150),   # 深粉
+        (255, 183, 197, 99),    # 淡粉（V10.9.0：alpha 降低适配暗色背景）
+        (255, 154, 162, 88),    # 樱粉
+        (255, 204, 188, 77),    # 浅桃
+        (255, 175, 188, 93),    # 中粉
+        (252, 157, 172, 82),    # 深粉
     ]
 
     def __init__(self, parent=None):
@@ -485,6 +1085,374 @@ class SakuraOverlay(QWidget):
 
 
 # ═══════════════════════════════════════════════
+#  历史浮层（V10.10）
+# ═══════════════════════════════════════════════
+
+class HistoryItemWidget(QFrame):
+    """单条历史记录：折叠摘要 / 点击展开全文。
+
+    阅读层级约定（V10.13）：
+    1. 第一行：角色名（着色加粗）+ 时间（弱化右对齐）+ 📍按钮
+    2. 第二行：正文摘要（最多约 2 行，可换行）
+    3. 展开后：完整正文（独立区域，左边线着色）
+    """
+
+    clicked = Signal(object)  # 发送自身引用（展开/折叠）
+    locate_clicked = Signal(int)  # 定位请求，发送 message_id
+
+    # ── 列表阅读常量（V10.13：统一管理避免硬编码）──
+    PREVIEW_WORDS = 80  # 摘要约 2 行
+    FONT_ROLE = QFont(FONT_FAMILY['ui'], FONT_SIZE['small'], QFont.Bold)       # V10.15a：走 token
+    FONT_TIME = QFont(FONT_FAMILY['ui'], FONT_SIZE['caption'])                 # V10.15a：走 token
+    FONT_CONTENT = QFont(FONT_FAMILY['ui'], FONT_SIZE['body'])                 # V10.15a：走 token
+    MARGINS = (14, 8, 14, 8)  # left, top, right, bottom
+    SPACING = 6  # 内部元素间距
+    # V10.15a：角色色引用全局 ROLE_COLORS，不再局部定义
+
+    def __init__(self, record: dict, parent=None):
+        super().__init__(parent)
+        self._record = record
+        self._expanded = False
+        self.setObjectName("history_item")
+
+        role = record.get("role", "system")
+        sender = record.get("sender", "")
+        content = record.get("content", "")
+        created = record.get("created_at", "")
+        time_str = created[5:16] if len(created) >= 16 else created
+        msg_id = record.get("id", 0)
+
+        sender_color = ROLE_COLORS.get(role, COLORS['text_muted'])  # V10.15a：引用全局 ROLE_COLORS
+        content_color = COLORS['text_muted'] if role == "system" else COLORS['text_secondary']
+        self._sender_color = sender_color
+
+        # 主布局（V10.13：垂直布局容纳 header + 摘要 + 详情）
+        self._layout = QVBoxLayout(self)
+        self._layout.setContentsMargins(*self.MARGINS)
+        self._layout.setSpacing(self.SPACING)
+
+        # ── 第一行：角色名 + 时间 + 📍（水平布局）──
+        header_row = QHBoxLayout()
+        header_row.setSpacing(8)
+
+        self._role_label = QLabel(sender)
+        self._role_label.setFont(self.FONT_ROLE)
+        self._role_label.setStyleSheet(f"color: {sender_color};")
+        header_row.addWidget(self._role_label)
+
+        header_row.addStretch()
+
+        self._time_label = QLabel(time_str)
+        self._time_label.setFont(self.FONT_TIME)
+        self._time_label.setStyleSheet(f"color: {COLORS['text_muted']};")
+        header_row.addWidget(self._time_label)
+
+        # 📍 定位按钮（保留 V10.12 功能）
+        self._locate_btn = QPushButton("📍")
+        self._locate_btn.setFixedSize(DIM['locate_btn'], DIM['locate_btn'])
+        self._locate_btn.setCursor(Qt.PointingHandCursor)
+        self._locate_btn.setToolTip("回到现场")
+        self._locate_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLORS['text_muted']};
+                border: none;
+                font-size: 12px;
+                padding: 0px;
+            }}
+            QPushButton:hover {{
+                color: {COLORS['accent']};
+            }}
+        """)
+        self._locate_btn.clicked.connect(lambda: self.locate_clicked.emit(msg_id))
+        header_row.addWidget(self._locate_btn)
+
+        self._layout.addLayout(header_row)
+
+        # ── 第二行：正文摘要（最多约 2 行，可换行）──
+        preview = content[:self.PREVIEW_WORDS] + ("…" if len(content) > self.PREVIEW_WORDS else "")
+        self._preview_label = QLabel(preview)
+        self._preview_label.setFont(self.FONT_CONTENT)
+        self._preview_label.setStyleSheet(f"color: {content_color};")
+        self._preview_label.setWordWrap(True)
+        self._layout.addWidget(self._preview_label)
+
+        # ── 展开态全文（初始隐藏，独立区域 + 左边线着色）──
+        self._detail_label = QLabel(content)
+        self._detail_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
+        self._detail_label.setWordWrap(True)
+        self._detail_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
+        self._detail_label.setStyleSheet(f"""
+            QLabel {{
+                color: {COLORS['text_secondary']};
+                background-color: {SURFACE_TINT['detail']};
+                border-left: 2px solid {sender_color};
+                border-radius: {RADIUS['xs']}px;
+                padding: 8px 10px;
+                margin-top: 4px;
+            }}
+        """)
+        self._detail_label.hide()
+        self._layout.addWidget(self._detail_label)
+
+        self._update_style()
+
+    def _update_style(self) -> None:
+        if self._expanded:
+            self.setStyleSheet(f"""
+                QFrame#history_item {{
+                    background-color: {SURFACE_TINT['active']};
+                    border-left: 2px solid {self._sender_color};
+                    border-radius: {RADIUS['sm2']}px;
+                }}
+            """)
+        else:
+            self.setStyleSheet(f"""
+                QFrame#history_item {{
+                    background-color: transparent;
+                    border-left: 2px solid {self._sender_color};
+                    border-radius: {RADIUS['sm2']}px;
+                }}
+                QFrame#history_item:hover {{
+                    background-color: {SURFACE_TINT['hover']};
+                }}
+            """)
+
+    def mousePressEvent(self, event) -> None:
+        self._expanded = not self._expanded
+        self._detail_label.setVisible(self._expanded)
+        self._preview_label.setVisible(not self._expanded)
+        self._update_style()
+        self.clicked.emit(self)
+
+
+class HistoryOverlay(QWidget):
+    """历史回忆浮层：主窗口级非阻塞 overlay。
+
+    半透明遮罩 + 居中卡片，遮罩点击/Esc/关闭按钮均可关闭。
+    show() 非 exec()，不阻塞流式输出。
+    """
+
+    closed = Signal()
+    locate_requested = Signal(int)  # V10.12：定位请求透传 message_id 给主窗口
+
+    def __init__(self, conv_store, parent=None):
+        super().__init__(parent)
+        self._conv_store = conv_store
+        self._search_timer: Optional[QTimer] = None
+        self._keyword = ""
+
+        # 让遮罩接收鼠标事件（卡片区域靠 geometry 判断）
+        self.setAttribute(Qt.WA_StyledBackground, True)
+
+        self._outer = QVBoxLayout(self)
+        self._outer.setContentsMargins(0, 0, 0, 0)
+        self._outer.addStretch()
+
+        # 居中卡片容器
+        card_wrapper = QHBoxLayout()
+        card_wrapper.setContentsMargins(0, 0, 0, 0)
+        card_wrapper.addStretch()
+
+        self._card = QFrame()
+        self._card.setObjectName("history_card")
+        self._card.setFixedWidth(DIM['history_card_w'])
+        self._card.setStyleSheet(f"""
+            QFrame#history_card {{
+                background-color: {COLORS['bg_surface_2']};
+                border: 1px solid {COLORS['border_focus']};
+                border-radius: {RADIUS['large']}px;
+            }}
+        """)
+        card_layout = QVBoxLayout(self._card)
+        card_layout.setContentsMargins(0, 0, 0, 0)
+        card_layout.setSpacing(0)
+
+        # ── 卡片标题栏 ──
+        header_frame = QFrame()
+        header_frame.setFixedHeight(DIM['history_header_h'])
+        header_frame.setStyleSheet(
+            f"border-bottom: 1px solid {COLORS['border_subtle']};"
+        )
+        header_layout = QHBoxLayout(header_frame)
+        header_layout.setContentsMargins(20, 0, 16, 0)
+
+        title = QLabel("📖 宅邸日志")
+        title.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['title'], QFont.Bold))
+        title.setStyleSheet(f"color: {COLORS['text_primary']};")
+        header_layout.addWidget(title)
+        header_layout.addStretch()
+
+        close_btn = QPushButton("✕")
+        close_btn.setFixedSize(DIM['icon_btn'], DIM['icon_btn'])
+        close_btn.setCursor(Qt.PointingHandCursor)
+        close_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLORS['text_muted']};
+                border: none;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{
+                color: {COLORS['text_primary']};
+            }}
+        """)
+        close_btn.clicked.connect(self._do_close)
+        header_layout.addWidget(close_btn)
+        card_layout.addWidget(header_frame)
+
+        # ── 搜索框 ──
+        search_frame = QFrame()
+        search_frame.setFixedHeight(DIM['history_header_h'])
+        search_layout = QHBoxLayout(search_frame)
+        search_layout.setContentsMargins(20, 10, 20, 10)
+
+        self._search_box = QLineEdit()
+        self._search_box.setPlaceholderText("搜索过往对话…")
+        self._search_box.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
+        self._search_box.setStyleSheet(f"""
+            QLineEdit {{
+                background-color: {SURFACE_TINT['input']};
+                color: {COLORS['text_primary']};
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: {RADIUS['medium']}px;
+                padding: 4px 10px;
+            }}
+            QLineEdit:focus {{
+                border-color: {COLORS['border_focus']};
+            }}
+        """)
+        self._search_box.textChanged.connect(self._on_search_changed)
+        search_layout.addWidget(self._search_box)
+        card_layout.addWidget(search_frame)
+
+        # ── 历史列表滚动区 ──
+        self._list_scroll = QScrollArea()
+        self._list_scroll.setWidgetResizable(True)
+        self._list_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self._list_scroll.setFrameShape(QFrame.NoFrame)
+        self._list_scroll.setStyleSheet("background-color: transparent;")
+
+        self._list_container = QWidget()
+        self._list_layout = QVBoxLayout(self._list_container)
+        self._list_layout.setAlignment(Qt.AlignTop)
+        self._list_layout.setSpacing(2)  # V10.13：增加条目间距，提升可读性
+        self._list_layout.addStretch()
+        self._list_scroll.setWidget(self._list_container)
+        card_layout.addWidget(self._list_scroll, 1)
+
+        card_wrapper.addWidget(self._card)
+        card_wrapper.addStretch()
+        self._outer.addLayout(card_wrapper)
+        self._outer.addStretch()
+
+    # ── 公开方法 ──
+
+    def refresh(self) -> None:
+        """刷新列表（打开时 / 清空搜索时调用）。"""
+        self._keyword = ""
+        self._search_box.clear()
+        self._load_data([])
+
+    def _load_data(self, records: list) -> None:
+        """清空列表并填充记录（倒序：最新在上）。"""
+        # 清空旧 widget
+        while self._list_layout.count() > 1:
+            item = self._list_layout.takeAt(0)
+            if item and item.widget():
+                w = item.widget()
+                w.setParent(None)
+                w.deleteLater()
+
+        if not records:
+            empty = QLabel("宅邸的走廊还十分安静，尚未留下对话的足迹。")
+            empty.setAlignment(Qt.AlignCenter)
+            empty.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
+            empty.setStyleSheet(f"color: {COLORS['text_muted']}; padding: 40px;")
+            self._list_layout.insertWidget(0, empty)
+            return
+
+        # records 来自 get_recent 已是正序，倒序插入实现最新在上
+        for record in reversed(records):
+            item_widget = HistoryItemWidget(record)
+            item_widget.locate_clicked.connect(self.locate_requested)  # V10.12
+            self._list_layout.insertWidget(self._list_layout.count() - 1, item_widget)
+
+    def load_recent(self) -> None:
+        """加载最近 100 条记录。"""
+        try:
+            records = self._conv_store.get_recent(limit=100)
+        except Exception:
+            records = []
+        self._load_data(records)
+
+    # ── 搜索 ──
+
+    def _on_search_changed(self, text: str) -> None:
+        keyword = text.strip()
+        self._keyword = keyword
+        # debounce 300ms
+        if self._search_timer:
+            self._search_timer.stop()
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.timeout.connect(lambda: self._do_search(keyword))
+        self._search_timer.start(300)
+
+    def _do_search(self, keyword: str) -> None:
+        if not keyword:
+            self.load_recent()
+            return
+        try:
+            results = self._conv_store.search(keyword, limit=50)
+        except Exception:
+            results = []
+        if not results:
+            self._show_no_result(keyword)
+            return
+        self._load_data(results)
+
+    def _show_no_result(self, keyword: str) -> None:
+        """清空列表并显示无结果提示。"""
+        while self._list_layout.count() > 1:
+            item = self._list_layout.takeAt(0)
+            if item and item.widget():
+                w = item.widget()
+                w.setParent(None)
+                w.deleteLater()
+        label = QLabel(f"没有找到与「{keyword}」相关的回忆。")
+        label.setAlignment(Qt.AlignCenter)
+        label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
+        label.setStyleSheet(f"color: {COLORS['text_muted']}; padding: 40px;")
+        self._list_layout.insertWidget(0, label)
+
+    # ── 关闭逻辑 ──
+
+    def _do_close(self) -> None:
+        self.hide()
+        self.closed.emit()
+
+    def mousePressEvent(self, event) -> None:
+        """点击遮罩空白区（卡片外）关闭。"""
+        pos = event.position().toPoint() if hasattr(event, 'position') else event.pos()
+        if not self._card.geometry().contains(pos):
+            self._do_close()
+
+    def keyPressEvent(self, event) -> None:
+        if event.key() == Qt.Key_Escape:
+            self._do_close()
+        else:
+            super().keyPressEvent(event)
+
+    def paintEvent(self, event) -> None:
+        """绘制半透明遮罩。"""
+        from PySide6.QtGui import QPainter
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), _rgba_to_qcolor(COLORS['overlay_mask']))
+        painter.end()
+
+
+# ═══════════════════════════════════════════════
 #  主窗口
 # ═══════════════════════════════════════════════
 
@@ -493,6 +1461,12 @@ class TwinChatApp(QMainWindow):
         super().__init__()
         _log("TwinChatApp.__init__ 开始 (gui V10.4.0, frozen-safe data dir)")
         self.setWindowTitle("❄ Re:Zero 双子系统 — Rem × Ram")
+        _win_icon = QIcon()
+        _win_icon_path = _asset_path("app_icon.ico")
+        if os.path.isfile(_win_icon_path):
+            for _sz in (16, 32, 48, 256):
+                _win_icon.addFile(_win_icon_path, QSize(_sz, _sz))
+        self.setWindowIcon(_win_icon)
         self.setMinimumSize(1000, 650)
         self.resize(1100, 750)
 
@@ -513,11 +1487,16 @@ class TwinChatApp(QMainWindow):
                 self.store.set("chat_history", [])  # 清空 JSON 中的旧历史
 
         self.mode = self.mem.get("mode", "llm")
-        self._streaming_bubble: Optional[ChatMessageWidget] = None
+        self._streaming_bubbles: list[ChatMessageWidget] = []  # V11.11：多临时泡列表
         self._streaming_buffer: str = ""
         self._streaming_active: bool = False
+        self._current_speaker: Optional[str] = None  # V12.0：当前说话人（"rem"/"ram"/None）
+        self._breath_group: Optional[QSequentialAnimationGroup] = None  # V12.0：状态栏呼吸组
+        _log(f"UI 动效: {'启用' if ENABLE_UI_MOTION else '禁用（REZERO_DISABLE_UI_MOTION=1）'}")
         self._llm_thread: Optional[QThread] = None
         self._llm_worker: Optional[LLMWorker] = None
+        self._history_overlay: Optional[HistoryOverlay] = None  # V10.10
+        self._session_start_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # V11.6.5
 
         # 世界状态（持久化）
         from shared.state import WorldState
@@ -526,8 +1505,10 @@ class TwinChatApp(QMainWindow):
         _log(f"世界加载: {self.world.period} {self.world.weather}")
 
         self._setup_ui()
+        self._setup_breathing()  # V12.0：状态栏呼吸（_mode_label 已存在）
         self._apply_theme()
         self._load_history()
+        self._show_resume_card()  # V11.6.5: 续聊卡（在历史加载后、引言前）
 
         # 创建 bot
         self.bot = self._create_bot()
@@ -537,9 +1518,32 @@ class TwinChatApp(QMainWindow):
         self._update_status_bar()
         self._update_panels()
 
-        # 生成开场引言（LLM 模式且首次启动）
-        if self.mode == "llm" and self.conv_store.count() == 0:
+        # V11.9.0：开场问候 — 空库完整引言 / 日历日变化日更问候 / 同日轻氛围
+        today_str = datetime.now().strftime("%Y-%m-%d")
+        last_greeting = self.world.last_greeting_date
+        day_changed = (last_greeting != today_str)
+        msg_count = self.conv_store.count()
+
+        if _VIGNETTE_DISABLED:
+            _log("开场引言已通过 REZERO_DISABLE_VIGNETTE 禁用")
+        elif msg_count == 0:
+            # 空库：保留完整引言路径（V10.4 L0-L3 多级生成）
+            _log("空库 → 完整引言 QTimer 注册 (300ms)")
             QTimer.singleShot(300, self._generate_vignette)
+        elif day_changed:
+            # 非空库 + 日历日变化：日更短问候（不依赖 mode，View-Only）
+            _log(f"day_changed=True today={today_str} last={last_greeting}")
+            self._show_daily_greeting(today_str)
+        else:
+            # 同日重开：不打日更问候
+            _log(f"already_greeted today={today_str} last={last_greeting}")
+
+        # 轻氛围：同日有历史重开时展示一行（空库完整引言时不重复打）
+        if msg_count > 0 and not day_changed:
+            self._show_ambient_line()
+        elif msg_count > 0 and day_changed:
+            # 换日时问候正文已带天气，不额外打轻氛围避免刷屏
+            _log("换日：日更问候已含天气，跳过轻氛围避免刷屏")
 
         _log("TwinChatApp.__init__ 完成")
 
@@ -557,6 +1561,7 @@ class TwinChatApp(QMainWindow):
                     model_name="deepseek-chat",
                     arc=StoryArc(self.mem.get("arc", "mansion_era")),
                     max_history=8,
+                    conversation_store=self.conv_store,
                 )
                 bot.engine.favor = self.mem.get("favor", 15)
                 bot.engine.ram_favor = self.mem.get("ram_favor", 8)
@@ -603,45 +1608,45 @@ class TwinChatApp(QMainWindow):
 
         # ── 顶部标题栏 ──
         header = QFrame()
-        header.setFixedHeight(54)
+        header.setFixedHeight(DIM['header_h'])
         header.setStyleSheet(f"background-color: {COLORS['bg_header']};")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 0, 18, 0)
 
         title = QLabel("❄  Re:Zero 双子系统  —  Rem × Ram")
-        title.setFont(QFont("Microsoft YaHei", 14, QFont.Bold))
-        title.setStyleSheet(f"color: {COLORS['text_light']};")
+        title.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['title_lg'], QFont.Bold))
+        title.setStyleSheet(f"color: {COLORS['text_primary']};")
         header_layout.addWidget(title)
         header_layout.addStretch()
 
         # 历史搜索
         self.search_box = QLineEdit()
         self.search_box.setPlaceholderText("搜索对话…")
-        self.search_box.setFixedWidth(160)
-        self.search_box.setFixedHeight(28)
-        self.search_box.setFont(QFont("Microsoft YaHei", 10))
+        self.search_box.setFixedWidth(DIM['search_box_w'])
+        self.search_box.setFixedHeight(DIM['search_box_h'])
+        self.search_box.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
         self.search_box.setStyleSheet(f"""
             QLineEdit {{
-                background-color: rgba(255,255,255,0.15);
-                color: {COLORS['text_light']};
-                border: 1px solid rgba(255,255,255,0.25);
-                border-radius: 6px;
+                background-color: {SURFACE_TINT['input']};
+                color: {COLORS['text_primary']};
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: {RADIUS['small']}px;
                 padding: 2px 8px;
             }}
             QLineEdit:focus {{
-                border-color: {COLORS['accent']};
+                border-color: {COLORS['border_focus']};
             }}
         """)
         self.search_box.returnPressed.connect(self._do_search)
         header_layout.addWidget(self.search_box)
 
         search_btn = QPushButton("🔍")
-        search_btn.setFixedSize(28, 28)
+        search_btn.setFixedSize(DIM['icon_btn'], DIM['icon_btn'])
         search_btn.setCursor(Qt.PointingHandCursor)
         search_btn.setStyleSheet(f"""
             QPushButton {{
                 background-color: transparent;
-                color: {COLORS['text_light']};
+                color: {COLORS['text_secondary']};
                 border: none;
                 font-size: 14px;
             }}
@@ -653,10 +1658,29 @@ class TwinChatApp(QMainWindow):
         header_layout.addWidget(search_btn)
 
         arc_label = QLabel("Arc I · 罗兹瓦尔宅邸")
-        arc_label.setFont(QFont("Microsoft YaHei", 10))
+        arc_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
         arc_label.setStyleSheet(f"color: {COLORS['accent']};")
         self._arc_label = arc_label
         header_layout.addWidget(arc_label)
+
+        # V10.10：历史浮层入口
+        history_btn = QPushButton("📖 回忆")
+        history_btn.setFixedHeight(DIM['history_btn_h'])
+        history_btn.setCursor(Qt.PointingHandCursor)
+        history_btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
+        history_btn.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent;
+                color: {COLORS['text_secondary']};
+                border: none;
+                padding: 0 6px;
+            }}
+            QPushButton:hover {{
+                color: {COLORS['accent']};
+            }}
+        """)
+        history_btn.clicked.connect(self._open_history)
+        header_layout.addWidget(history_btn)
 
         main_layout.addWidget(header)
 
@@ -665,7 +1689,7 @@ class TwinChatApp(QMainWindow):
         body.setSpacing(0)
 
         # 左侧：蕾姆面板
-        self.rem_panel = CharacterPanel("蕾 姆", "🩵", COLORS["rem_primary"], sprite_path=_asset_path("rem_sprite.jpg"))
+        self.rem_panel = CharacterPanel("蕾 姆", "🩵", COLORS["rem_accent"], sprite_path=_asset_path("rem_sprite.jpg"))
         body.addWidget(self.rem_panel)
 
         # 中间：聊天区域
@@ -680,6 +1704,8 @@ class TwinChatApp(QMainWindow):
         self.chat_container = QWidget()
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setAlignment(Qt.AlignTop)
+        self.chat_layout.setSpacing(SPACING['md'])  # V10.14：消息间距显式设定
+        self.chat_layout.setContentsMargins(0, SPACING['sm'], 0, SPACING['sm'])  # V10.14：上下留白
         self.chat_layout.addStretch()
         self.scroll.setWidget(self.chat_container)
         chat_section.addWidget(self.scroll, 1)
@@ -691,8 +1717,8 @@ class TwinChatApp(QMainWindow):
 
         # 输入区域
         input_frame = QFrame()
-        input_frame.setFixedHeight(130)
-        input_frame.setStyleSheet(f"background-color: {COLORS['bg_secondary']}; border-top: 1px solid {COLORS['border']};")
+        input_frame.setFixedHeight(DIM['input_frame_h'])
+        input_frame.setStyleSheet(f"background-color: {COLORS['bg_surface']}; border-top: 1px solid {COLORS['border_subtle']};")
         input_layout = QVBoxLayout(input_frame)
         input_layout.setContentsMargins(14, 10, 14, 10)
         input_layout.setSpacing(6)
@@ -708,19 +1734,19 @@ class TwinChatApp(QMainWindow):
             ("🔄 切换模式", "/toggle"),
         ]):
             btn = QPushButton(label)
-            btn.setFixedHeight(26)
-            btn.setFont(QFont("Microsoft YaHei", 9))
+            btn.setFixedHeight(DIM['quick_btn_h'])
+            btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
             btn.setCursor(Qt.PointingHandCursor)
             btn.setStyleSheet(f"""
                 QPushButton {{
-                    background-color: {COLORS['bg_sidebar']};
+                    background-color: {COLORS['bg_surface_2']};
                     color: {COLORS['text_secondary']};
-                    border: 1px solid {COLORS['border']};
-                    border-radius: 6px;
+                    border: 1px solid {COLORS['border_subtle']};
+                    border-radius: {RADIUS['small']}px;
                     padding: 2px 10px;
                 }}
                 QPushButton:hover {{
-                    background-color: {COLORS['rem_bubble']};
+                    background-color: {SURFACE_TINT['input']};
                     color: {COLORS['text_primary']};
                 }}
             """)
@@ -735,14 +1761,14 @@ class TwinChatApp(QMainWindow):
 
         self.input_box = QTextEdit()
         self.input_box.setPlaceholderText("和蕾姆、拉姆说点什么吧… (Enter 发送)")
-        self.input_box.setFont(QFont("Microsoft YaHei", 11))
-        self.input_box.setFixedHeight(55)
+        self.input_box.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg']))
+        self.input_box.setFixedHeight(DIM['input_box_h'])
         self.input_box.installEventFilter(self)
         input_row.addWidget(self.input_box, 1)
 
         self.send_btn = QPushButton("发 送")
-        self.send_btn.setFixedSize(72, 55)
-        self.send_btn.setFont(QFont("Microsoft YaHei", 11, QFont.Bold))
+        self.send_btn.setFixedSize(DIM['send_btn_w'], DIM['send_btn_h'])
+        self.send_btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg'], QFont.Bold))
         self.send_btn.setCursor(Qt.PointingHandCursor)
         self.send_btn.clicked.connect(self._send_message)
         input_row.addWidget(self.send_btn)
@@ -753,27 +1779,28 @@ class TwinChatApp(QMainWindow):
         body.addLayout(chat_section, 1)
 
         # 右侧：拉姆面板
-        self.ram_panel = CharacterPanel("拉 姆", "💗", COLORS["ram_primary"], sprite_path=_asset_path("ram_sprite.jpg"))
+        self.ram_panel = CharacterPanel("拉 姆", "💗", COLORS["ram_accent"], sprite_path=_asset_path("ram_sprite.jpg"))
         body.addWidget(self.ram_panel)
 
         main_layout.addLayout(body, 1)
 
         # ── 底部状态栏 ──
         footer = QFrame()
-        footer.setFixedHeight(28)
-        footer.setStyleSheet(f"background-color: {COLORS['bg_header']};")
+        footer.setFixedHeight(DIM['footer_h'])
+        footer.setStyleSheet(f"background-color: {COLORS['bg_header']}; border-top: 1px solid {COLORS['border_subtle']};")
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(14, 0, 14, 0)
 
         self.footer_label = QLabel("就绪")
-        self.footer_label.setFont(QFont("Microsoft YaHei", 9))
-        self.footer_label.setStyleSheet(f"color: {COLORS['text_light']};")
+        self.footer_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
+        self.footer_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         footer_layout.addWidget(self.footer_label)
         footer_layout.addStretch()
 
         mode_label = QLabel("LLM 桥接")
-        mode_label.setFont(QFont("Microsoft YaHei", 9))
-        mode_label.setStyleSheet(f"color: {COLORS['accent']};")
+        mode_label.setTextFormat(Qt.RichText)  # V10.14：启用 RichText 主次分层
+        mode_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
+        mode_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
         self._mode_label = mode_label
         footer_layout.addWidget(mode_label)
 
@@ -782,36 +1809,37 @@ class TwinChatApp(QMainWindow):
     def _apply_theme(self) -> None:
         self.setStyleSheet(f"""
             QMainWindow {{
-                background-color: {COLORS['bg_primary']};
+                background-color: {COLORS['bg_base']};
             }}
             QScrollArea {{
                 border: none;
                 background-color: transparent;
             }}
             QTextEdit {{
-                border: 1px solid {COLORS['border']};
-                border-radius: 10px;
+                border: 1px solid {COLORS['border_subtle']};
+                border-radius: {RADIUS['medium']}px;
                 padding: 8px 10px;
-                background-color: {COLORS['bg_secondary']};
+                background-color: {COLORS['bg_surface']};
                 color: {COLORS['text_primary']};
             }}
             QTextEdit:focus {{
-                border-color: {COLORS['accent']};
+                border-color: {COLORS['border_focus']};
             }}
             QPushButton {{
                 background-color: {COLORS['accent']};
                 color: white;
                 border: none;
-                border-radius: 8px;
+                border-radius: {RADIUS['small']}px;
             }}
             QPushButton:hover {{
-                background-color: #b8944f;
+                background-color: {COLORS['accent_hover']};
             }}
             QPushButton:pressed {{
-                background-color: #a07d3a;
+                background-color: {COLORS['accent_press']};
             }}
             QPushButton:disabled {{
-                background-color: #c0b8a8;
+                background-color: {COLORS['btn_disabled_bg']};
+                color: {COLORS['btn_disabled_fg']};
             }}
         """)
 
@@ -819,11 +1847,20 @@ class TwinChatApp(QMainWindow):
 
     def _handle_command(self, cmd: str) -> None:
         if cmd == "/status":
-            if self.mode == "llm":
-                status_text = self.bot.status()
-            else:
-                status_text = self.bot.status()
-            self._append_parsed_message("系统", status_text, "system")
+            # V10.9.2：多行可读排版 + 瞬时消失 + 不存 DB
+            state = self.engine.snapshot()
+            arc_cn = ARC_CN.get(state.arc.value, state.arc.value)
+            favor_cn = FAVOR_LEVEL_CN.get(state.favor_level.name, state.favor_level.name)
+            oni_cn = ONI_STAGE_CN.get(state.oni_stage.name, state.oni_stage.name)
+            status_text = (
+                f"📊 状态\n"
+                f"篇章：{arc_cn}\n"
+                f"蕾姆：{favor_cn}（{state.favor}）· 独立 {state.independence:.2f}\n"
+                f"拉姆：{state.ram_stage.value}（{state.ram_favor}）\n"
+                f"鬼化：{oni_cn} · 残香 {state.witch_scent}\n"
+                f"⌁ 点击关闭"
+            )
+            self._append_parsed_message("系统", status_text, "system", save=False, transient=True)
             self._update_panels()
         elif cmd == "/mansion":
             self.bot.set_arc(StoryArc.MANSION_ERA)
@@ -866,6 +1903,7 @@ class TwinChatApp(QMainWindow):
                     model_name="deepseek-chat",
                     arc=old.arc,
                     max_history=8,
+                    conversation_store=self.conv_store,
                 )
                 new_engine = new_bot.engine
                 _log("_switch_mode: bridge created OK")
@@ -889,7 +1927,7 @@ class TwinChatApp(QMainWindow):
                 f"→ 已切换至{'LLM 桥接' if target == 'llm' else '本地模板'}模式（状态已迁移）",
                 "system",
             )
-            self._mode_label.setText("LLM 桥接" if target == "llm" else "本地模板")
+            self._update_status_bar()  # V10.14：统一走 RichText 刷新，不再手动 setText
             self._update_panels()
         except Exception as e:
             _log(f"_switch_mode 失败: {e}\n{traceback.format_exc()}")
@@ -898,65 +1936,123 @@ class TwinChatApp(QMainWindow):
     # ── 开场引言 ────────────────────────────
 
     def _generate_vignette(self) -> None:
-        """生成开场氛围段（异步，不阻塞 UI）。
+        """生成开场氛围段。
 
         v10.4 起走 shared.vignette 的 L0-L3 多级生成：
         L0 缓存 → L1 LLM(重试+校验) → L2 动态模板 → L3 静态兜底。
         引言为 View-Only 数据，绝不写入对话历史（save=False + 不进 messages）。
+        V10.10.3：全路径 try-except + 探针日志。
+        V10.10.4：frozen EXE 走安全路径（主线程 L2/L3 模板，不创建 QThread 不调 LLM）。
+        V11.12：占位消息持有引用删除（替代脆弱的 count-2 位置删除）；
+                引言卡使用 vignette 幕间卡变体（强于灰条、弱于角色泡）。
         """
-        if self.mode != "llm" or not hasattr(self.bot, 'world'):
-            self._append_parsed_message(
-                "系统", "欢迎回到罗兹瓦尔宅邸。输入消息开始对话。", "system", save=False
-            )
-            return
+        _log("引言生成触发")
+        try:
+            if self.mode != "llm" or not hasattr(self.bot, 'world'):
+                self._append_parsed_message(
+                    "系统", "欢迎回到罗兹瓦尔宅邸。输入消息开始对话。", "system", save=False
+                )
+                return
 
-        self._append_parsed_message("系统", "✨ 正在感知宅邸的氛围…", "system", save=False)
+            placeholder = self._append_parsed_message("系统", "✨ 正在感知宅邸的氛围…", "system", save=False)
 
-        def _on_done(clean: str):
-            # 移除旧的"正在感知"消息
-            count = self.chat_layout.count()
-            if count >= 2:
-                item = self.chat_layout.itemAt(count - 2)
-                if item and item.widget():
-                    w = item.widget()
-                    w.setParent(None)
-                    w.deleteLater()
-            self._append_parsed_message("系统", f"━━  ✦  ━━\n{clean}\n━━  ✦  ━━", "system", save=False)
-
-        # 用 raw_completion 绕过角色 system prompt
-        class VignetteWorker(QObject):
-            finished = Signal(str)
-            error = Signal(str)
-            def __init__(self, bot, world):
-                super().__init__()
-                self.bot = bot; self.world = world
-            def run(self):
+            def _on_done(clean: str):
+                _log(f"引言回调 _on_done: {clean[:30]}...")
                 try:
-                    from shared.vignette import VignetteGenerator
-                    engine = self.bot.engine
-                    gen = VignetteGenerator(llm_callable=self.bot.raw_completion)
-                    text = gen.generate(
-                        self.world,
-                        rem_favor_level=engine._get_favor_level().name,
-                        independence=engine.independence,
-                        ram_stage=engine._get_ram_stage().value,
-                    )
-                    self.finished.emit(text)
+                    # V11.12：按引用移除占位消息（count-2 位置删除已废弃，
+                    # 期间若有其他 widget 插入不会再误删）
+                    if placeholder is not None:
+                        try:
+                            self.chat_layout.removeWidget(placeholder)
+                            placeholder.setParent(None)
+                            placeholder.deleteLater()
+                        except RuntimeError:
+                            pass  # 已被销毁（如 MAX_VISIBLE_WIDGETS 淘汰）
+                    self._append_parsed_message(
+                        "系统", f"━━  ✦  ━━\n{clean}\n━━  ✦  ━━",
+                        "system", save=False, force_center=True, variant="vignette")
+                    # v10.8.1：将引言氛围注入 Bridge，供首轮对话感知（View-Only，不进 history）
+                    if hasattr(self.bot, 'set_opening_atmosphere'):
+                        self.bot.set_opening_atmosphere(clean)
+                    _log("引言回调完成")
                 except Exception as e:
-                    self.error.emit(str(e))
+                    _log(f"引言回调异常: {e}\n{traceback.format_exc()}")
 
-        worker = VignetteWorker(self.bot, self.world)
-        worker.finished.connect(_on_done)
-        worker.error.connect(
-            lambda e: _on_done(f"宅邸的轮廓在{self.world.period}的{self.world.weather}中若隐若现。")
-        )
-        thread = QThread()
-        worker.moveToThread(thread)
-        thread.started.connect(worker.run)
-        worker.finished.connect(thread.quit)
-        worker.error.connect(thread.quit)
-        thread.finished.connect(thread.deleteLater)
-        thread.start()
+            # ── V10.10.4: frozen 安全路径 ──
+            # frozen EXE 下 QThread + LLM 调用触发原生崩溃（0xC0000409），
+            # 改为主线程直接走 L2/L3 模板生成，不创建线程不调 LLM。
+            if getattr(sys, "frozen", False):
+                _log("frozen 安全引言路径")
+                from shared.vignette import VignetteGenerator
+                engine = self.bot.engine
+                gen = VignetteGenerator(llm_callable=None)  # None → 跳过 L1，直接 L2/L3
+                text = gen.generate(
+                    self.world,
+                    rem_favor_level=engine._get_favor_level().name,
+                    independence=engine.independence,
+                    ram_stage=engine._get_ram_stage().value,
+                    locked=engine.locked,
+                    recovery=engine.recovery,
+                    oni_warning=(engine.oni_stage != OniStage.NONE),
+                    witch_scent=engine.witch_scent,
+                )
+                _log(f"模板引言生成完成: {text[:30]}...")
+                _on_done(text)
+                _log("模板引言已展示")
+                return
+
+            # ── 非 frozen：保留现有 LLM Worker 路径 ──
+            # 用 raw_completion 绕过角色 system prompt
+            class VignetteWorker(QObject):
+                finished = Signal(str)
+                error = Signal(str)
+                def __init__(self, bot, world):
+                    super().__init__()
+                    self.bot = bot; self.world = world
+                def run(self):
+                    _log("引言 Worker.run() 开始")
+                    try:
+                        from shared.vignette import VignetteGenerator
+                        engine = self.bot.engine
+                        gen = VignetteGenerator(llm_callable=self.bot.raw_completion)
+                        text = gen.generate(
+                            self.world,
+                            rem_favor_level=engine._get_favor_level().name,
+                            independence=engine.independence,
+                            ram_stage=engine._get_ram_stage().value,
+                            locked=engine.locked,
+                            recovery=engine.recovery,
+                            oni_warning=(engine.oni_stage != OniStage.NONE),
+                            witch_scent=engine.witch_scent,
+                        )
+                        _log(f"引言生成完成: {text[:30]}...")
+                        self.finished.emit(text)
+                    except Exception as e:
+                        _log(f"引言 Worker 异常: {e}\n{traceback.format_exc()}")
+                        self.error.emit(str(e))
+
+            _log("引言 Worker 创建")
+            worker = VignetteWorker(self.bot, self.world)
+            worker.finished.connect(_on_done)
+            worker.error.connect(
+                lambda e: _on_done(f"宅邸的轮廓在{self.world.period}的{self.world.weather}中若隐若现。")
+            )
+            thread = QThread()
+            worker.moveToThread(thread)
+            thread.started.connect(worker.run)
+            worker.finished.connect(thread.quit)
+            worker.error.connect(thread.quit)
+            thread.finished.connect(thread.deleteLater)
+            thread.start()
+            _log("引言子线程已启动")
+        except Exception as e:
+            _log(f"引言生成启动失败: {e}\n{traceback.format_exc()}")
+            # 降级为静态欢迎语
+            try:
+                self._append_parsed_message(
+                    "系统", "欢迎来到罗兹瓦尔宅邸。", "system", save=False)
+            except Exception:
+                pass
 
     # ── 历史搜索 ────────────────────────────
 
@@ -966,27 +2062,52 @@ class TwinChatApp(QMainWindow):
             return
         results = self.conv_store.search(query, limit=10)
         if not results:
-            self._append_parsed_message("系统", f"未找到包含「{query}」的对话。", "system")
+            self._append_parsed_message("系统", f"未找到包含「{query}」的对话。", "system", save=False, transient=True)
             return
-        self._append_parsed_message("系统", f"━━ 搜索「{query}」找到 {len(results)} 条 ━━", "system")
+        # V10.9.2：搜索全部瞬时化——不存 DB、自动消失、可点击关闭
+        self._append_parsed_message(
+            "系统", f"🔍 搜索「{query}」找到 {len(results)} 条", "system", save=False, transient=True
+        )
         for r in results:
-            role = r["role"]
             sender = r["sender"]
             text = r["content"]
-            # 截断过长内容
-            preview = text[:80] + ("…" if len(text) > 80 else "")
-            self._append_parsed_message(sender, preview, role)
-        self._append_parsed_message("系统", "━━ 搜索结束 ━━", "system")
+            created = r.get("created_at", "")
+            # 时间截取 MM-DD HH:MM（去掉年份和秒）
+            time_str = created[5:16] if len(created) >= 16 else created
+            preview = text[:60] + ("…" if len(text) > 60 else "")
+            self._append_parsed_message(
+                "系统", f"{time_str} · {sender} → {preview}", "system", save=False, transient=True
+            )
 
     # ── 消息处理 ────────────────────────────
 
     MAX_VISIBLE_WIDGETS = 80  # 最多保留 80 条消息 widget
 
-    def _append_parsed_message(self, sender: str, text: str, role: str, save: bool = True) -> None:
-        """添加消息 widget。超出上限时移除最早的。"""
-        msg = ChatMessageWidget(sender, text, role=role)
+    def _append_parsed_message(self, sender: str, text: str, role: str, save: bool = True, transient: bool = False, message_id: Optional[int] = None, force_center: bool = False, highlight: bool = False, variant: str = "system", animate: bool = True) -> Optional[QWidget]:
+        """添加消息 widget。超出上限时移除最早的。
+
+        V10.9.0：system 角色走 SystemLabelWidget 轻标签，其余走 ChatMessageWidget。
+        V10.9.2：transient=True 时系统标签自动消失 + 可点击关闭。
+        V10.12：message_id 参数透传给 ChatMessageWidget（历史回放带 id）；
+                save=True 时捕获 conv_store.append 返回值回填 widget.message_id。
+        V11.9.1：force_center 透传给 SystemLabelWidget（日更问候多行居中）。
+        V11.10.0：highlight 透传给 ChatMessageWidget（高光变体）。
+        V11.12：variant 透传给 SystemLabelWidget（vignette 幕间卡）；
+                返回值改为创建的 widget（供占位引用删除等场景，既有调用方不受影响）。
+        V12.0：animate 参数 — 正式角色泡（rem/ram/user）200ms opacity 轻入场；
+               system 标签恒无入场；历史批量回放传 animate=False 跳过动画。
+        """
+        if role == "system":
+            msg = SystemLabelWidget(text, transient=transient, force_center=force_center, variant=variant)
+        else:
+            msg = ChatMessageWidget(sender, text, role=role, message_id=message_id,
+                                    variant="highlight" if highlight else "normal")
         insert_index = self.chat_layout.count() - 1  # 在 stretch 之前插入
         self.chat_layout.insertWidget(insert_index, msg)
+
+        # V12.0：正式角色泡轻入场（system 标签无入场；历史回放由调用方传 animate=False）
+        if animate and role != "system":
+            self._play_entrance_animation(msg)
 
         # 限制可见 widget 数量，防止内存泄漏
         visible = self.chat_layout.count() - 1  # 减去末尾 stretch
@@ -1002,17 +2123,35 @@ class TwinChatApp(QMainWindow):
                 break
 
         if save:
-            self.conv_store.append(role, sender, text)
+            new_id = self.conv_store.append(role, sender, text)
+            if hasattr(msg, "message_id"):
+                msg.message_id = new_id  # V10.12：回填 DB id 供定位
         QTimer.singleShot(50, self._scroll_to_bottom)
+        return msg
 
     def _insert_streaming_bubble(self, role: str) -> ChatMessageWidget:
-        """插入一个空流式气泡，后续逐 token 填充。"""
+        """插入一个空流式气泡，后续逐 token 填充。
+
+        V11.10.1：使用 variant="streaming" 弱变体，视觉明显弱于正式泡。
+        V11.11：临时泡全部 save=False，不写 ConversationStore。
+        """
         sender = "蕾 姆" if role == "rem" else ("拉 姆" if role == "ram" else role)
-        msg = ChatMessageWidget(sender, "", role=role)
+        msg = ChatMessageWidget(sender, "", role=role, variant="streaming")
         insert_index = self.chat_layout.count() - 1
         self.chat_layout.insertWidget(insert_index, msg)
         QTimer.singleShot(30, self._scroll_to_bottom)
         return msg
+
+    def _clear_streaming_bubbles(self) -> None:
+        """V11.11：统一清理所有流式临时泡（finished/error/重入共用）。"""
+        for bubble in self._streaming_bubbles:
+            try:
+                bubble.setParent(None)
+                bubble.deleteLater()
+            except Exception:
+                pass
+        self._streaming_bubbles = []
+        self._set_speaking_panels(None)  # V12.0：说话态复位（finished/error/重入共用）
 
     def _scroll_to_bottom(self) -> None:
         vsb = self.scroll.verticalScrollBar()
@@ -1063,6 +2202,7 @@ class TwinChatApp(QMainWindow):
         self.footer_label.setText("双子思考中…")
         self.send_btn.setEnabled(False)
         self._streaming_active = True
+        self._set_breathing(False)  # V12.0：思考中暂停状态栏呼吸
 
         if self.mode == "llm" and hasattr(self.bot, 'chat_stream'):
             self._send_llm_stream(text)
@@ -1078,10 +2218,17 @@ class TwinChatApp(QMainWindow):
                 reply = self.bot.interact(text)
             _log(f"回复: {reply[:60]}")
         except Exception as e:
-            reply = f"【系统】出错了：{e}"
+            # V11.10.0：错误不走解析器，直接 system 消息
+            self._append_parsed_message("系统", f"出错了：{e}", "system")
+            self._finish_reply()
             _log(f"异常: {e}")
+            return
 
-        self._parse_twin_reply(reply)
+        # V11.10.0：检查场景高光标记
+        highlight = hasattr(self.bot, '_active_scene_id') and bool(self.bot._active_scene_id)
+        self._parse_twin_reply(reply, highlight=highlight)
+        if hasattr(self.bot, '_active_scene_id'):
+            self.bot._active_scene_id = None
         self._finish_reply()
 
     def _send_llm_stream(self, text: str) -> None:
@@ -1104,7 +2251,8 @@ class TwinChatApp(QMainWindow):
                 pass
 
         self._streaming_buffer = ""
-        self._streaming_bubble = None
+        # V11.11：重入时清理所有旧临时泡，防止孤儿残留
+        self._clear_streaming_bubbles()
 
         self._llm_thread = QThread()
         self._llm_worker = LLMWorker(self.bot, text, stream=True)
@@ -1118,61 +2266,78 @@ class TwinChatApp(QMainWindow):
 
     def _on_stream_token(self, token: str) -> None:
         self._streaming_buffer += token
-        if self._streaming_bubble is None and self._streaming_buffer.strip():
-            # 流式进行中：建一个临时预览气泡
-            self._streaming_bubble = self._insert_streaming_bubble("system")
-            self._streaming_bubble.setObjectName("__streaming_temp__")
-        if self._streaming_bubble:
-            self._streaming_bubble.update_text(self._streaming_buffer)
-            QTimer.singleShot(10, self._scroll_to_bottom)
+        # V11.11：流式分段，按说话人切泡
+        segments = _streaming_segments(self._streaming_buffer)
+        if not segments:
+            return
+        # V12.0：当前说话人 = 最后一段 speaker，变化时才点亮对应侧（幂等）
+        current = segments[-1][0]
+        if current != self._current_speaker:
+            self._set_speaking_panels(current)
+        # 段数多于当前泡数 → 新增泡
+        while len(self._streaming_bubbles) < len(segments):
+            speaker, _ = segments[len(self._streaming_bubbles)]
+            bubble = self._insert_streaming_bubble(speaker)
+            self._streaming_bubbles.append(bubble)
+        # 更新各泡文本（纯文本，不含标签）
+        for i, (speaker, text) in enumerate(segments):
+            if i < len(self._streaming_bubbles):
+                self._streaming_bubbles[i].update_text(text)
+        QTimer.singleShot(10, self._scroll_to_bottom)
 
     def _on_stream_finished(self, _final: str = "") -> None:
         buffered = self._streaming_buffer or _final
-        # 移除临时预览气泡
-        if self._streaming_bubble:
-            try:
-                self._streaming_bubble.setParent(None)
-                self._streaming_bubble.deleteLater()
-            except Exception:
-                pass
-        self._streaming_bubble = None
-        self._streaming_buffer = ""
-        # 解析完整回复，拆分成独立的蕾姆/拉姆气泡
+        # V11.10.1：先解析插入正式泡，再删临时泡（减少空白帧跳变）
         if buffered.strip():
-            self._parse_twin_reply(buffered)
+            # V11.10.0：检查场景高光标记
+            highlight = hasattr(self.bot, '_active_scene_id') and bool(self.bot._active_scene_id)
+            self._parse_twin_reply(buffered, highlight=highlight)
+            if hasattr(self.bot, '_active_scene_id'):
+                self.bot._active_scene_id = None
+        # V11.11：移除所有临时预览泡（正式泡已在上方插入）
+        self._clear_streaming_bubbles()
+        self._streaming_buffer = ""
         self._finish_reply()
         _log("流式完成")
 
     def _on_stream_error(self, err: str) -> None:
         self._streaming_active = False
-        self._append_parsed_message("系统", f"出错了：{err}", "system")
+        # V11.11：清理所有临时泡，防止孤儿残留
+        self._clear_streaming_bubbles()
         self._streaming_buffer = ""
-        self._streaming_bubble = None
+        self._append_parsed_message("系统", f"出错了：{err}", "system")
         self._finish_reply()
         _log(f"流式错误: {err}")
 
-    def _parse_twin_reply(self, reply: str) -> None:
-        """解析双子回复，按【蕾姆】/【拉姆】分行，分色显示。"""
-        lines = reply.strip().split("\n")
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
-            if line.startswith("【蕾姆】") or line.startswith("【蕾姆】:"):
-                content = line.split(":", 1)[1].strip().strip('"') if ":" in line else line[4:].strip()
-                self._append_parsed_message("蕾 姆", content, "rem")
-            elif line.startswith("【拉姆】") or line.startswith("【拉姆】:"):
-                content = line.split(":", 1)[1].strip().strip('"') if ":" in line else line[4:].strip()
-                self._append_parsed_message("拉 姆", content, "ram")
-            elif line.startswith("【系统】") or line.startswith("【系统】:"):
-                content = line.split(":", 1)[1].strip() if ":" in line else line[4:].strip()
-                self._append_parsed_message("系统", content, "system")
+    def _parse_twin_reply(self, reply: str, highlight: bool = False) -> None:
+        """V11.10.0：解析双子回复，缓冲+flush 模型，speaker 继承。
+
+        - 【蕾姆】/【拉姆】→ 切换 speaker，开启新气泡段
+        - 无前缀行 → 并入当前 speaker 段（默认 rem）
+        - 【系统】→ 提取内容后按无前缀行处理（继承或默认 rem）
+        - 禁止 LLM 台词降级 system
+        - highlight=True 时标记最后一个 rem 段为高光变体
+        """
+        segments = parse_twin_segments(reply)
+
+        # 找最后一个 rem 段索引（用于 highlight）
+        last_rem_idx = -1
+        for i in range(len(segments) - 1, -1, -1):
+            if segments[i][0] == "rem":
+                last_rem_idx = i
+                break
+
+        for i, (speaker, text) in enumerate(segments):
+            if speaker == "rem":
+                self._append_parsed_message("蕾 姆", text, "rem",
+                                            highlight=(highlight and i == last_rem_idx))
             else:
-                if line and not line.startswith("【"):
-                    self._append_parsed_message("系统", line, "system")
+                self._append_parsed_message("拉 姆", text, "ram")
 
     def _finish_reply(self) -> None:
         self._streaming_active = False
+        self._set_speaking_panels(None)  # V12.0：兜底复位说话态（幂等，未亮时不做事）
+        self._set_breathing(True)  # V12.0：完成后恢复状态栏呼吸
         self._save_state()
         self._update_panels()
         self._update_status_bar()
@@ -1190,59 +2355,86 @@ class TwinChatApp(QMainWindow):
             role = item["role"]
             text = item["content"]
             sender = item["sender"]
+            msg_id = item.get("id")  # V10.12：透传 DB id 供定位
             if not text:
                 continue
-            self._append_parsed_message(sender, text, role, save=False)
+            self._append_parsed_message(sender, text, role, save=False, message_id=msg_id, animate=False)  # V12.0：历史批量回放跳过入场动画
             shown += 1
         _log(f"历史显示: {shown} 条")
         if shown == 0:
-            self._append_parsed_message(
-                "系统",
-                "❄ 欢迎来到 Re:Zero 双子系统。\n"
-                "左侧是蕾姆面板，右侧是拉姆面板。\n"
-                "输入消息开始对话，或使用底部快捷按钮。",
-                "system", save=False,
-            )
+            # V11.6.5: 有上次摘要时不显示欢迎语（续聊卡接管，避免双卡叠放）
+            last_summary = None
+            try:
+                last_summary = self.conv_store.get_last_session_summary()
+            except Exception:
+                pass
+            if not last_summary:
+                self._append_parsed_message(
+                    "系统",
+                    "❄ 欢迎来到 Re:Zero 双子系统。\n"
+                    "左侧是蕾姆面板，右侧是拉姆面板。\n"
+                    "输入消息开始对话，或使用底部快捷按钮。",
+                    "system", save=False,
+                )
 
     # ── 状态同步 ────────────────────────────
 
     def _update_panels(self) -> None:
-        """更新左右角色面板。"""
+        """更新左右角色面板（V11.0：表情扩档 + 状态分层）。"""
         try:
             state = self.engine.snapshot()
         except Exception:
             return
 
-        # 蕾姆面板
-        rem_emotion = "😊"
+        # ── 蕾姆表情（11 档优先级，命中即停）──
+        # 鬼化/残香仅通过表情传达，面板不显示术语
         if state.witch_scent >= 3:
-            rem_emotion = "😰"
-        elif state.oni_stage.value > 0:
-            rem_emotion = "😠"
-        elif state.consecutive_negative >= 2:
-            rem_emotion = "😟"
+            rem_emotion = "😰"       # P1 魔女侵蚀
+        elif state.oni_stage == OniStage.BRINK:
+            rem_emotion = "😡"       # P2 失控边缘
+        elif state.oni_stage == OniStage.FULL:
+            rem_emotion = "😠"       # P3 完全解放
+        elif state.oni_stage == OniStage.EMERGING:
+            rem_emotion = "😤"       # P4 鬼化显现
+        elif state.recovery < 0.3:
+            rem_emotion = "😵"       # P5 记忆严重模糊
+        elif state.consecutive_negative >= 3:
+            rem_emotion = "😟"       # P6 连连受挫
         elif state.locked:
-            rem_emotion = "🥰"
+            rem_emotion = "🥰"       # P7 忠诚锁定
         elif state.independence >= 0.6:
-            rem_emotion = "😌"
+            rem_emotion = "😌"       # P8 独立人格
+        elif state.favor >= 80:
+            rem_emotion = "😍"       # P9 深爱满溢
+        elif state.favor < 15:
+            rem_emotion = "😐"       # P10 尚且陌生
+        else:
+            rem_emotion = "😊"       # P11 平静温和
 
         self.rem_panel.update_state(
             favor=state.favor,
-            stage=state.favor_level.name,
+            stage=FAVOR_LEVEL_CN.get(state.favor_level.name, state.favor_level.name),
             emotion=rem_emotion,
             locked=state.locked,
             independence=state.independence,
+            recovery=state.recovery,
         )
 
-        # 拉姆面板
-        ram_emotion_map = {
-            "可疑": "😒",
-            "观察中": "🤔",
-            "还算守规矩": "😐",
-            "勉强认可": "😏",
-            "真正承认": "😌",
-        }
-        ram_emotion = ram_emotion_map.get(state.ram_stage.value, "😐")
+        # ── 拉姆表情（8 档：姐姐危险感知 + 自身阶段）──
+        if state.witch_scent >= 3:
+            ram_emotion = "😠"       # P1 姐姐的怒意
+        elif state.oni_stage >= OniStage.FULL:
+            ram_emotion = "😤"       # P2 姐姐的警惕
+        else:
+            ram_emotion_map = {
+                "可疑": "😒",
+                "观察中": "🤔",
+                "还算守规矩": "😐",
+                "勉强认可": "😏",
+                "真正承认": "😌",
+            }
+            ram_emotion = ram_emotion_map.get(state.ram_stage.value, "😐")
+
         self.ram_panel.update_state(
             favor=state.ram_favor,
             stage=state.ram_stage.value,
@@ -1253,12 +2445,124 @@ class TwinChatApp(QMainWindow):
         try:
             state = self.engine.snapshot()
             w = self.world if hasattr(self, 'world') else WorldState.now()
+            # 活跃事件可见化：有事件且与 period/weather 相容才追加（V11.9.2）
+            ram_part = state.ram_stage.value
+            ev = w.active_event or ""
+            if ev and event_compatible(w.period, w.weather, ev):
+                event_short = ev[:16] + '…' if len(ev) > 16 else ev
+                ram_part += f"  ·  {event_short}"
+            # V10.14：RichText 主次分层（金色模式 / 次亮主信息 / 弱化次信息）
+            mode_text = "LLM" if self.mode == "llm" else "本地"
+            sep = f'<span style="color:{COLORS["text_muted"]};">  ·  </span>'
             self._mode_label.setText(
-                f"{'LLM' if self.mode == 'llm' else '本地'} | "
-                f"{w.period} · {w.weather} | "
-                f"好感 {state.favor}/100 | "
-                f"{state.ram_stage.value}"
+                f'<span style="color:{COLORS["accent"]};">{mode_text}</span>'
+                f'{sep}'
+                f'<span style="color:{COLORS["text_secondary"]};">{w.period} · {w.weather}  ·  好感 {state.favor}/100</span>'
+                f'{sep}'
+                f'<span style="color:{COLORS["text_muted"]};">{ram_part}</span>'
             )
+        except Exception:
+            pass
+
+    # ── V12.0 视觉动效（头像说话态 / 气泡入场 / 状态栏呼吸）────────────
+
+    def _setup_breathing(self) -> None:
+        """V12.0：状态栏呼吸 — _mode_label opacity 0.85↔1.0，单程 2s，无限往复。
+
+        ENABLE_UI_MOTION=False 时不创建任何动画对象（完全静态）。
+        """
+        if not ENABLE_UI_MOTION:
+            return
+        try:
+            self._breath_effect = QGraphicsOpacityEffect(self._mode_label)
+            self._mode_label.setGraphicsEffect(self._breath_effect)
+            self._breath_effect.setOpacity(1.0)
+            fwd = QPropertyAnimation(self._breath_effect, b"opacity", self._mode_label)
+            fwd.setDuration(2000)
+            fwd.setStartValue(1.0)
+            fwd.setEndValue(0.85)
+            fwd.setEasingCurve(QEasingCurve.InOutSine)
+            bwd = QPropertyAnimation(self._breath_effect, b"opacity", self._mode_label)
+            bwd.setDuration(2000)
+            bwd.setStartValue(0.85)
+            bwd.setEndValue(1.0)
+            bwd.setEasingCurve(QEasingCurve.InOutSine)
+            self._breath_group = QSequentialAnimationGroup(self)
+            self._breath_group.addAnimation(fwd)
+            self._breath_group.addAnimation(bwd)
+            self._breath_group.setLoopCount(-1)
+            self._breath_group.start()
+            _log("状态栏呼吸已启动")
+        except Exception as e:
+            _log(f"呼吸动画创建异常: {e}")
+            self._breath_group = None
+
+    def _set_breathing(self, active: bool) -> None:
+        """V12.0：呼吸暂停/恢复。思考中 pause（opacity 停在当前值），完成后 resume。"""
+        if not ENABLE_UI_MOTION:
+            return
+        group = getattr(self, "_breath_group", None)
+        if group is None:
+            return
+        try:
+            st = group.state()
+            if active:
+                if st == QAbstractAnimation.Stopped:
+                    group.start()
+                elif st == QAbstractAnimation.Paused:
+                    group.resume()
+            else:
+                if st == QAbstractAnimation.Running:
+                    group.pause()
+        except Exception as e:
+            _log(f"呼吸暂停/恢复异常: {e}")
+
+    def _set_speaking_panels(self, speaker: Optional[str]) -> None:
+        """V12.0：点亮/复位侧栏说话描边。speaker=None 全部复位。
+
+        状态跟踪（_current_speaker）不受开关影响；仅 QSS 刷新受 ENABLE_UI_MOTION 控制。
+        """
+        self._current_speaker = speaker
+        if not ENABLE_UI_MOTION:
+            return
+        try:
+            self.rem_panel.set_speaking(speaker == "rem")
+            self.ram_panel.set_speaking(speaker == "ram")
+        except Exception as e:
+            _log(f"_set_speaking_panels 异常: {e}")
+
+    def _play_entrance_animation(self, widget: QWidget) -> None:
+        """V12.0：正式消息泡轻入场 — opacity 0→1，200ms，OutCubic。
+
+        动画结束即卸载 effect（防离屏渲染残留）；widget 可能已被删除，
+        清理回调与创建路径均 try/except，异常只记日志不拖垮事件循环。
+        """
+        if not ENABLE_UI_MOTION:
+            return
+        try:
+            effect = QGraphicsOpacityEffect(widget)
+            widget.setGraphicsEffect(effect)
+            effect.setOpacity(0.0)
+            anim = QPropertyAnimation(effect, b"opacity", widget)
+            anim.setDuration(200)
+            anim.setStartValue(0.0)
+            anim.setEndValue(1.0)
+            anim.setEasingCurve(QEasingCurve.OutCubic)
+            anim.finished.connect(
+                lambda w=widget, e=effect: self._cleanup_entrance_effect(w, e)
+            )
+            anim.start(QAbstractAnimation.DeleteWhenStopped)
+        except Exception as e:
+            _log(f"入场动画异常: {e}")
+
+    def _cleanup_entrance_effect(self, widget, effect) -> None:
+        """卸载入场动画的 opacity effect（widget 可能已被删除，全部 try/except）。"""
+        try:
+            widget.setGraphicsEffect(None)
+        except Exception:
+            pass
+        try:
+            effect.deleteLater()
         except Exception:
             pass
 
@@ -1297,19 +2601,345 @@ class TwinChatApp(QMainWindow):
             self.sakura.setGeometry(self.scroll.viewport().rect())
         return super().eventFilter(source, event)
 
+    # ── 历史浮层（V10.10） ───────────────────
+
+    def _open_history(self) -> None:
+        """懒创建并打开历史浮层。"""
+        if _HISTORY_DISABLED:
+            _log("历史浮层已通过 REZERO_DISABLE_HISTORY 禁用")
+            return
+        if self._history_overlay is None:
+            self._history_overlay = HistoryOverlay(self.conv_store, parent=self)
+            self._history_overlay.closed.connect(self._close_history)
+            self._history_overlay.locate_requested.connect(self._locate_message)  # V10.12
+        # 跟随窗口尺寸
+        self._history_overlay.setGeometry(self.rect())
+        # 刷新数据（每次打开都拉最新）
+        self._history_overlay.load_recent()
+        self._history_overlay.show()
+        self._history_overlay.raise_()
+        self._history_overlay.setFocus()
+        _log("历史浮层已打开")
+
+    def _close_history(self) -> None:
+        """关闭历史浮层。"""
+        if self._history_overlay:
+            self._history_overlay.hide()
+            self.input_box.setFocus()
+            _log("历史浮层已关闭")
+
+    # ── V10.12：历史条目定位 ───────────────────
+
+    def _locate_message(self, message_id: int) -> None:
+        """根据 message_id 定位主聊天中的消息 widget。
+
+        成功：关闭浮层 → 滚动到目标 → 短暂高亮 2 秒
+        失败：关闭浮层 → transient 提示（不污染主聊天流）
+        """
+        # 1. 关闭浮层
+        if self._history_overlay:
+            self._history_overlay.hide()
+
+        # message_id 无效（系统消息等）
+        if not message_id:
+            self._append_parsed_message(
+                "系统", "📍 该消息不支持定位。", "system", save=False, transient=True
+            )
+            return
+
+        # 2. 遍历 chat_layout 查找匹配 message_id 的 widget
+        target = None
+        for i in range(self.chat_layout.count()):
+            item = self.chat_layout.itemAt(i)
+            if not item or not item.widget():
+                continue
+            w = item.widget()
+            if isinstance(w, ChatMessageWidget) and getattr(w, "message_id", None) == message_id:
+                target = w
+                break
+
+        # 3. 成功：滚动 + 高亮
+        if target is not None:
+            self.scroll.ensureWidgetVisible(target)
+            self._highlight_widget(target)
+            self.input_box.setFocus()
+            return
+
+        # 4. 失败：从 DB 取内容摘要，transient 提示
+        summary = ""
+        try:
+            record = self.conv_store.get_by_id(message_id)
+            if record:
+                content = record.get("content", "")
+                summary = (content[:60] + "…") if len(content) > 60 else content
+        except Exception as e:
+            _log(f"定位降级查询异常: {e}")
+
+        tip = "📍 该消息不在当前可见范围（可能已随对话滚动移出）。"
+        if summary:
+            tip += f"内容摘要：{summary}"
+        self._append_parsed_message("系统", tip, "system", save=False, transient=True)
+
+    def _highlight_widget(self, widget) -> None:
+        """短暂高亮目标 widget（金色半透明背景，2 秒后恢复）。
+
+        不动 BubbleWidget 内部样式，仅设置 ChatMessageWidget 外层背景。
+        """
+        try:
+            widget.setStyleSheet(
+                f"background-color: {COLORS['locate_highlight']}; border-radius: {RADIUS['small']}px;"
+            )
+            QTimer.singleShot(2000, lambda: widget.setStyleSheet(""))
+        except Exception as e:
+            _log(f"高亮异常: {e}")
+
+    def resizeEvent(self, event) -> None:
+        """窗口 resize 时同步浮层遮罩尺寸。"""
+        super().resizeEvent(event)
+        if self._history_overlay and self._history_overlay.isVisible():
+            self._history_overlay.setGeometry(self.rect())
+
+    # ── V11.6.5: session 摘要（规则生成，不调 LLM）──
+
+    def _generate_session_summary(self) -> Optional[dict]:
+        """规则生成 session 摘要（不调 LLM）。
+
+        算法（收紧版）：
+        - 优先：自上次 session_summaries.msg_end_id 之后的新消息
+        - 若无上次摘要：最近 ≤50 条
+        - 统计 user 消息数 = 轮次
+        - last_user_excerpt ≤50 字
+        """
+        try:
+            last_summary = self.conv_store.get_last_session_summary()
+            after_id = last_summary["msg_end_id"] if last_summary else None
+
+            messages = self.conv_store.get_messages_since(after_id, limit=50)
+            if not messages:
+                return None
+
+            user_msgs = [m for m in messages if m["role"] == "user"]
+            turn_count = len(user_msgs)
+            if turn_count == 0:
+                return None  # 无用户消息，不算有效 session
+
+            # 最后一条用户消息截断 ≤50 字
+            last_user_msg = user_msgs[-1]["content"]
+            last_user_excerpt = last_user_msg[:50]
+            if len(last_user_msg) > 50:
+                last_user_excerpt += "…"
+
+            # 规则摘要文本
+            first_user = user_msgs[0]["content"][:20]
+            if turn_count <= 2:
+                summary_text = f"简短交流了{turn_count}轮"
+            elif turn_count <= 5:
+                summary_text = f"聊了{turn_count}轮，从「{first_user}」开始"
+            else:
+                summary_text = f"深入聊了{turn_count}轮，从「{first_user}」开始"
+
+            return {
+                "turn_count": turn_count,
+                "summary_text": summary_text,
+                "last_user_excerpt": last_user_excerpt,
+                "msg_start_id": messages[0]["id"],
+                "msg_end_id": messages[-1]["id"],
+            }
+        except Exception as e:
+            _log(f"生成 session 摘要失败: {e}")
+            return None
+
+    def _save_session_summary(self) -> None:
+        """关闭时写入 session 摘要（closeEvent 末尾调用，失败不影响主流程）。"""
+        try:
+            summary = self._generate_session_summary()
+            if not summary:
+                _log("session 摘要：无有效内容，跳过")
+                return
+            self.conv_store.save_session_summary(
+                started_at=self._session_start_time,
+                ended_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                turn_count=summary["turn_count"],
+                summary_text=summary["summary_text"],
+                last_user_excerpt=summary["last_user_excerpt"],
+                msg_start_id=summary["msg_start_id"],
+                msg_end_id=summary["msg_end_id"],
+            )
+            _log(f"session 摘要已保存: turns={summary['turn_count']}")
+        except Exception as e:
+            _log(f"session 摘要保存失败: {e}")
+
+    def _show_daily_greeting(self, today_str: str) -> None:
+        """V11.9.1：自然日首次问候 — 表驱动模板，View-Only。
+
+        按当前 period 选骨架模板，天气走 WEATHER_CLAUSES 白名单注入。
+        active_event 与天气冲突则跳过 event 并打日志。
+        不依赖 mode（local/llm 均展示），不调用 LLM，不进 ConversationStore。
+        展示后立即写入 last_greeting_date 并持久化。
+        """
+        try:
+            period = self.world.period
+            weather = self.world.weather
+            event = self.world.active_event or ""
+
+            # 天气从句：白名单查找，未知天气中性兜底
+            weather_clause = WEATHER_CLAUSES.get(weather, "")
+
+            # 事件从句：冲突检测（V11.9.2 统一入口）
+            event_clause = ""
+            if event:
+                if event_compatible(period, weather, event):
+                    event_clause = event + "。"
+                else:
+                    _log(f"日更问候: event与period/weather冲突, skip event. "
+                         f"period={period} weather={weather} event={event}")
+
+            template = GREETING_TEMPLATES.get(period, GREETING_TEMPLATES["上午"])
+            text = template.format(weather_clause=weather_clause, event_clause=event_clause)
+            # V11.12：日更问候与开场引言共用 vignette 幕间卡变体（同为宅邸幕间语义）
+            self._append_parsed_message(
+                "系统", f"━  ✦  ━\n{text}\n━  ✦  ━",
+                "system", save=False, force_center=True, variant="vignette"
+            )
+            self.world.last_greeting_date = today_str
+            # 立即持久化，防止崩溃丢失问候标记
+            self.store.set("world_state", self.world.save_dict())
+            _log(f"日更问候已展示: period={period} weather={weather} date={today_str}")
+        except Exception as e:
+            _log(f"日更问候展示失败: {e}\n{traceback.format_exc()}")
+
+    def _show_ambient_line(self) -> None:
+        """V11.9.0：同日轻氛围一行 — period · weather · active_event，View-Only。
+
+        V11.9.2：active_event 与 period/weather 语义冲突时省略 event 段并打日志。
+        仅在同日有历史重开时展示（空库完整引言时不重复打）。
+        save=False，不进 ConversationStore。
+        """
+        try:
+            parts = [self.world.period, self.world.weather]
+            event = self.world.active_event or ""
+            if event:
+                if event_compatible(self.world.period, self.world.weather, event):
+                    parts.append(event)
+                else:
+                    _log(f"轻氛围: event与period/weather冲突, skip event. "
+                         f"period={self.world.period} weather={self.world.weather} event={event}")
+            text = " · ".join(parts)
+            self._append_parsed_message("系统", f"🌧️ {text}", "system", save=False)
+            _log(f"轻氛围已展示: {text}")
+        except Exception as e:
+            _log(f"轻氛围展示失败: {e}")
+
+    def _show_resume_card(self) -> None:
+        """启动时展示上次 session 摘要（续聊卡）。
+
+        挂载于 _load_history() 之后、引言 QTimer 之前。
+        - 无摘要 / 无对话记录 → 不显示
+        - save=False，不写 DB
+        - 有摘要时已压制欢迎语（_load_history 中处理），避免双卡叠放
+        """
+        try:
+            summary = self.conv_store.get_last_session_summary()
+            if not summary:
+                return
+            if self.conv_store.count() == 0:
+                return  # 无对话记录不显示（fresh install 场景）
+
+            ended = summary.get("ended_at", "")
+            turns = summary.get("turn_count", 0)
+            text_body = summary.get("summary_text", "")
+            excerpt = summary.get("last_user_excerpt", "")
+
+            # 格式化时间（只取 日期+时分）
+            time_str = ended[:16] if len(ended) >= 16 else ended
+
+            card_text = f"📋 上次对话 · {time_str}\n{text_body}（共{turns}轮）\n"
+            if excerpt:
+                card_text += f"最后你说：「{excerpt}」\n"
+            card_text += "继续输入即可接着聊，或点击右上角宅邸日志查看完整回忆。"
+
+            self._append_parsed_message("系统", card_text, "system", save=False)
+            _log(f"续聊卡已展示: turns={turns} time={time_str}")
+        except Exception as e:
+            _log(f"续聊卡展示失败: {e}")
+
     def closeEvent(self, event) -> None:
         self._save_state()
+        self._save_session_summary()  # V11.6.5: 写入 session 摘要
         event.accept()
 
 
-def main() -> None:
+def _install_crash_handler() -> None:
+    """安装崩溃捕获：excepthook 捕获未处理异常写入日志。"""
+    crash_path = os.path.join(get_data_dir(), "crash.log")
     try:
+        def _excepthook(exc_type, exc_value, exc_tb):
+            msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+            _log(f"未捕获异常: {exc_value}\n{msg}")
+            try:
+                with open(crash_path, "a", encoding="utf-8") as f:
+                    f.write(f"\n[{datetime.now().isoformat()}] 未捕获异常:\n{msg}")
+            except Exception:
+                pass
+        sys.excepthook = _excepthook
+    except Exception as e:
+        _log(f"崩溃处理器安装失败: {e}")
+
+
+def main() -> None:
+    _install_crash_handler()
+    try:
+        # Windows 任务栏图标修复：在 QApplication 之前设置 AppUserModelID，
+        # 否则任务栏将窗口归到默认进程标识，显示系统默认图标而非自定义图标。
+        if sys.platform == "win32":
+            try:
+                ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(
+                    "ReZeroTwin.RemRam.1"
+                )
+                _log("AppUserModelID 已设置: ReZeroTwin.RemRam.1")
+            except Exception as e:
+                _log(f"AppUserModelID 设置失败（非致命）: {e}")
+
         app = QApplication(sys.argv)
-        app.setFont(QFont("Microsoft YaHei", 10))
+
+        # 构建多尺寸 QIcon：显式 addFile 各尺寸，确保任务栏/标题栏各 DPI 均有位图
+        icon_path = _asset_path("app_icon.ico")
+        icon_exists = os.path.isfile(icon_path)
+        _log(f"图标路径: {icon_path} | isfile={icon_exists}")
+
+        app_icon = QIcon()
+        if icon_exists:
+            for sz in (16, 32, 48, 256):
+                app_icon.addFile(icon_path, QSize(sz, sz))
+            _log(f"QIcon addFile 完成: 16/32/48/256 from {icon_path}")
+        else:
+            _log("[警告] 图标文件不存在，QIcon 将为空，任务栏/窗口图标会异常")
+
+        # frozen 时补充：用 EXE 自身内嵌图标作为兜底（Windows 可从 PE 资源提取）
+        if getattr(sys, "frozen", False) and sys.platform == "win32":
+            try:
+                exe_icon = QIcon(sys.executable)
+                if not exe_icon.isNull():
+                    app_icon = exe_icon
+                    _log(f"frozen 兜底: 使用 EXE 内嵌图标 ({sys.executable})")
+                else:
+                    _log("frozen 兜底: EXE 内嵌图标为空，保持 ICO 文件图标")
+            except Exception as e:
+                _log(f"frozen 兜底失败（非致命）: {e}")
+
+        app.setWindowIcon(app_icon)
+        app.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
+        app.aboutToQuit.connect(lambda: _log("aboutToQuit 信号触发"))
         window = TwinChatApp()
         window.show()
+        # show 后二次 setWindowIcon：强制任务栏刷新图标关联
+        window.setWindowIcon(app_icon)
+        _log("show 后二次 setWindowIcon 已执行")
         _log("窗口 show 完成")
-        sys.exit(app.exec())
+        _log("即将进入 app.exec() 事件循环")
+        ret = app.exec()
+        _log(f"app.exec() 返回 {ret}")
+        sys.exit(ret)
     except Exception as e:
         _log(f"main 异常: {e}\n{traceback.format_exc()}")
         raise

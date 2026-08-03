@@ -11,6 +11,7 @@ a = Analysis(
     binaries=openai_binaries,
     datas=[
         ('assets', 'assets'),
+        ('content', 'content'),
     ] + openai_datas,
     hiddenimports=openai_hidden + [
         'dotenv',
@@ -20,6 +21,8 @@ a = Analysis(
         'shared.memory_store',
         'shared.conversation_store',
         'shared.vignette',
+        'shared.validators',
+        'shared.world_state',
         'llm.bridge',
         'local.rem_ai',
         'local.twin_system',
@@ -56,10 +59,10 @@ exe = EXE(
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,
-    disable_windowed_traceback=False,
+    disable_windowed_traceback=True,
     argv_emulation=False,
     target_arch=None,
     codesign_identity=None,
     entitlements_file=None,
-    icon=None,
+    icon='assets/app_icon.ico',
 )

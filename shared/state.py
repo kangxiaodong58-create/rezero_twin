@@ -28,6 +28,18 @@ class FavorLevel(IntEnum):
     BELOVED = 4
 
 
+# V11.7：好感阶段中文映射（唯一真源）
+# 供 GUI 面板、PromptBuilder、Vignette L1 prompt 共用，避免双源。
+# cache key / snapshot 仍用英文枚举名，仅展示层用此映射。
+FAVOR_LEVEL_CN = {
+    "STRANGER": "陌生人",
+    "FAMILIAR": "熟悉",
+    "CLOSE": "亲密",
+    "DEAR": "挚爱",
+    "BELOVED": "深爱",
+}
+
+
 class OniStage(IntEnum):
     NONE = 0
     EMERGING = 1
@@ -95,6 +107,19 @@ from dataclasses import dataclass, field
 from datetime import datetime as _dt
 
 
+# 轻量环境事件池：宅邸日常氛围，不触发剧情，不改变硬状态
+EVENT_POOL: List[Dict[str, Any]] = [
+    {"id": "tea_ready",        "desc": "红茶刚好煮好，茶香还停在走廊里", "weight": 15},
+    {"id": "garden_bloom",     "desc": "宅邸花园里的花比昨天多开了一些", "weight": 12},
+    {"id": "cleaning_morning", "desc": "清晨的大扫除刚结束，空气里有肥皂水的气味", "weight": 12},
+    {"id": "library_dust",     "desc": "书库里有几本旧书被遗忘在窗边，落了一层薄灰", "weight": 10},
+    {"id": "cat_visitor",      "desc": "一只野猫从庭院围墙跳了进来，正晒着太阳", "weight": 10},
+    {"id": "laundry_day",      "desc": "今天是被单晾晒日，后院的白布在风中轻轻摇晃", "weight": 12},
+    {"id": "sunny_noon",       "desc": "午后的阳光特别好，木地板被晒得温暖", "weight": 10},
+    {"id": "night_wind",       "desc": "入夜后风变大了，窗户被吹得轻轻作响", "weight": 10},
+]
+
+
 @dataclass
 class WorldState:
     """世界状态：时间 + 天气。持久化保存，天气确定性生成（MD5，跨进程稳定）。
@@ -108,17 +133,22 @@ class WorldState:
     days_since_last: int = 0
     weather: str = "晴朗"
     active_event: str = ""          # 当前活跃事件（如"花园的花开了"）
+    event_generated_at: float = 0.0  # 事件生成时间戳，用于 TTL 过期判断
     last_real_ts: float = 0.0       # 上次保存的现实时间戳
     weather_seed: int = 42          # 天气确定性种子（随时间推演）
     weather_last_change: str = ""   # 天气上次变化时间（ISO 分钟）
     last_interaction_ts: float = 0.0  # 用户上次有效对话时间戳
+    last_greeting_date: str = ""     # V11.9.0: 上次日更问候的日历日（YYYY-MM-DD）
     character_actions: Dict[str, str] = field(default_factory=lambda: {
         "rem": "在整理房间",
         "ram": "靠在一旁休息",
     })
+    scene_cooldowns: Dict[str, str] = field(default_factory=dict)  # V11.10.0: 情感场景冷却 {scene_id: ISO ts}
 
     # 天气连续多少小时不变后开始推演
     WEATHER_CHANGE_HOURS: float = 8.0
+    # 活跃事件自然过期时间（小时）
+    EVENT_TTL_HOURS: float = 24.0
 
     PERIODS = [
         ("清晨", 5, 7), ("上午", 7, 11), ("午后", 11, 14),
@@ -167,6 +197,28 @@ class WorldState:
         return cls._determine_weather(date_str, "全天", 42)
 
     @classmethod
+    def _pick_active_event(cls, system_date: str, period: str, weather: str, seed: int) -> str:
+        """按 (日期, 时段, 天气, 种子) 确定性选择活跃事件。"""
+        raw = f"{system_date}_{period}_{weather}_{seed}".encode("utf-8")
+        point = int(hashlib.md5(raw).hexdigest()[:8], 16)
+        total_weight = sum(ev["weight"] for ev in EVENT_POOL)
+        idx = point % total_weight
+        cumulative = 0
+        for ev in EVENT_POOL:
+            cumulative += ev["weight"]
+            if idx < cumulative:
+                return ev["desc"]
+        return EVENT_POOL[-1]["desc"]
+
+    def refresh_active_event(self) -> None:
+        """根据当前世界状态刷新活跃事件并记录生成时间。"""
+        system_date = (self.current_time or "")[:10] or _dt.now().strftime("%Y-%m-%d")
+        self.active_event = self._pick_active_event(
+            system_date, self.period, self.weather, self.weather_seed
+        )
+        self.event_generated_at = _dt.now().timestamp()
+
+    @classmethod
     def load_or_create(cls, saved: Optional[Dict[str, Any]] = None) -> "WorldState":
         """从存档恢复或新建；启动时推演时段、离线天数与自然天气变化。"""
         now = _dt.now()
@@ -192,19 +244,45 @@ class WorldState:
             actions = saved.get("character_actions")
             if not isinstance(actions, dict) or not actions:
                 actions = {"rem": "在整理房间", "ram": "靠在一旁休息"}
+
+            # 活跃事件：空 / 过期 / 用户离线归来 时重新选择
+            active_event = saved.get("active_event", "") or ""
+            event_generated_at = float(saved.get("event_generated_at", 0.0) or 0.0)
+            hours_since_event = (
+                (now_ts - event_generated_at) / 3600.0
+                if event_generated_at > 0
+                else float("inf")
+            )
+            should_refresh_event = (
+                not active_event
+                or hours_since_event >= cls.EVENT_TTL_HOURS
+                or days_away > 0
+            )
+            if should_refresh_event:
+                active_event = cls._pick_active_event(
+                    now.strftime("%Y-%m-%d"), period, weather, seed
+                )
+                event_generated_at = now_ts
+
             return cls(
                 current_time=now.strftime("%Y-%m-%d %H:%M"),
                 period=period,
                 days_since_last=days_away,
                 weather=weather,
-                active_event=saved.get("active_event", ""),
+                active_event=active_event,
+                event_generated_at=event_generated_at,
                 last_real_ts=now_ts,
                 weather_seed=seed,
                 weather_last_change=weather_last_change,
                 last_interaction_ts=last_interaction,
+                last_greeting_date=saved.get("last_greeting_date", "") or "",
                 character_actions=actions,
+                scene_cooldowns=saved.get("scene_cooldowns", {}) or {},
             )
-        return cls.now()
+        # 无存档新建：先生成默认世界状态，再刷新活跃事件
+        ws = cls.now()
+        ws.refresh_active_event()
+        return ws
 
     def mark_interaction(self) -> None:
         """用户产生有效对话时调用：刷新最后互动时间戳并清零离线天数。"""
@@ -226,11 +304,14 @@ class WorldState:
             "days_since_last": self.days_since_last,
             "weather": self.weather,
             "active_event": self.active_event,
+            "event_generated_at": self.event_generated_at,
             "last_real_ts": self.last_real_ts or _dt.now().timestamp(),
             "weather_seed": self.weather_seed,
             "weather_last_change": self.weather_last_change,
             "last_interaction_ts": self.last_interaction_ts,
+            "last_greeting_date": self.last_greeting_date,
             "character_actions": dict(self.character_actions),
+            "scene_cooldowns": dict(self.scene_cooldowns),
         }
 
     def to_prompt_text(self) -> str:
@@ -252,6 +333,8 @@ class WorldState:
         ]
         if self.days_since_last > 0:
             lines.append(f"- 距离您上次来访：约 {self.days_since_last} 天")
+        event_desc = self.active_event or "无特殊事件"
+        lines.append(f"- 当前事件：{event_desc}")
         return "\n".join(lines)
 
 

@@ -17,10 +17,12 @@ from shared.config import load_env
 load_env()
 
 from shared.state import StoryArc
+from shared.conversation_store import ConversationStore
+from shared.world_state import WorldState, load_world_state, save_world_state, mark_interaction
 from local import ReZeroTwinSystem as LocalTwinSystem
 
 
-def run_local() -> None:
+def run_local(world: WorldState) -> None:
     sys_obj = LocalTwinSystem()
     print("Re:Zero 双子系统已启动（本地模板模式）")
     print("指令：status | empire | mansion | late | recover 0.6 | recover 1.0 | quit\n")
@@ -53,19 +55,23 @@ def run_local() -> None:
                 continue
             print(sys_obj.interact(msg))
             print()
+            mark_interaction(world)
         except (KeyboardInterrupt, EOFError):
             break
 
 
-def run_llm() -> None:
+def run_llm(world: WorldState) -> None:
     from llm import ReZeroLLMBridge
 
     api_key = os.getenv("DEEPSEEK_API_KEY", "your-api-key-here")
+    conv_store = ConversationStore()
     bot = ReZeroLLMBridge(
         api_key=api_key,
         base_url="https://api.deepseek.com",
         model_name="deepseek-chat",
+        conversation_store=conv_store,
     )
+    bot.world = world
     print("Re:Zero 双子系统已启动（LLM 桥接模式）")
     print("输入 status 查看硬状态 | empire / mansion / recover 0.7 切换状态 | quit 退出\n")
     while True:
@@ -92,8 +98,12 @@ def run_llm() -> None:
                 bot.recover(p)
                 print(f"→ 记忆恢复进度设为 {p}")
                 continue
-            print(bot.chat(user_msg))
+            reply = bot.chat(user_msg)
+            print(reply)
             print()
+            # 持久化到 ConversationStore，供下次启动恢复上下文
+            conv_store.append("user", "你", user_msg)
+            conv_store.append("assistant", "双子", reply)
         except (KeyboardInterrupt, EOFError):
             break
 
@@ -107,10 +117,14 @@ def main() -> None:
         help="运行模式：local 使用本地模板回复，llm 使用大模型桥接（需要 DEEPSEEK_API_KEY）",
     )
     args = parser.parse_args()
-    if args.mode == "llm":
-        run_llm()
-    else:
-        run_local()
+    world = load_world_state()
+    try:
+        if args.mode == "llm":
+            run_llm(world)
+        else:
+            run_local(world)
+    finally:
+        save_world_state(world)
 
 
 if __name__ == "__main__":
