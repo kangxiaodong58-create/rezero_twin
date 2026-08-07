@@ -6,6 +6,57 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.0.1] - 2026-08-07 (热修：撤回连带同轮助手回复)
+
+> 真机契约抽测 T2 暴露：撤回用户句后，同轮残留助手句仍含该信息（模型可据此答出已撤内容）。修复：撤回时连带「同一次发送产生的助手回复」一并 recalled（占位），随后 `_restore_history_from_store` 剪枝——已撤轮完整退出 LLM 上下文。
+
+### Added
+- `ConversationStore.recall_turn(message_id)`：撤回用户句 + 同轮助手（`id > message_id` 且下一条 user 之前的 rem/ram/assistant 记录，system 不连带）；**不连锁后续轮次**
+- 测试 2 例：连带范围（同轮助手 recalled、后续轮 normal）/ 撤后 history 不含用户原文与同轮助手原文（后续轮保留）
+
+### Changed
+- `_on_recall_request`：`update_status` → `recall_turn`，遍历 `_mark_widget_recalled` 置占位
+
+### 不变项
+- 3 分钟窗口、删除语义、failed 态、好感/其它功能零改动；V14.0 三条查询过滤差不变
+
+### 验收
+1. pytest **64/64**（62 既有 + 2 新增）
+2. 契约补验（真机可选）：撤回含生日的轮次后追问——模型不再能由同轮残留答出
+
+---
+
+## [V14.0] - 2026-08-07 (消息删除 · 3 分钟撤回 · 取消后失败态)
+
+> 对话时间线治理：删除（任意角色）、撤回（仅用户、created_at 起 3 分钟内）、取消流式后用户句标记「未送达」。全部软状态（status 字段），主聊天/回忆浮层/搜索/LLM 上下文四路径过滤差统一。
+
+### Added
+- **`messages.status` 软状态字段**（normal/recalled/deleted/failed）+ 旧库幂等迁移（PRAGMA 检查 + ALTER）；`ConversationStore.update_status(message_id, status)`
+- **右键菜单**（项目首个 QMenu）：`ChatMessageWidget` 撤回（仅 user 且 normal）/删除；`SystemLabelWidget` 删除（瞬态标签无 id 无菜单）；均带 QMessageBox 确认防误触
+- **撤回占位**：widget 保留时间线位置，文本换「（已撤回）」+ 45% 透明度轻样式；超时（>3 分钟）拒绝并 transient 提示
+- **取消后失败态**：`_pending_user_widget` 机制——取消流式时本轮用户句 `status=failed` + 「（未送达）」弱化标记；可再右键删除
+- **测试**：`tests/test_message_status.py` 7 用例（迁移/过滤/搜索/剪枝）+ offscreen 1 用例（撤回占位/超时/删除移除/取消 failed）
+
+### Changed
+- **三条查询的 status 过滤差**（代码注释已写明）：
+  - `get_recent` / `get_messages_since`（GUI 展示：主聊天+回忆）：normal + failed + recalled，排除 deleted
+  - `search`（FTS + LIKE 双通道）：仅 normal（撤回/删除/未送达正文不可搜）
+  - `bridge._restore_history_from_store`（LLM 上下文）：仅 normal（failed/recalled/deleted 均不进 Prompt）
+- `_load_history`：按 status 渲染（recalled 占位 / failed 标记）
+- 删除/撤回后 `_prune_bridge_history()` → `_restore_history_from_store()` 重建——下一轮 Prompt 不引用已删/已撤正文
+
+### 不变项
+- HardStateEngine 好感公式、V13 超时/取消/history 契约、parse 分段、Vignette 零改动
+- 删除/撤回为软状态：DB 保留行与 id（定位/摘要 msg_end_id 不炸）；FTS 行不动，命中由查询侧过滤
+- 不做：引用、搜索高亮、主动问候、好感改动
+
+### 验收
+1. pytest **62/62**（54 既有回归 + 8 新增）
+2. 离屏：撤回占位 + 超时拒绝 + 删除移除 + 取消 failed（临时 DB，未碰正式 data/）
+3. 真机待验：右键菜单手感、3 分钟窗口体感、取消后「未送达」标记
+
+---
+
 ## [V13.1] - 2026-08-07 (好感增长曲线最小修复：蕾姆日常陪伴通道 · 拉姆不再无条件涨)
 
 > 用户反馈「蕾姆好感长期不涨、拉姆曾反超」。Step 1 诊断（离屏 7 项断言）坐实：**规则不对称**——蕾姆无日常增长通道（普通友善 Δ=0），拉姆在本地模式却无条件每轮 +1。本版只补「陪伴通道」+ 删一处无条件调用，不动公式/风控/解析/Vignette。

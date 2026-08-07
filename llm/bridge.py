@@ -127,6 +127,10 @@ class ReZeroLLMBridge:
                 content = (row.get("content") or "").strip()
                 if not content:
                     continue
+                if row.get("status", "normal") != "normal":
+                    # V14.0：failed/recalled/deleted 均不进 LLM 上下文
+                    # （GUI 展示路径与搜索的过滤差异见 ConversationStore.get_recent 注释）
+                    continue
                 if role == "user":
                     _flush_assistant()
                     restored.append({"role": "user", "content": content})

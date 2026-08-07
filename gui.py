@@ -71,6 +71,7 @@ from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QLineEdit, QPushButton, QLabel, QFrame, QScrollArea,
     QMessageBox, QSizePolicy, QSplitter, QProgressBar, QGraphicsOpacityEffect,
+    QMenu,
 )
 
 from local import ReZeroTwinSystem
@@ -657,12 +658,15 @@ class SystemLabelWidget(QWidget):
     V10.9.2：transient 模式支持自动消失 + 点击关闭。
     V11.12：variant="vignette" 幕间卡变体 — 金色 accent 派生淡底 + 细金边，
     视觉强于 system 灰条、弱于 streaming 草稿泡与正式角色泡。
+    V14.0：带 DB id 的系统消息可右键删除（瞬态标签无 id 无菜单）。
     """
+    delete_requested = Signal(int)  # V14.0：删除请求
 
-    def __init__(self, text: str, transient: bool = False, auto_dismiss_ms: int = 15000, force_center: bool = False, variant: str = "system", parent=None):
+    def __init__(self, text: str, transient: bool = False, auto_dismiss_ms: int = 15000, force_center: bool = False, variant: str = "system", message_id: Optional[int] = None, parent=None):
         super().__init__(parent)
         self._transient = transient
         self._dismissed = False
+        self.message_id = message_id  # V14.0：DB 记录 id（瞬态标签为 None，无右键菜单）
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(SPACING['lg'], SPACING['xs'], SPACING['lg'], SPACING['xs'])
@@ -743,6 +747,14 @@ class SystemLabelWidget(QWidget):
         else:
             super().mousePressEvent(event)
 
+    def contextMenuEvent(self, event) -> None:
+        """V14.0：带 DB id 的系统消息右键删除（瞬态标签无 id 无菜单）。"""
+        if self.message_id is None:
+            return
+        menu = QMenu(self)
+        menu.addAction("删除", lambda: self.delete_requested.emit(self.message_id))
+        menu.exec(event.globalPos())
+
     def set_text(self, text: str) -> None:
         """更新标签文本（流式追加兼容）。"""
         label = self.findChild(QLabel)
@@ -754,7 +766,10 @@ class ChatMessageWidget(QWidget):
     """一条聊天消息：头像 + 发送者名 + 气泡。
 
     V10.12：新增 message_id 属性，用于历史浮层点击定位。
+    V14.0：右键菜单（撤回/删除）+ 软状态（recalled 占位 / failed 未送达）。
     """
+    recall_requested = Signal(int)  # V14.0：撤回请求（仅 user 且 normal）
+    delete_requested = Signal(int)  # V14.0：删除请求（任意有 DB id 的消息）
 
     def __init__(self, sender: str, text: str, role: str, message_id: Optional[int] = None, variant: str = "normal", parent=None):
         """
@@ -766,6 +781,7 @@ class ChatMessageWidget(QWidget):
         self.role = role
         self.sender = sender
         self.message_id = message_id  # V10.12：DB 记录 id，供定位查找
+        self._status = "normal"  # V14.0：normal|recalled|failed（deleted 的消息直接移除 widget）
 
         layout = QHBoxLayout(self)
         layout.setContentsMargins(12, 5, 12, 5)
@@ -788,6 +804,7 @@ class ChatMessageWidget(QWidget):
         name_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))  # V10.14：去 Bold，弱化角色名层级
         # V10.15a：角色色统一走 ROLE_COLORS 字典
         name_label.setStyleSheet(f"color: {ROLE_COLORS.get(role, COLORS['text_muted'])};")
+        self._name_label = name_label  # V14.0：failed 时追加「（未送达）」标记
 
         # 气泡
         bubble = BubbleWidget(text, role=role, variant=variant)
@@ -820,6 +837,35 @@ class ChatMessageWidget(QWidget):
     def update_text(self, text: str) -> None:
         """流式更新气泡文本。"""
         self._bubble.set_text(text)
+
+    # ── V14.0：软状态与右键菜单 ──
+
+    def set_recalled(self) -> None:
+        """撤回占位：保留时间线位置，内容替换为「（已撤回）」轻样式。"""
+        self._status = "recalled"
+        self._bubble.set_text("（已撤回）")
+        eff = QGraphicsOpacityEffect(self)
+        eff.setOpacity(0.45)
+        self.setGraphicsEffect(eff)
+
+    def set_failed(self) -> None:
+        """未送达标记：用户句保留原文，名字后缀「（未送达）」+ 弱化。"""
+        self._status = "failed"
+        if self._name_label is not None:
+            self._name_label.setText(f"{self.sender}（未送达）")
+        eff = QGraphicsOpacityEffect(self)
+        eff.setOpacity(0.55)
+        self.setGraphicsEffect(eff)
+
+    def contextMenuEvent(self, event) -> None:
+        """右键菜单：撤回（仅 user 且 normal）/ 删除（任意有 DB id 的消息）。"""
+        if self.message_id is None:
+            return  # 无 DB id（瞬态/未落库）不出菜单
+        menu = QMenu(self)
+        if self._status == "normal" and self.role == "user":
+            menu.addAction("撤回", lambda: self.recall_requested.emit(self.message_id))
+        menu.addAction("删除", lambda: self.delete_requested.emit(self.message_id))
+        menu.exec(event.globalPos())
 
 
 # ═══════════════════════════════════════════════
@@ -1506,6 +1552,7 @@ class TwinChatApp(QMainWindow):
         self._llm_worker: Optional[LLMWorker] = None
         self._history_overlay: Optional[HistoryOverlay] = None  # V10.10
         self._session_start_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # V11.6.5
+        self._pending_user_widget: Optional[ChatMessageWidget] = None  # V14.0：本轮发送的用户句（取消→failed）
 
         # 世界状态（持久化）
         from shared.state import WorldState
@@ -2161,10 +2208,16 @@ class TwinChatApp(QMainWindow):
                system 标签恒无入场；历史批量回放传 animate=False 跳过动画。
         """
         if role == "system":
-            msg = SystemLabelWidget(text, transient=transient, force_center=force_center, variant=variant)
+            msg = SystemLabelWidget(text, transient=transient, force_center=force_center,
+                                    variant=variant, message_id=message_id)
         else:
             msg = ChatMessageWidget(sender, text, role=role, message_id=message_id,
                                     variant="highlight" if highlight else "normal")
+        # V14.0：右键菜单信号接线（仅带 DB id 的消息；瞬态标签无 id 不接线）
+        if hasattr(msg, "recall_requested"):
+            msg.recall_requested.connect(self._on_recall_request)
+        if hasattr(msg, "delete_requested"):
+            msg.delete_requested.connect(self._on_delete_request)
         # V12.1：回合间距 — 插入前计算（此时 layout 最后一条才是真正的上一条）
         self._apply_turn_rhythm(msg, role)
 
@@ -2239,7 +2292,8 @@ class TwinChatApp(QMainWindow):
         _log(f"发送: {text[:40]}")
 
         self.input_box.clear()
-        self._append_parsed_message("你", text, "user")
+        # V14.0：记录本轮用户句 widget（取消时标记 failed）
+        self._pending_user_widget = self._append_parsed_message("你", text, "user")
 
         # 命令检测
         lowered = text.lower()
@@ -2335,10 +2389,19 @@ class TwinChatApp(QMainWindow):
         self._streaming_buffer = ""
 
     def _cancel_streaming(self) -> None:
-        """V13.0：用户取消当前流式回复。"""
+        """V13.0：用户取消当前流式回复。V14.0：本轮用户句标记未送达（failed）。"""
         _log("用户取消流式回复")
         self._teardown_llm_thread()
         self._streaming_active = False
+        pending = getattr(self, "_pending_user_widget", None)
+        if pending is not None and pending.message_id:
+            try:
+                self.conv_store.update_status(pending.message_id, "failed")
+                pending.set_failed()
+                _log(f"取消：用户句 #{pending.message_id} 标记 failed")
+            except Exception as e:
+                _log(f"失败态标记异常: {e}")
+        self._pending_user_widget = None
         self._set_breathing(True)  # 恢复状态栏呼吸
         self._set_speaking_panels(None)
         self._update_panels()
@@ -2455,6 +2518,7 @@ class TwinChatApp(QMainWindow):
 
     def _finish_reply(self) -> None:
         self._streaming_active = False
+        self._pending_user_widget = None  # V14.0：成功完成——本轮用户句不标记 failed
         self._set_speaking_panels(None)  # V12.0：兜底复位说话态（幂等，未亮时不做事）
         self._set_breathing(True)  # V12.0：完成后恢复状态栏呼吸
         self._save_state()
@@ -2478,7 +2542,13 @@ class TwinChatApp(QMainWindow):
             msg_id = item.get("id")  # V10.12：透传 DB id 供定位
             if not text:
                 continue
-            self._append_parsed_message(sender, text, role, save=False, message_id=msg_id, animate=False)  # V12.0：历史批量回放跳过入场动画
+            w = self._append_parsed_message(sender, text, role, save=False, message_id=msg_id, animate=False)  # V12.0：历史批量回放跳过入场动画
+            # V14.0：软状态渲染——recalled 占位 / failed 未送达标记（deleted 已被 get_recent 过滤）
+            status = item.get("status", "normal")
+            if status == "recalled" and w is not None:
+                w.set_recalled()
+            elif status == "failed" and w is not None:
+                w.set_failed()
             shown += 1
         _log(f"历史显示: {shown} 条")
         if shown == 0:
@@ -2685,6 +2755,73 @@ class TwinChatApp(QMainWindow):
             effect.deleteLater()
         except Exception:
             pass
+
+    # ── V14.0：撤回 / 删除 ────────────────────────
+
+    def _on_recall_request(self, message_id: int) -> None:
+        """撤回：仅 user 消息、created_at 起 3 分钟内、status=normal。"""
+        try:
+            record = self.conv_store.get_by_id(message_id)
+        except Exception as e:
+            _log(f"撤回查询异常: {e}")
+            return
+        if not record or record.get("role") != "user" or record.get("status") != "normal":
+            return
+        # 3 分钟窗口（DB created_at 为权威时间戳，格式 YYYY-MM-DD HH:MM:SS）
+        created = record.get("created_at", "")
+        try:
+            dt = datetime.strptime(created, "%Y-%m-%d %H:%M:%S")
+        except (ValueError, TypeError):
+            _log(f"撤回：created_at 解析失败 {created!r}")
+            return
+        if (datetime.now() - dt).total_seconds() > 180:
+            self._append_parsed_message(
+                "系统", "已超过 3 分钟，无法撤回。", "system", save=False, transient=True)
+            return
+        if QMessageBox.question(self, "撤回消息", "撤回这条消息？") == QMessageBox.Yes:
+            # V14.0.1：连带同一次发送产生的助手回复（同轮占位），不连锁整段历史
+            recalled_ids = self.conv_store.recall_turn(message_id)
+            for mid in recalled_ids:
+                self._mark_widget_recalled(mid)
+            self._prune_bridge_history()
+            _log(f"撤回: #{message_id}（连带同轮 {len(recalled_ids) - 1} 条助手）")
+
+    def _on_delete_request(self, message_id: int) -> None:
+        """删除：任意有 DB id 的消息（软删 status=deleted）。"""
+        if QMessageBox.question(self, "删除消息", "删除这条消息？此操作不可恢复。") == QMessageBox.Yes:
+            self.conv_store.update_status(message_id, "deleted")
+            self._remove_widget_by_id(message_id)
+            self._prune_bridge_history()
+            _log(f"删除: #{message_id}")
+
+    def _prune_bridge_history(self) -> None:
+        """V14.0：删除/撤回后重建 bridge.history——已删/已撤内容不进后续 Prompt。"""
+        restore = getattr(self.bot, "_restore_history_from_store", None)
+        if restore is not None:
+            try:
+                restore()
+            except Exception as e:
+                _log(f"history 剪枝失败: {e}")
+
+    def _mark_widget_recalled(self, message_id: int) -> None:
+        """按 DB id 找到聊天区 widget 并置为撤回占位。"""
+        for i in range(self.chat_layout.count()):
+            item = self.chat_layout.itemAt(i)
+            w = item.widget() if item else None
+            if w is not None and getattr(w, "message_id", None) == message_id:
+                w.set_recalled()
+                break
+
+    def _remove_widget_by_id(self, message_id: int) -> None:
+        """按 DB id 移除聊天区 widget（保留布局 stretch）。"""
+        for i in range(self.chat_layout.count()):
+            item = self.chat_layout.itemAt(i)
+            w = item.widget() if item else None
+            if w is not None and getattr(w, "message_id", None) == message_id:
+                self.chat_layout.removeWidget(w)
+                w.setParent(None)
+                w.deleteLater()
+                break
 
     def _save_state(self) -> None:
         try:

@@ -132,12 +132,65 @@ def test_cancel_with_empty_input_v1301() -> None:
     assert win.chat_layout.count() == count_before, "非流式空输入不应有副作用"
 
 
+def test_recall_delete_failed_v140() -> None:
+    """V14.0：撤回占位 / 撤回超时拒绝 / 删除移除 widget / 取消→failed。
+
+    使用临时 DB 替换 win.conv_store，不写入正式 data/conversations.db。
+    """
+    import datetime as _dt
+    import tempfile
+    from PySide6.QtWidgets import QMessageBox as QMB
+
+    win = _make_window()
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(db_path)
+    win.conv_store = gui.ConversationStore(db_path=db_path)
+    gui.QMessageBox.question = staticmethod(lambda *a, **k: QMB.StandardButton.Yes)
+
+    # 1) 撤回：用户消息 → widget 占位 + DB recalled
+    w = win._append_parsed_message("你", "要撤回的话", "user")
+    assert w.message_id is not None, "save=True 应回填 message_id"
+    win._on_recall_request(w.message_id)
+    assert w._status == "recalled", "撤回后 widget 应为占位"
+    assert win.conv_store.get_by_id(w.message_id)["status"] == "recalled", "DB 应为 recalled"
+
+    # 2) 撤回超时（created_at 改 4 分钟前）→ 拒绝
+    w2 = win._append_parsed_message("你", "超过三分钟的话", "user")
+    old_ts = (_dt.datetime.now() - _dt.timedelta(minutes=4)).strftime("%Y-%m-%d %H:%M:%S")
+    with win.conv_store._connect() as conn:
+        conn.execute("UPDATE messages SET created_at=? WHERE id=?", (old_ts, w2.message_id))
+        conn.commit()
+    win._on_recall_request(w2.message_id)
+    assert win.conv_store.get_by_id(w2.message_id)["status"] == "normal", "超时不应撤回"
+    assert w2._status == "normal", "超时 widget 不应变占位"
+
+    # 3) 删除：widget 从布局移除 + DB deleted
+    w3 = win._append_parsed_message("蕾 姆", "要被删的话", "rem")
+    win._on_delete_request(w3.message_id)
+    assert win.conv_store.get_by_id(w3.message_id)["status"] == "deleted", "DB 应为 deleted"
+    removed = True
+    for i in range(win.chat_layout.count()):
+        if win.chat_layout.itemAt(i).widget() is w3:
+            removed = False
+            break
+    assert removed, "删除后 widget 应从主聊天移除"
+
+    # 4) 取消 → 本轮用户句 failed（widget + DB）
+    w4 = win._append_parsed_message("你", "然后取消的话", "user")
+    win._pending_user_widget = w4
+    win._cancel_streaming()
+    assert win.conv_store.get_by_id(w4.message_id)["status"] == "failed", "取消后 DB 应为 failed"
+    assert w4._status == "failed", "取消后 widget 应标记未送达"
+
+
 def main() -> int:
     tests = [
         ("回合间距五档 V12.1", test_turn_rhythm_five_levels_v121),
         ("回合间距 streaming 时序 V12.1", test_turn_rhythm_streaming_v121),
         ("回合间距裁剪+基线 V12.1", test_turn_rhythm_cap_and_spacing_v121),
         ("空输入取消回归 V13.0.1", test_cancel_with_empty_input_v1301),
+        ("撤回/删除/失败态 V14.0", test_recall_delete_failed_v140),
     ]
     failed = 0
     for name, fn in tests:

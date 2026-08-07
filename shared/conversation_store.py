@@ -42,9 +42,14 @@ class ConversationStore:
                     role TEXT NOT NULL,        -- 'user' | 'rem' | 'ram' | 'system'
                     sender TEXT NOT NULL,       -- '你' | '蕾 姆' | '拉 姆' | '系统'
                     content TEXT NOT NULL,
-                    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime'))
+                    created_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+                    status TEXT NOT NULL DEFAULT 'normal'  -- V14.0: normal|recalled|deleted|failed
                 )
             """)
+            # V14.0：旧库迁移——补 status 列（幂等，PRAGMA 检查后 ALTER）
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(messages)")]
+            if "status" not in cols:
+                conn.execute("ALTER TABLE messages ADD COLUMN status TEXT NOT NULL DEFAULT 'normal'")
             conn.execute("""
                 CREATE VIRTUAL TABLE IF NOT EXISTS messages_fts
                 USING fts5(content, content_rowid='id')
@@ -86,16 +91,65 @@ class ConversationStore:
             conn.commit()
             return cur.lastrowid
 
+    def update_status(self, message_id: int, status: str) -> bool:
+        """V14.0：软状态更新（normal/recalled/deleted/failed），返回是否命中。
+
+        撤回/删除/失败态均为软状态：保留行与 id，仅改 status（FTS 行不动，
+        命中与否由查询侧 status 过滤控制）。
+        """
+        if status not in ("normal", "recalled", "deleted", "failed"):
+            return False
+        with self._connect() as conn:
+            cur = conn.execute(
+                "UPDATE messages SET status = ? WHERE id = ?", (status, message_id)
+            )
+            conn.commit()
+            return cur.rowcount > 0
+
+    def recall_turn(self, message_id: int) -> List[int]:
+        """V14.0.1：撤回用户句并连带「同一次发送产生的助手回复」标为 recalled。
+
+        同轮 = message_id 之后、下一条 user 消息之前的 rem/ram/assistant 记录
+        （system 消息不连带；后续轮次不连锁——只处理这一轮）。
+        返回所有被标为 recalled 的 id（含用户句本身）。
+        """
+        with self._connect() as conn:
+            next_user = conn.execute(
+                "SELECT MIN(id) FROM messages WHERE id > ? AND role = 'user'",
+                (message_id,),
+            ).fetchone()[0]
+            upper = next_user if next_user is not None else (1 << 31)
+            ids = [r[0] for r in conn.execute(
+                "SELECT id FROM messages WHERE id > ? AND id < ? "
+                "AND role IN ('rem','ram','assistant') AND status = 'normal'",
+                (message_id, upper),
+            ).fetchall()]
+            ids.append(message_id)
+            conn.executemany(
+                "UPDATE messages SET status = 'recalled' WHERE id = ?",
+                [(i,) for i in ids],
+            )
+            conn.commit()
+            return ids
+
     def get_recent(self, limit: int = 50, offset: int = 0) -> List[Dict[str, Any]]:
         """分页读取最近消息（按 id 升序返回，最旧在前、最新在末尾）。
 
         内部 SQL 先 ORDER BY id DESC 取最近 limit 条，再 reversed 转为升序，
         便于 GUI 直接追加渲染。offset 基于 DESC 偏移（即跳过最新的 offset 条）。
+
+        V14.0 三条查询的 status 过滤差异（务必保持一致）：
+        - get_recent / get_messages_since（GUI 展示路径，主聊天+回忆浮层）：
+          normal + failed + recalled，排除 deleted
+        - search（全文/子串检索）：仅 normal（撤回/删除/未送达均不命中正文）
+        - bridge._restore_history_from_store（LLM 上下文）：仅 normal
+          （failed/recalled/deleted 均不进 Prompt）
         """
         with self._connect() as conn:
             rows = conn.execute(
-                "SELECT id, role, sender, content, created_at "
-                "FROM messages ORDER BY id DESC LIMIT ? OFFSET ?",
+                "SELECT id, role, sender, content, created_at, status "
+                "FROM messages WHERE status IN ('normal','failed','recalled') "
+                "ORDER BY id DESC LIMIT ? OFFSET ?",
                 (limit, offset),
             ).fetchall()
         return [dict(r) for r in reversed(rows)]
@@ -123,21 +177,22 @@ class ConversationStore:
 
         with self._connect() as conn:
             # 通道 1：FTS5 快路径（try-except 隔离，FTS 语法异常不致命）
+            # V14.0：仅 status='normal' 命中（撤回/删除/未送达正文不可搜）
             fts_rows: List[sqlite3.Row] = []
             try:
                 fts_rows = conn.execute(
-                    "SELECT m.id, m.role, m.sender, m.content, m.created_at "
+                    "SELECT m.id, m.role, m.sender, m.content, m.created_at, m.status "
                     "FROM messages m JOIN messages_fts f ON m.id = f.rowid "
-                    "WHERE messages_fts MATCH ? ORDER BY rank LIMIT ?",
+                    "WHERE messages_fts MATCH ? AND m.status = 'normal' ORDER BY rank LIMIT ?",
                     (query, limit),
                 ).fetchall()
             except Exception:
                 pass
 
-            # 通道 2：LIKE 子串兜底（CJK 任意子串命中）
+            # 通道 2：LIKE 子串兜底（CJK 任意子串命中；同样仅 normal）
             like_rows = conn.execute(
-                "SELECT id, role, sender, content, created_at "
-                "FROM messages WHERE content LIKE ? ESCAPE '\\' "
+                "SELECT id, role, sender, content, created_at, status "
+                "FROM messages WHERE content LIKE ? ESCAPE '\\' AND status = 'normal' "
                 "ORDER BY id DESC LIMIT ?",
                 (like_pattern, limit),
             ).fetchall()
@@ -161,10 +216,10 @@ class ConversationStore:
             return conn.execute("SELECT COUNT(*) FROM messages").fetchone()[0]
 
     def get_by_id(self, message_id: int) -> Optional[Dict[str, Any]]:
-        """按 id 取单条消息记录（V10.12：定位降级摘要用）。"""
+        """按 id 取单条消息记录（V10.12：定位降级摘要用；V14.0：撤回窗口判断用）。"""
         with self._connect() as conn:
             row = conn.execute(
-                "SELECT id, role, sender, content, created_at "
+                "SELECT id, role, sender, content, created_at, status "
                 "FROM messages WHERE id = ?",
                 (message_id,),
             ).fetchone()
@@ -231,14 +286,16 @@ class ConversationStore:
         with self._connect() as conn:
             if after_msg_id is not None:
                 rows = conn.execute(
-                    "SELECT id, role, sender, content, created_at "
-                    "FROM messages WHERE id > ? ORDER BY id ASC LIMIT ?",
+                    "SELECT id, role, sender, content, created_at, status "
+                    "FROM messages WHERE id > ? AND status IN ('normal','failed','recalled') "
+                    "ORDER BY id ASC LIMIT ?",
                     (after_msg_id, limit),
                 ).fetchall()
             else:
                 rows = conn.execute(
-                    "SELECT id, role, sender, content, created_at "
-                    "FROM messages ORDER BY id DESC LIMIT ?",
+                    "SELECT id, role, sender, content, created_at, status "
+                    "FROM messages WHERE status IN ('normal','failed','recalled') "
+                    "ORDER BY id DESC LIMIT ?",
                     (limit,),
                 ).fetchall()
                 rows = list(reversed(rows))
