@@ -272,6 +272,44 @@ def test_quote_reply_v142() -> None:
     assert not win._quote_bar.isVisible(), "发送后引用条应隐藏"
 
 
+def test_letter_dispatch_v143() -> None:
+    """V14.3：GUI 接线——离线 3 天触发来信（渲染 + 落库 + 冷却状态）；同日再触发被拦。"""
+    import tempfile
+    import time as _time
+    from datetime import datetime as _dt
+
+    win = _make_window()  # REZERO_DISABLE_VIGNETTE=1 环境下构造（来信判定跳过，安全）
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(db_path)
+    win.conv_store = gui.ConversationStore(db_path=db_path)
+
+    # 模拟离线 3 天：改 world 内存状态（不落盘，零污染）
+    win.world.last_interaction_ts = _time.time() - 3 * 86400
+    win.world.last_period = "上午"
+    win.world.last_letter_ts = 0.0
+    win.world.last_letter_date = ""
+
+    orig_flag = gui._VIGNETTE_DISABLED
+    gui._VIGNETTE_DISABLED = False
+    try:
+        today = _dt.now().strftime("%Y-%m-%d")
+        letter = win._maybe_dispatch_letter(today)
+        assert letter is not None, "离线 3 天应触发来信"
+        assert letter["messages"], "来信消息非空"
+        # DB 落库（role=rem/ram，status normal）
+        recent = win.conv_store.get_recent(limit=10)
+        letter_roles = {r["role"] for r in recent if r["role"] in ("rem", "ram")}
+        assert letter_roles, f"来信应落库: {recent}"
+        # 冷却状态更新
+        assert win.world.last_letter_date == today, "冷却日期应更新"
+        # 同日再触发 → 被每日上限拦截
+        letter2 = win._maybe_dispatch_letter(today)
+        assert letter2 is None, "同日二次触发应被冷却拦截"
+    finally:
+        gui._VIGNETTE_DISABLED = orig_flag
+
+
 def main() -> int:
     tests = [
         ("回合间距五档 V12.1", test_turn_rhythm_five_levels_v121),
@@ -281,6 +319,7 @@ def main() -> int:
         ("撤回/删除/失败态 V14.0", test_recall_delete_failed_v140),
         ("搜索命中词黄高亮 V14.1", test_search_highlight_v141),
         ("引用回复 V14.2", test_quote_reply_v142),
+        ("主动来信 GUI 接线 V14.3", test_letter_dispatch_v143),
     ]
     failed = 0
     for name, fn in tests:

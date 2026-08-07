@@ -15,6 +15,7 @@ import ctypes
 import html
 import os
 import sys
+import time
 
 # ── PyInstaller windowed 模式 (console=False) 下 sys.stdout/stderr 为 None ──
 # PySide6 初始化或任何 print/logging 写入 None 会触发 0xC0000409 原生崩溃。
@@ -79,6 +80,7 @@ from local import ReZeroTwinSystem
 from shared.state import StoryArc, OniStage, FAVOR_LEVEL_CN
 from shared.memory_store import MemoryStore
 from shared.conversation_store import ConversationStore
+from shared.letter_manager import LetterManager  # V14.3：主动来信
 
 # 日志与持久化统一走 get_data_dir()：
 # frozen 时指向 EXE 同级 data/，源码时指向项目根 data/。
@@ -1592,6 +1594,7 @@ class TwinChatApp(QMainWindow):
         self._session_start_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # V11.6.5
         self._pending_user_widget: Optional[ChatMessageWidget] = None  # V14.0：本轮发送的用户句（取消→failed）
         self._quote: Optional[dict] = None  # V14.2：待发送的引用 {id, sender, preview}
+        self.letter_manager = LetterManager()  # V14.3：主动来信控制器（纯模板，零 API 费用）
 
         # 世界状态（持久化）
         from shared.state import WorldState
@@ -1614,13 +1617,20 @@ class TwinChatApp(QMainWindow):
         self._update_panels()
 
         # V11.9.0：开场问候 — 空库完整引言 / 日历日变化日更问候 / 同日轻氛围
+        # V14.3：主动来信优先级最高（来信 > 日更问候 > 轻氛围 > 引言）
         today_str = datetime.now().strftime("%Y-%m-%d")
         last_greeting = self.world.last_greeting_date
         day_changed = (last_greeting != today_str)
         msg_count = self.conv_store.count()
 
+        letter = None
+        if not _VIGNETTE_DISABLED:
+            letter = self._maybe_dispatch_letter(today_str)
+
         if _VIGNETTE_DISABLED:
             _log("开场引言已通过 REZERO_DISABLE_VIGNETTE 禁用")
+        elif letter is not None:
+            pass  # V14.3：来信已展示，跳过日更问候/引言/轻氛围（互斥）
         elif msg_count == 0:
             # 空库：保留完整引言路径（V10.4 L0-L3 多级生成）
             _log("空库 → 完整引言 QTimer 注册 (300ms)")
@@ -1634,13 +1644,41 @@ class TwinChatApp(QMainWindow):
             _log(f"already_greeted today={today_str} last={last_greeting}")
 
         # 轻氛围：同日有历史重开时展示一行（空库完整引言时不重复打）
-        if msg_count > 0 and not day_changed:
+        if letter is not None:
+            pass  # V14.3：来信触发时跳过轻氛围（互斥）
+        elif msg_count > 0 and not day_changed:
             self._show_ambient_line()
         elif msg_count > 0 and day_changed:
             # 换日时问候正文已带天气，不额外打轻氛围避免刷屏
             _log("换日：日更问候已含天气，跳过轻氛围避免刷屏")
 
         _log("TwinChatApp.__init__ 完成")
+
+    # ── V14.3：主动来信 ────────────────────────
+
+    def _maybe_dispatch_letter(self, today_str: str) -> Optional[dict]:
+        """主动来信判定与渲染（启动序列调用；分离以便离屏测试）。
+
+        last_period 回填（方案 C：字段优先，旧存档从 DB 推导）→ 冷却/桶/发件人
+        判定 → 触发则落库（role=rem/ram 与正常回复一致）+ 渲染双泡。
+        返回 letter 结果（None=未触发，回落既有问候逻辑）。
+        """
+        self.world.ensure_last_period(self.conv_store)
+        letter = self.letter_manager.evaluate_and_dispatch(
+            state=self.world,
+            favor=self.engine.favor,
+            current_weather=self.world.weather,
+            now_ts=time.time(),
+            today_str=today_str,
+        )
+        if letter is not None:
+            for m in letter["messages"]:
+                role = m["sender"]  # "rem" / "ram"
+                sender = "蕾 姆" if role == "rem" else "拉 姆"
+                self._append_parsed_message(sender, m["content"], role, save=True)
+            _log(f"主动来信触发: {len(letter['messages'])} 条"
+                 f" (suppress_vignette={letter['suppress_vignette']})")
+        return letter
 
     # ── Bot 创建 ────────────────────────────
 

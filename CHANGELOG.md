@@ -6,6 +6,30 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.3] - 2026-08-07 (双子主动来信 / 问候系统)
+
+> 离线归来时双子主动来信：按离线时长分桶（跨时段/半天/1-3天/3-7天/7天+），发件人按蕾姆好感动态加权（rem/ram/twins），纯模板插值（零 API 费用、本地/LLM 双模式一致），冷却 8h + 每日 1 次防打扰。来信优先于日更问候/轻氛围/引言（互斥）。
+
+### Added
+- **`shared/letter_manager.py`**（新）：LetterManager——模板池加载（frozen 兼容）、冷却校验（首次启动排除/8h 间隔/每日 1 次）、离线桶判定、发件人权重采样（favor <30/<70/≥70 三档）、白名单安全插值（replace 实现，模板笔误不崩）、twins 复合来信按【蕾姆】/【拉姆】拆分
+- **`content/letters.json`**（新，40 条模板）：跨时段/半天/1-3天/3-7天/7天+ × rem/ram/twins × 好感低/中/高三档 + 天气变体；占位符 `{last_period}/{current_period}/{days_absent}/{hours_absent}/{weather}`
+- **WorldState 三字段**：`last_period` / `last_letter_ts` / `last_letter_date`（持久化到 memory.json）；`mark_interaction()` 记录交互时段；`ensure_last_period(store)` **方案 C 回填**（字段优先，旧存档从 DB 最后消息 created_at 推导，空库回落当前时段）
+- 测试：`tests/test_letter_manager.py` 12 用例（模板池/冷却红线/桶边界 8 断言/权重三档/插值白名单/twins 拆分/全链路触发/静默/回填）
+
+### Changed
+- 启动序列（`_load_history` 后）：`ensure_last_period` → 来信判定 → 触发则落库（role=rem/ram，与正常回复一致）+ 渲染 + 跳过日更问候/轻氛围/引言；未触发回落既有逻辑。优先级：**来信 > 日更问候 > 轻氛围 > 引言**
+
+### 不变项
+- 来信走 `_append_parsed_message(save=True)`：status=normal → 搜索/回忆/右键删除/LLM 上下文（restore）天然兼容
+- 不写好感/事件记忆（纯展示+上下文消息）；HardStateEngine、V13/V14 全部契约零改动
+- `content/` 已在 PyInstaller datas（ReZeroTwin.spec:14）——frozen 自动包含
+
+### 验收
+1. pytest **82/82**（70 既有 + 12 新增）
+2. 真机待验：改系统时间/离线数小时后再开 → 双子来信；连续开两次 → 第二次不触发（冷却）；右键可删来信
+
+---
+
 ## [V14.2] - 2026-08-07 (引用回复)
 
 > 任意气泡可引用：右键「引用」→ 输入区引用条（可取消）→ 发送时当前轮 Prompt 注入「用户引用了…」增强针对性。引用为一次性 ephemeral——不进 history、不落库、不写 events，回忆/搜索零污染。

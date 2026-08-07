@@ -139,6 +139,9 @@ class WorldState:
     weather_last_change: str = ""   # 天气上次变化时间（ISO 分钟）
     last_interaction_ts: float = 0.0  # 用户上次有效对话时间戳
     last_greeting_date: str = ""     # V11.9.0: 上次日更问候的日历日（YYYY-MM-DD）
+    last_period: str = ""            # V14.3: 上一次交互时的时段（如"上午"）；空=旧存档待回填
+    last_letter_ts: float = 0.0      # V14.3: 上次主动来信时间戳（Unix epoch）
+    last_letter_date: str = ""       # V14.3: 上次主动来信的日历日（YYYY-MM-DD）
     character_actions: Dict[str, str] = field(default_factory=lambda: {
         "rem": "在整理房间",
         "ram": "靠在一旁休息",
@@ -276,6 +279,9 @@ class WorldState:
                 weather_last_change=weather_last_change,
                 last_interaction_ts=last_interaction,
                 last_greeting_date=saved.get("last_greeting_date", "") or "",
+                last_period=saved.get("last_period", "") or "",
+                last_letter_ts=float(saved.get("last_letter_ts", 0.0) or 0.0),
+                last_letter_date=saved.get("last_letter_date", "") or "",
                 character_actions=actions,
                 scene_cooldowns=saved.get("scene_cooldowns", {}) or {},
             )
@@ -289,6 +295,27 @@ class WorldState:
         now_ts = _dt.now().timestamp()
         self.last_interaction_ts = now_ts
         self.days_since_last = 0
+        self.last_period = self.period  # V14.3：记录本次交互结束时的时段
+
+    def ensure_last_period(self, store) -> None:
+        """V14.3：last_period 回填（方案 C 混合模式）。
+
+        已有值直接返回；旧存档为空时从 conversations.db 最后一条消息的
+        created_at 推导时段；库也空则回落到当前时段。
+        """
+        if self.last_period:
+            return
+        derived = ""
+        try:
+            recent = store.get_recent(limit=1)
+            if recent:
+                created = recent[-1].get("created_at", "")
+                if created:
+                    hour = _dt.strptime(created, "%Y-%m-%d %H:%M:%S").hour
+                    derived = self._period_for_hour(hour)
+        except Exception:
+            derived = ""
+        self.last_period = derived or self.period
 
     @staticmethod
     def _period_for_hour(hour: int) -> str:
@@ -310,6 +337,9 @@ class WorldState:
             "weather_last_change": self.weather_last_change,
             "last_interaction_ts": self.last_interaction_ts,
             "last_greeting_date": self.last_greeting_date,
+            "last_period": self.last_period,
+            "last_letter_ts": self.last_letter_ts,
+            "last_letter_date": self.last_letter_date,
             "character_actions": dict(self.character_actions),
             "scene_cooldowns": dict(self.scene_cooldowns),
         }
