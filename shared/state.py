@@ -478,6 +478,9 @@ class HardStateEngine:
         # 长期事件记忆与对话计数（v9.3.0）
         self.events: List[Dict[str, Any]] = []
         self.turn_count = 0
+        # V13.1：陪伴通道防刷（5涨3停，重启重置；非存档字段）
+        self._companion_gains = 0
+        self._companion_cooldown = 0
 
     def _get_favor_level(self) -> FavorLevel:
         for lv in reversed(FavorLevel):
@@ -724,6 +727,29 @@ class HardStateEngine:
             self.profile.name = extracted_name
             self._safe_add_favor(4)
             self.profile.record_pattern("告知名字")
+
+        # V13.1：陪伴通道——非负面且无其它增减通道命中时稳定慢涨（5涨3停防刷）。
+        # 覆盖普通友善 / QUICK / 提拉姆等日常轮；排除：负面意图、高危、夸奖、
+        # 从零、替代品/不如姐姐、首次名字（这些走各自高光/扣分通道），以及
+        # 任何温情词命中（含否定式「不太开心」——V9.2.6 语义：负面表达不加分；
+        # 「高兴」不在 WARM 列表，单独补「不高兴」）。
+        if self._companion_cooldown > 0:
+            self._companion_cooldown -= 1
+        elif (intent not in (Intent.VENT, Intent.SELF_DOUBT, Intent.PROCRASTINATE,
+                             Intent.BOUNDARY_TEST, Intent.DANGER)
+              and not is_praise
+              and intent != Intent.FROM_ZERO
+              and not any(k in text for k in self.WARM_KEYWORDS)
+              and "替代品" not in text
+              and "不如姐姐" not in text
+              and "不高兴" not in text
+              and extracted_name is None
+              and not any(k in text for k in self.HIGH_RISK_KEYWORDS)):
+            self._safe_add_favor(1)
+            self._companion_gains += 1
+            if self._companion_gains >= 5:
+                self._companion_gains = 0
+                self._companion_cooldown = 3
 
         self.profile.record_pattern(intent.value)
 

@@ -6,6 +6,78 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V13.1] - 2026-08-07 (好感增长曲线最小修复：蕾姆日常陪伴通道 · 拉姆不再无条件涨)
+
+> 用户反馈「蕾姆好感长期不涨、拉姆曾反超」。Step 1 诊断（离屏 7 项断言）坐实：**规则不对称**——蕾姆无日常增长通道（普通友善 Δ=0），拉姆在本地模式却无条件每轮 +1。本版只补「陪伴通道」+ 删一处无条件调用，不动公式/风控/解析/Vignette。
+
+### Added
+- **蕾姆陪伴通道**（`HardStateEngine.update()`）：非负面且无其它增减通道命中时 `favor +1`（覆盖普通友善 / QUICK / 提拉姆等日常轮）；**5涨3停**防刷（`_companion_gains`/`_companion_cooldown`，重启重置，非存档字段）
+- **测试固化**：`tests/test_favor_growth.py` 6 用例（20 轮友善可观察增长 / 夸奖蕾姆 ≥ 拉姆 / 危险后恢复 / 防刷上限 / 本地模式拉姆不再无条件涨 / 存档一致）
+
+### Changed
+- `local/twin_system.py` `interact()`：删除无条件 `on_rem_treated_well(1)`——拉姆正向增长改由 `engine.update` 的 PRAISE / MENTION_RAM 通道驱动（与 LLM 模式行为对齐，修复「10 轮普通对话拉姆 8→18 反超蕾姆 15」）；边界试探 `on_rem_hurt(3)` 保留
+- `llm/bridge.py` `chat_stream` 生成器：新增 `except` 分支——`cancel_stream()` 关闭底层 socket 后，进行中迭代抛出的 `httpx.ReadError`（WinError 10038）在 `_stream_cancelled` 时**静默吞掉**（V13.0「取消=安静」契约）；真实异常继续上抛。**真机 LLM 抽测 A3 暴露**：此前取消路径以异常结束（GUI 被 disconnect+worker except 兜底不崩，但单线程/测试场景会炸）
+
+### 不变项
+- 高光/风控 Δ 全部不变：夸奖 +2/+1、从零 +3/+1、温情 +1、高危 -12/-6、边界 -3、替代品 -1
+- V13.0 超时/取消/history 契约、解析分段、Vignette、Validator 零改动
+- 陪伴通道明确排除负面：VENT/SELF_DOUBT/PROCRASTINATE/BOUNDARY/DANGER 意图、高危词、替代品/不如姐姐、任何温情词命中（含「不太开心」否定式——V9.2.6 语义回归守护）、首次名字
+
+### 验收
+1. `tests/test_favor_growth.py` 6/6；冒烟 **34/34**；`test_llm_failures` 10/10；离屏 4/4
+2. 回归守护：`test_keyword_judgment_v926`（「我今天不太开心」不加分）在陪伴通道下保持绿——修复过程中曾 33/34，经「温情词命中即排除」修正后恢复
+3. 真机待验：20 轮日常对话后蕾姆面板数字应有肉眼可见增长；拉姆面板不再只靠聊天就涨
+
+---
+
+## [V13.0.1] - 2026-08-07 (热修：流式取消失效——空输入早退挡住取消入口)
+
+> 真机缺陷：流式中点发送键（应为「取消」）无反应，内容继续生成。根因：`_send_message` 先取文本、空输入即 return，而发完消息后输入框已清空 → 取消分支永远到不了。
+
+### Changed
+- `_send_message()`：`_streaming_active` 取消判定**移到**空输入判定之前（取消优先）；非流式空输入行为不变（仍安静 return）
+
+### 不变项
+- bridge / HardStateEngine / 解析分段 / Vignette / V13.0 全部契约（超时、fallback 不写 history、cancel_stream）零改动
+- 取消后三层忽略保证不变：teardown 先 disconnect（主防线）→ `_stream_cancelled` 生成器提前结束 → 引用置空
+
+### 验收
+1. `test_llm_failures.py` 10/10（含取消用例回归）；冒烟 34/34；离屏 **4/4**（空输入取消回归已固化进 `test_ui_offscreen.py`，非一次性脚本）
+2. 真机：流式中输入框留空直接点「取消」→ 立即停字、临时泡消失、footer「已取消」、gui.log 出现「用户取消流式回复」；随后可立即再发
+
+---
+
+## [V13.0] - 2026-08-06 (稳定版 P0：LLM 超时 · 线程收尾与取消 · 兜底不污染 history)
+
+> 产品级验收（真实 DeepSeek 实测，¥0.0661）坐实三缺陷后补的工程铠甲：LLM 超时兜底、流式可取消、校验失败不再「失忆」且不污染 LLM 上下文。AI 层（人格/记忆/世界观）零改动。
+
+### Added
+- **LLM 请求超时**：client 级 `timeout`（`REZERO_LLM_TIMEOUT` 环境变量，默认 45s），覆盖 chat / chat_stream / raw_completion 全部调用；超时走既有异常路径（角色文案 + 不写 history）
+- **流式取消**：流式中发送键变「取消」；`LLMWorker.cancel()` → `bridge.cancel_stream()`（置标志 + 关闭底层 httpx 流）→ 生成器静默提前结束；`_teardown_llm_thread()` 统一收尾（断开信号 → 取消 → requestInterruption → quit+wait(2s) → terminate 仅作最后手段）
+- **线程收尾接入三处**：closeEvent（先收尾再存状态）、`_switch_mode`（流式中切模式先收尾，修复旧 worker 错对象读）、`_send_llm_stream` 重入（原手写 quit/terminate 块替换为统一收尾）
+- **流式校验结果回传**：bridge 新增 `_last_stream_ok` / `_stream_fallback_text`；GUI `_on_stream_finished` 校验失败时丢弃未校验全文、清临时泡、展示 View-Only 回避文案
+- **测试固化**：`tests/test_llm_failures.py` 10 用例（4 类异常 mock + 兜底不污染 history + 取消 + 文案防回归，零 API 费用）
+
+### Changed
+- `_fallback_reply()` 文案：失忆感「刚才的话，蕾姆不太确定」→ 角色内回避「……这个话题，蕾姆想先放一放。您愿意说点别的吗？」（T1-05）
+- `_generate_validated()` 返回 `(reply, is_fallback)` 二元组；`chat()` 兜底分支不写 history、不清首轮氛围、不写场景冷却（`mark_interaction` 保留）
+- `_parse_twin_reply()` 新增 `save` 参数（默认 True）；兜底展示走 `save=False`，不落 ConversationStore
+- `_send_message()` 流式中原「正在回复中」提示改为取消动作
+
+### 不变项
+- HardStateEngine 好感/独立度/鬼化/拉姆阶段数值公式零改动
+- `parse_twin_segments` / `_streaming_segments` 分段规则零改动
+- 场景冷却、WorldState 事件生成、Vignette L0–L3 架构零改动；frozen 安全引言路径不变
+- API 异常路径（断网/超时）文案保留「没听清」（语义真实），仅校验失败兜底改回避
+
+### 验收
+1. `tests/test_llm_failures.py` 10/10（含 T1-05 回归：兜底不写 history）
+2. 冒烟回归 34/34；UI 离屏 3/3
+3. 离屏集成验证 11/11（teardown 幂等 / 取消状态恢复 / 校验失败分支清泡+回避文案 / 正常分支回归）
+4. 真机：流式中点发送键立即取消；流式中关窗 ≤2s；切模式无僵尸回调
+
+---
+
 ## [V12.1] - 2026-08-03 (对话回合视觉分组：同角色紧 · 换人松 · 阵营段落)
 
 > 用最小布局参数做出「对话回合感」：同一 speaker 连续消息收紧、换人略松、角色↔用户有段落感。不改文案、不改解析、不动效主逻辑。

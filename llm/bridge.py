@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from shared.config import load_env
 
@@ -54,9 +54,12 @@ class ReZeroLLMBridge:
         if not key or key == _DEFAULT_KEY:
             raise ValueError("未提供 DEEPSEEK_API_KEY。请在 .env 文件中设置或传入环境变量。")
         OpenAI = _get_openai()
+        # V13.0：LLM 请求超时（秒），env REZERO_LLM_TIMEOUT 可覆盖，默认 45
+        self.timeout_sec = float(os.getenv("REZERO_LLM_TIMEOUT", "45"))
         self.client = OpenAI(
             api_key=key,
             base_url=base_url,
+            timeout=self.timeout_sec,
         )
         self.model_name = model_name
         self.engine = HardStateEngine(arc=arc)
@@ -67,6 +70,12 @@ class ReZeroLLMBridge:
         self.validator = ResponseValidator()
         self._first_round_atmosphere: Optional[str] = None  # v10.8.1：首轮氛围（View-Only）
         self._active_scene_id: Optional[str] = None  # V11.10.0：本轮情感场景 ID
+        # V13.0：兜底/校验结果回传 GUI + 取消通道（布尔/字符串，GIL 原子，跨线程安全）
+        self._last_chat_fallback = False       # chat() 本轮是否为兜底（View-Only）
+        self._last_stream_ok: Optional[bool] = None  # 流式校验结果（None=未开始）
+        self._stream_fallback_text: str = ""   # 流式校验失败回避文案（View-Only）
+        self._active_stream = None             # 当前流式请求（取消用）
+        self._stream_cancelled = False         # 取消标志（生成器内检查）
         self._restore_history_from_store()
 
     def set_opening_atmosphere(self, text: str) -> None:
@@ -235,10 +244,13 @@ class ReZeroLLMBridge:
             world.scene_cooldowns[self._active_scene_id] = datetime.now().isoformat(timespec="seconds")
 
     def _fallback_reply(self) -> str:
-        """校验彻底失败时的安全兜底回复。"""
+        """校验彻底失败时的安全兜底回复。
+
+        V13.0：文案改为「角色内回避」，禁止失忆感（T1-05 验收缺陷）。
+        """
         return (
-            '【蕾姆】: "……刚才的话，蕾姆不太确定。请再说一次，好吗？"\n'
-            '【拉姆】: "哼。刚才那段，拉姆也当作没听见。你重新说。"'
+            '【蕾姆】: "……这个话题，蕾姆想先放一放。您愿意说点别的吗？"\n'
+            '【拉姆】: "哼。刚才那段，拉姆建议换个说法再试。"'
         )
 
     def _generate_validated(
@@ -247,10 +259,11 @@ class ReZeroLLMBridge:
         messages: List[Dict[str, Any]],
         temperature: float,
         max_tokens: int,
-    ) -> str:
+    ) -> Tuple[str, bool]:
         """调用 LLM 并校验回复；失败时重试 1 次，仍失败返回安全 fallback。
 
-        返回的文本保证已经过校验，可直接写入 history。
+        V13.0：返回 (reply, is_fallback)。is_fallback=True 表示兜底文本，
+        调用方不得写入 history（View-Only 数据）。
         """
         for attempt in range(2):
             current_temp = temperature if attempt == 0 else max(0.1, temperature - 0.25)
@@ -263,14 +276,14 @@ class ReZeroLLMBridge:
             reply = response.choices[0].message.content.strip()
             result = self.validator.validate(reply)
             if result.ok:
-                return result.cleaned or reply
+                return result.cleaned or reply, False
             logging.warning(
                 "LLM 回复校验失败 (attempt %d): %s | raw: %s",
                 attempt + 1,
                 result.reason,
                 reply[:200],
             )
-        return self._fallback_reply()
+        return self._fallback_reply(), True
 
     def chat(
         self,
@@ -281,14 +294,23 @@ class ReZeroLLMBridge:
     ) -> str:
         messages, _state = self._build_messages(user_input)
         try:
-            reply = self._generate_validated(
+            reply, is_fallback = self._generate_validated(
                 user_input, messages, temperature, max_tokens
             )
         except Exception as e:
             logging.warning("chat API 调用失败: %s", e)
             # V11.10.0：错误返回角色格式，不写【系统】（避免被解析器误分类）
             self._active_scene_id = None
+            self._last_chat_fallback = True
             return '【蕾姆】: "……蕾姆好像没听清。请再说一次好吗？"'
+        if is_fallback:
+            # V13.0：校验失败兜底 = View-Only——不写 history、不清首轮氛围、
+            # 不写场景冷却（mark_interaction 保留：用户确实产生了互动）。
+            logging.warning("chat 校验失败重试耗尽，返回 View-Only 兜底（不写 history）")
+            self._last_chat_fallback = True
+            self._active_scene_id = None
+            return reply
+        self._last_chat_fallback = False
         self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": reply})
         self._first_round_atmosphere = None  # v10.8.1：首轮氛围一次性消费
@@ -303,9 +325,18 @@ class ReZeroLLMBridge:
     def chat_stream(self, user_input: str, *, temperature: float = 0.65, max_tokens: int = 600):
         """流式聊天：返回 (generator, state_snapshot)。
 
-        完整生成结束后进行后验校验；校验失败的内容不会写入 history。
+        V13.0：
+        - 完整生成结束后后验校验；校验失败不写 history，结果经 _last_stream_ok
+          回传 GUI（由 GUI 展示 View-Only 回避文案）。
+        - 取消通道：cancel_stream() 置 _stream_cancelled 并关闭底层流，
+          生成器在下一个检查点静默提前结束，不校验、不写 history。
         """
         messages, state = self._build_messages(user_input)
+        # V13.0：每次调用重置流式状态（防陈旧回传）
+        self._last_stream_ok = None
+        self._stream_fallback_text = ""
+        self._stream_cancelled = False
+        self._active_stream = None
         try:
             stream = self.client.chat.completions.create(
                 model=self.model_name,
@@ -314,43 +345,85 @@ class ReZeroLLMBridge:
                 max_tokens=max_tokens,
                 stream=True,
             )
+            self._active_stream = stream
 
             def _generator():
                 full = ""
-                for chunk in stream:
-                    delta = chunk.choices[0].delta.content
-                    if delta:
-                        full += delta
-                        yield delta
+                try:
+                    for chunk in stream:
+                        if self._stream_cancelled:
+                            # V13.0：用户取消——静默结束，不校验、不写 history
+                            return
+                        delta = chunk.choices[0].delta.content
+                        if delta:
+                            full += delta
+                            yield delta
 
-                # 流式完整输出结束后校验；失败仅记录日志，不污染 history
-                result = self.validator.validate(full)
-                if result.ok:
-                    final = result.cleaned or full
-                    self.history.append({"role": "user", "content": user_input})
-                    self.history.append({"role": "assistant", "content": final})
-                    self._first_round_atmosphere = None  # v10.8.1：首轮氛围一次性消费
-                    # V11.10.0：成功生成后写入场景冷却
-                    if self.world is not None:
-                        self._write_scene_cooldown(self.world)
-                        self.world.mark_interaction()
-                else:
-                    logging.warning(
-                        "流式 LLM 回复校验失败，跳过写入 history: %s | input: %s | full: %s",
-                        result.reason,
-                        user_input[:50],
-                        full[:200],
-                    )
-                    self._active_scene_id = None
+                    if self._stream_cancelled:
+                        return
+
+                    # 流式完整输出结束后校验；失败仅记录日志，不污染 history
+                    result = self.validator.validate(full)
+                    if result.ok:
+                        self._last_stream_ok = True
+                        final = result.cleaned or full
+                        self.history.append({"role": "user", "content": user_input})
+                        self.history.append({"role": "assistant", "content": final})
+                        self._first_round_atmosphere = None  # v10.8.1：首轮氛围一次性消费
+                        # V11.10.0：成功生成后写入场景冷却
+                        if self.world is not None:
+                            self._write_scene_cooldown(self.world)
+                            self.world.mark_interaction()
+                    else:
+                        # V13.0：校验失败回传 GUI，由 GUI 展示 View-Only 回避文案
+                        self._last_stream_ok = False
+                        self._stream_fallback_text = self._fallback_reply()
+                        logging.warning(
+                            "流式 LLM 回复校验失败，跳过写入 history: %s | input: %s | full: %s",
+                            result.reason,
+                            user_input[:50],
+                            full[:200],
+                        )
+                        self._active_scene_id = None
+                except Exception:
+                    # V13.1（真机抽测暴露）：cancel_stream() 关闭底层 socket 后，
+                    # 进行中的迭代会抛 httpx.ReadError（WinError 10038）——取消引发的
+                    # 读中断应静默结束（V13.0「取消=安静」契约）；真实异常继续上抛。
+                    if self._stream_cancelled:
+                        return
+                    raise
+                finally:
+                    # V13.0：无论取消/异常/正常结束，关闭底层流并释放引用
+                    try:
+                        stream.close()
+                    except Exception:
+                        pass
+                    self._active_stream = None
 
             return _generator(), state
         except Exception as e:
             logging.warning("chat_stream API 调用失败: %s", e)
             self._active_scene_id = None
+            self._last_stream_ok = False
+            self._stream_fallback_text = ""
+
             def _err():
                 # V11.10.0：错误返回角色格式，不写【系统】（避免被解析器误分类）
                 yield '【蕾姆】: "……蕾姆好像没听清。请再说一次好吗？"'
             return _err(), state
+
+    def cancel_stream(self) -> None:
+        """V13.0：中断当前流式请求（主线程可调用，线程安全）。
+
+        置取消标志 + 关闭底层 httpx 流；工作线程的生成器会在下一个
+        检查点静默提前结束（不校验、不写 history）。
+        """
+        self._stream_cancelled = True
+        if self._active_stream is not None:
+            try:
+                self._active_stream.close()
+            except Exception:
+                pass
 
     def status(self) -> str:
         state = self.engine.snapshot()

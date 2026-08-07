@@ -25,9 +25,10 @@ class ReZeroTwinSystem:
     def interact(self, user_input: str) -> str:
         rem_reply, intent, oni_stage = self.rem.generate(user_input)
 
-        if intent != Intent.BOUNDARY_TEST:
-            self.ram.on_rem_treated_well(1)
-        else:
+        # V13.1：删除无条件 on_rem_treated_well(1)——拉姆正向增长改由
+        # engine.update 的 PRAISE / MENTION_RAM 通道驱动（与 LLM 模式一致，
+        # 修复「本地模式拉姆每轮 +1、10 轮内反超蕾姆」）；保留边界试探扣分。
+        if intent == Intent.BOUNDARY_TEST:
             self.ram.on_rem_hurt(3)
 
         if not self.twin_enabled:

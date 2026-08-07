@@ -109,11 +109,35 @@ def test_turn_rhythm_cap_and_spacing_v121() -> None:
     )
 
 
+def test_cancel_with_empty_input_v1301() -> None:
+    """V13.0.1：流式中空输入框点发送键必须触发取消（缺陷回归）。
+
+    原缺陷：_send_message 先取文本、空输入即 return，挡住取消分支；
+    发完消息后输入框已清空 → 点「取消」无反应。
+    """
+    win = _make_window()
+    win._streaming_active = True
+    win.send_btn.setText("取消")
+    win.send_btn.setEnabled(True)
+    win.input_box.clear()  # 发完消息后的典型状态
+    win._send_message()
+    assert win._streaming_active is False, "空输入点发送键应触发取消"
+    assert win.send_btn.text() == "发送" and win.send_btn.isEnabled(), "取消后按钮应恢复「发送」"
+    assert win.footer_label.text() == "已取消", "footer 应显示「已取消」"
+    assert len(win._streaming_bubbles) == 0 and win._streaming_buffer == "", "临时泡/buffer 应清空"
+    # 非流式空输入仍应安静 return（无副作用回归）
+    win._streaming_active = False
+    count_before = win.chat_layout.count()
+    win._send_message()
+    assert win.chat_layout.count() == count_before, "非流式空输入不应有副作用"
+
+
 def main() -> int:
     tests = [
         ("回合间距五档 V12.1", test_turn_rhythm_five_levels_v121),
         ("回合间距 streaming 时序 V12.1", test_turn_rhythm_streaming_v121),
         ("回合间距裁剪+基线 V12.1", test_turn_rhythm_cap_and_spacing_v121),
+        ("空输入取消回归 V13.0.1", test_cancel_with_empty_input_v1301),
     ]
     failed = 0
     for name, fn in tests:

@@ -506,6 +506,15 @@ class LLMWorker(QObject):
         self.user_input = user_input
         self.stream = stream
 
+    def cancel(self) -> None:
+        """V13.0：主线程调用——中断底层 LLM 流，使 run() 尽快返回。"""
+        try:
+            cancel_fn = getattr(self.bot, "cancel_stream", None)
+            if cancel_fn is not None:
+                cancel_fn()
+        except Exception as e:
+            _log(f"LLMWorker.cancel 异常: {e}")
+
     def run(self) -> None:
         try:
             if self.stream and hasattr(self.bot, 'chat_stream'):
@@ -1885,6 +1894,11 @@ class TwinChatApp(QMainWindow):
         self._update_panels()
 
     def _switch_mode(self) -> None:
+        self._teardown_llm_thread()  # V13.0：流式中切模式先收尾（防旧 worker 回调/错对象读）
+        self._streaming_active = False
+        self._set_breathing(True)
+        self.send_btn.setText("发送")
+        self.send_btn.setEnabled(True)
         old = self.engine
         target = "local" if self.mode == "llm" else "llm"
         _log(f"_switch_mode: {self.mode} → {target}")
@@ -2214,12 +2228,13 @@ class TwinChatApp(QMainWindow):
     # ── 发送消息 ────────────────────────────
 
     def _send_message(self) -> None:
+        # V13.0.1：取消优先——流式中即使输入框为空，点发送键也应取消
+        # （原「先取 text → 空输入 return」会挡住取消入口：发完消息输入框已清空）
+        if self._streaming_active:
+            self._cancel_streaming()
+            return
         text = self.input_box.toPlainText().strip()
         if not text:
-            return
-        # 防止并发发送
-        if self._streaming_active:
-            self._append_parsed_message("系统", "双子正在回复中，请稍候…", "system")
             return
         _log(f"发送: {text[:40]}")
 
@@ -2254,7 +2269,8 @@ class TwinChatApp(QMainWindow):
             self.world.mark_interaction()
 
         self.footer_label.setText("双子思考中…")
-        self.send_btn.setEnabled(False)
+        self.send_btn.setText("取消")  # V13.0：流式中发送键变取消
+        self.send_btn.setEnabled(True)
         self._streaming_active = True
         self._set_breathing(False)  # V12.0：思考中暂停状态栏呼吸
 
@@ -2280,29 +2296,62 @@ class TwinChatApp(QMainWindow):
 
         # V11.10.0：检查场景高光标记
         highlight = hasattr(self.bot, '_active_scene_id') and bool(self.bot._active_scene_id)
-        self._parse_twin_reply(reply, highlight=highlight)
+        # V13.0：兜底 View-Only（不写 ConversationStore）
+        is_fallback = getattr(self.bot, "_last_chat_fallback", False)
+        self._parse_twin_reply(reply, highlight=highlight, save=not is_fallback)
         if hasattr(self.bot, '_active_scene_id'):
             self.bot._active_scene_id = None
         self._finish_reply()
 
-    def _send_llm_stream(self, text: str) -> None:
-        """LLM 流式发送（异步线程，安全的线程管理）。"""
-        # 清理旧线程
-        if self._llm_thread and self._llm_thread.isRunning():
-            _log("_send_llm_stream: 等待旧线程结束...")
-            self._llm_thread.quit()
-            if not self._llm_thread.wait(2000):
-                _log("_send_llm_stream: 强制终止旧线程")
-                self._llm_thread.terminate()
-                self._llm_thread.wait(1000)
-        # 断开旧信号
-        if self._llm_worker:
+    # ── V13.0：线程收尾与取消 ──────────────────────────
+
+    def _teardown_llm_thread(self) -> None:
+        """统一收尾 LLM 工作线程（取消/关窗/切模式/重入共用）。
+
+        顺序：断开信号 → worker.cancel（关底层流）→ requestInterruption →
+        quit+wait(2s) → 超时才 terminate（最后手段）→ 置空引用 → 清临时泡。
+        不碰 _streaming_active（由调用方管理）。
+        """
+        if self._llm_worker is not None:
             try:
-                self._llm_worker.stream_token.disconnect()
-                self._llm_worker.finished.disconnect()
-                self._llm_worker.error.disconnect()
+                self._llm_worker.disconnect()
             except Exception:
                 pass
+            try:
+                self._llm_worker.cancel()
+            except Exception as e:
+                _log(f"worker.cancel 异常: {e}")
+        if self._llm_thread is not None:
+            if self._llm_thread.isRunning():
+                self._llm_thread.requestInterruption()
+                self._llm_thread.quit()
+                if not self._llm_thread.wait(2000):
+                    _log("线程收尾超时（2s），最后手段 terminate")
+                    self._llm_thread.terminate()
+                    self._llm_thread.wait(1000)
+        self._llm_worker = None
+        self._llm_thread = None
+        self._clear_streaming_bubbles()
+        self._streaming_buffer = ""
+
+    def _cancel_streaming(self) -> None:
+        """V13.0：用户取消当前流式回复。"""
+        _log("用户取消流式回复")
+        self._teardown_llm_thread()
+        self._streaming_active = False
+        self._set_breathing(True)  # 恢复状态栏呼吸
+        self._set_speaking_panels(None)
+        self._update_panels()
+        self._update_status_bar()
+        self.footer_label.setText("已取消")
+        self.send_btn.setText("发送")
+        self.send_btn.setEnabled(True)
+        self.input_box.setFocus()
+
+    def _send_llm_stream(self, text: str) -> None:
+        """LLM 流式发送（异步线程，安全的线程管理）。"""
+        # V13.0：统一走 _teardown_llm_thread 清理旧线程（原 quit/wait/terminate 手写块）
+        self._teardown_llm_thread()
 
         self._streaming_buffer = ""
         # V11.11：重入时清理所有旧临时泡，防止孤儿残留
@@ -2340,6 +2389,20 @@ class TwinChatApp(QMainWindow):
         QTimer.singleShot(10, self._scroll_to_bottom)
 
     def _on_stream_finished(self, _final: str = "") -> None:
+        # V13.0：校验失败回传——丢弃未通过校验的全文，展示 View-Only 回避文案
+        stream_ok = getattr(self.bot, "_last_stream_ok", None)
+        if stream_ok is False:
+            _log("流式校验失败：丢弃未校验全文，展示 View-Only 回避文案")
+            self._clear_streaming_bubbles()
+            self._streaming_buffer = ""
+            fallback_text = (
+                getattr(self.bot, "_stream_fallback_text", "")
+                or '【蕾姆】: "……这个话题，蕾姆想先放一放。您愿意说点别的吗？"'
+            )
+            self._parse_twin_reply(fallback_text, highlight=False, save=False)
+            self._finish_reply()
+            _log("流式校验失败：已展示回避文案")
+            return
         buffered = self._streaming_buffer or _final
         # V11.10.1：先解析插入正式泡，再删临时泡（减少空白帧跳变）
         if buffered.strip():
@@ -2363,7 +2426,7 @@ class TwinChatApp(QMainWindow):
         self._finish_reply()
         _log(f"流式错误: {err}")
 
-    def _parse_twin_reply(self, reply: str, highlight: bool = False) -> None:
+    def _parse_twin_reply(self, reply: str, highlight: bool = False, save: bool = True) -> None:
         """V11.10.0：解析双子回复，缓冲+flush 模型，speaker 继承。
 
         - 【蕾姆】/【拉姆】→ 切换 speaker，开启新气泡段
@@ -2371,6 +2434,7 @@ class TwinChatApp(QMainWindow):
         - 【系统】→ 提取内容后按无前缀行处理（继承或默认 rem）
         - 禁止 LLM 台词降级 system
         - highlight=True 时标记最后一个 rem 段为高光变体
+        - V13.0：save 参数——View-Only 兜底文案传 save=False，不写 ConversationStore
         """
         segments = parse_twin_segments(reply)
 
@@ -2384,9 +2448,10 @@ class TwinChatApp(QMainWindow):
         for i, (speaker, text) in enumerate(segments):
             if speaker == "rem":
                 self._append_parsed_message("蕾 姆", text, "rem",
-                                            highlight=(highlight and i == last_rem_idx))
+                                            highlight=(highlight and i == last_rem_idx),
+                                            save=save)
             else:
-                self._append_parsed_message("拉 姆", text, "ram")
+                self._append_parsed_message("拉 姆", text, "ram", save=save)
 
     def _finish_reply(self) -> None:
         self._streaming_active = False
@@ -2396,6 +2461,7 @@ class TwinChatApp(QMainWindow):
         self._update_panels()
         self._update_status_bar()
         self.footer_label.setText("就绪")
+        self.send_btn.setText("发送")  # V13.0：恢复发送态
         self.send_btn.setEnabled(True)
         self.input_box.setFocus()
 
@@ -2918,6 +2984,7 @@ class TwinChatApp(QMainWindow):
             _log(f"续聊卡展示失败: {e}")
 
     def closeEvent(self, event) -> None:
+        self._teardown_llm_thread()  # V13.0：先收尾线程，再存状态（防 worker 写一半）
         self._save_state()
         self._save_session_summary()  # V11.6.5: 写入 session 摘要
         event.accept()
