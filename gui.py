@@ -530,11 +530,12 @@ class LLMWorker(QObject):
     stream_token = Signal(str)       # 流式 token
     error = Signal(str)
 
-    def __init__(self, bot, user_input: str, stream: bool = True, parent=None):
+    def __init__(self, bot, user_input: str, stream: bool = True, reply_to: Optional[dict] = None, parent=None):
         super().__init__(parent)
         self.bot = bot
         self.user_input = user_input
         self.stream = stream
+        self.reply_to = reply_to  # V14.2：引用回复（透传 bridge）
 
     def cancel(self) -> None:
         """V13.0：主线程调用——中断底层 LLM 流，使 run() 尽快返回。"""
@@ -548,14 +549,14 @@ class LLMWorker(QObject):
     def run(self) -> None:
         try:
             if self.stream and hasattr(self.bot, 'chat_stream'):
-                gen, _state = self.bot.chat_stream(self.user_input)
+                gen, _state = self.bot.chat_stream(self.user_input, reply_to=self.reply_to)  # V14.2：引用透传
                 full = ""
                 for token in gen:
                     full += token
                     self.stream_token.emit(token)
                 self.finished.emit(full)
             else:
-                reply = self.bot.chat(self.user_input)
+                reply = self.bot.chat(self.user_input, reply_to=self.reply_to)  # V14.2：引用透传
                 self.finished.emit(reply)
         except Exception as e:
             self.error.emit(str(e))
@@ -688,8 +689,10 @@ class SystemLabelWidget(QWidget):
     V11.12：variant="vignette" 幕间卡变体 — 金色 accent 派生淡底 + 细金边，
     视觉强于 system 灰条、弱于 streaming 草稿泡与正式角色泡。
     V14.0：带 DB id 的系统消息可右键删除（瞬态标签无 id 无菜单）。
+    V14.2：带 DB id 的系统消息可引用。
     """
     delete_requested = Signal(int)  # V14.0：删除请求
+    quote_requested = Signal(int)   # V14.2：引用请求
 
     def __init__(self, text: str, transient: bool = False, auto_dismiss_ms: int = 15000, force_center: bool = False, variant: str = "system", message_id: Optional[int] = None, parent=None):
         super().__init__(parent)
@@ -777,10 +780,11 @@ class SystemLabelWidget(QWidget):
             super().mousePressEvent(event)
 
     def contextMenuEvent(self, event) -> None:
-        """V14.0：带 DB id 的系统消息右键删除（瞬态标签无 id 无菜单）。"""
+        """V14.0：带 DB id 的系统消息右键删除；V14.2：可引用（瞬态无 id 无菜单）。"""
         if self.message_id is None:
             return
         menu = QMenu(self)
+        menu.addAction("引用", lambda: self.quote_requested.emit(self.message_id))
         menu.addAction("删除", lambda: self.delete_requested.emit(self.message_id))
         menu.exec(event.globalPos())
 
@@ -799,6 +803,7 @@ class ChatMessageWidget(QWidget):
     """
     recall_requested = Signal(int)  # V14.0：撤回请求（仅 user 且 normal）
     delete_requested = Signal(int)  # V14.0：删除请求（任意有 DB id 的消息）
+    quote_requested = Signal(int)   # V14.2：引用请求（任意 normal 且有 DB id 的消息）
 
     def __init__(self, sender: str, text: str, role: str, message_id: Optional[int] = None, variant: str = "normal", parent=None):
         """
@@ -887,12 +892,14 @@ class ChatMessageWidget(QWidget):
         self.setGraphicsEffect(eff)
 
     def contextMenuEvent(self, event) -> None:
-        """右键菜单：撤回（仅 user 且 normal）/ 删除（任意有 DB id 的消息）。"""
+        """右键菜单：引用（normal 且 DB id）/ 撤回（仅 user 且 normal）/ 删除。"""
         if self.message_id is None:
             return  # 无 DB id（瞬态/未落库）不出菜单
         menu = QMenu(self)
-        if self._status == "normal" and self.role == "user":
-            menu.addAction("撤回", lambda: self.recall_requested.emit(self.message_id))
+        if self._status == "normal":
+            menu.addAction("引用", lambda: self.quote_requested.emit(self.message_id))
+            if self.role == "user":
+                menu.addAction("撤回", lambda: self.recall_requested.emit(self.message_id))
         menu.addAction("删除", lambda: self.delete_requested.emit(self.message_id))
         menu.exec(event.globalPos())
 
@@ -1584,6 +1591,7 @@ class TwinChatApp(QMainWindow):
         self._history_overlay: Optional[HistoryOverlay] = None  # V10.10
         self._session_start_time: str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")  # V11.6.5
         self._pending_user_widget: Optional[ChatMessageWidget] = None  # V14.0：本轮发送的用户句（取消→failed）
+        self._quote: Optional[dict] = None  # V14.2：待发送的引用 {id, sender, preview}
 
         # 世界状态（持久化）
         from shared.state import WorldState
@@ -1812,6 +1820,36 @@ class TwinChatApp(QMainWindow):
         input_layout = QVBoxLayout(input_frame)
         input_layout.setContentsMargins(14, 10, 14, 10)
         input_layout.setSpacing(6)
+
+        # V14.2：引用条（默认隐藏；发起引用后显示「↪ 回复 …」，可 × 取消）
+        self._quote_bar = QFrame()
+        self._quote_bar.setObjectName("quote_bar")
+        self._quote_bar.setStyleSheet(
+            "background-color: rgba(201,169,110,0.08);"
+            " border-left: 3px solid rgba(201,169,110,0.8); border-radius: 4px;"
+        )
+        quote_layout = QHBoxLayout(self._quote_bar)
+        quote_layout.setContentsMargins(10, 3, 6, 3)
+        quote_layout.setSpacing(6)
+        self._quote_label = QLabel("")
+        self._quote_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
+        self._quote_label.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent;")
+        quote_layout.addWidget(self._quote_label, 1)
+        self._quote_close = QPushButton("×")
+        self._quote_close.setFixedSize(20, 20)
+        self._quote_close.setCursor(Qt.PointingHandCursor)
+        self._quote_close.setToolTip("取消引用")
+        self._quote_close.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent; color: {COLORS['text_muted']};
+                border: none; font-size: 14px; border-radius: 10px;
+            }}
+            QPushButton:hover {{ color: {COLORS['accent']}; background-color: rgba(255,255,255,0.06); }}
+        """)
+        self._quote_close.clicked.connect(self._clear_quote)
+        quote_layout.addWidget(self._quote_close)
+        self._quote_bar.hide()
+        input_layout.addWidget(self._quote_bar)
 
         # 快捷选项按钮行
         quick_row = QHBoxLayout()
@@ -2309,6 +2347,8 @@ class TwinChatApp(QMainWindow):
             msg.recall_requested.connect(self._on_recall_request)
         if hasattr(msg, "delete_requested"):
             msg.delete_requested.connect(self._on_delete_request)
+        if hasattr(msg, "quote_requested"):
+            msg.quote_requested.connect(self._on_quote_request)
         # V12.1：回合间距 — 插入前计算（此时 layout 最后一条才是真正的上一条）
         self._apply_turn_rhythm(msg, role)
 
@@ -2419,8 +2459,22 @@ class TwinChatApp(QMainWindow):
         self._streaming_active = True
         self._set_breathing(False)  # V12.0：思考中暂停状态栏呼吸
 
+        # V14.2：引用——发送时校验被引用消息状态（期间可能被删/撤）
+        reply_to = None
+        if self._quote is not None:
+            try:
+                qrec = self.conv_store.get_by_id(self._quote["id"])
+            except Exception:
+                qrec = None
+            if qrec is None or qrec.get("status") != "normal":
+                self._append_parsed_message(
+                    "系统", "原消息已撤回，引用已取消。", "system", save=False, transient=True)
+            else:
+                reply_to = {"id": self._quote["id"], "preview": self._quote["preview"]}
+            self._clear_quote()  # 引用一次性消费（无论成功与否）
+
         if self.mode == "llm" and hasattr(self.bot, 'chat_stream'):
-            self._send_llm_stream(text)
+            self._send_llm_stream(text, reply_to=reply_to)
         else:
             QTimer.singleShot(50, lambda: self._send_sync(text))
 
@@ -2502,8 +2556,8 @@ class TwinChatApp(QMainWindow):
         self.send_btn.setEnabled(True)
         self.input_box.setFocus()
 
-    def _send_llm_stream(self, text: str) -> None:
-        """LLM 流式发送（异步线程，安全的线程管理）。"""
+    def _send_llm_stream(self, text: str, reply_to: Optional[dict] = None) -> None:
+        """LLM 流式发送（异步线程，安全的线程管理）。reply_to: V14.2 引用。"""
         # V13.0：统一走 _teardown_llm_thread 清理旧线程（原 quit/wait/terminate 手写块）
         self._teardown_llm_thread()
 
@@ -2512,7 +2566,7 @@ class TwinChatApp(QMainWindow):
         self._clear_streaming_bubbles()
 
         self._llm_thread = QThread()
-        self._llm_worker = LLMWorker(self.bot, text, stream=True)
+        self._llm_worker = LLMWorker(self.bot, text, stream=True, reply_to=reply_to)
         self._llm_worker.moveToThread(self._llm_thread)
         self._llm_thread.started.connect(self._llm_worker.run)
         self._llm_worker.stream_token.connect(self._on_stream_token, Qt.QueuedConnection)
@@ -2847,6 +2901,32 @@ class TwinChatApp(QMainWindow):
             effect.deleteLater()
         except Exception:
             pass
+
+    # ── V14.2：引用回复 ────────────────────────
+
+    def _on_quote_request(self, message_id: int) -> None:
+        """右键「引用」：校验消息仍为 normal，展示引用条。"""
+        try:
+            record = self.conv_store.get_by_id(message_id)
+        except Exception as e:
+            _log(f"引用查询异常: {e}")
+            record = None
+        if not record or record.get("status") != "normal":
+            self._append_parsed_message(
+                "系统", "原消息已撤回，无法引用。", "system", save=False, transient=True)
+            return
+        preview = (record.get("content") or "").strip()
+        if len(preview) > 30:
+            preview = preview[:30] + "…"
+        self._quote = {"id": message_id, "sender": record.get("sender", ""), "preview": preview}
+        self._quote_label.setText(f"↪ 回复 {record.get('sender', '')}：{preview}")
+        self._quote_bar.show()
+
+    def _clear_quote(self) -> None:
+        """取消引用：清状态 + 隐藏引用条。"""
+        self._quote = None
+        if hasattr(self, "_quote_bar"):
+            self._quote_bar.hide()
 
     # ── V14.0：撤回 / 删除 ────────────────────────
 

@@ -227,6 +227,51 @@ def test_search_highlight_v141() -> None:
     assert label2 is not None and "<span" not in label2.text(), "recalled 占位不应参与高亮"
 
 
+def test_quote_reply_v142() -> None:
+    """V14.2：引用条显示 / 已撤提示 / 取消 / 发送消费（临时 DB）。"""
+    import tempfile
+
+    win = _make_window()
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(db_path)
+    win.conv_store = gui.ConversationStore(db_path=db_path)
+
+    # 1) 引用 normal 消息 → 引用条显示 + _quote 设置
+    w = win._append_parsed_message("蕾 姆", "这是可以被引用的内容", "rem")
+    win._on_quote_request(w.message_id)
+    assert win._quote is not None and win._quote["id"] == w.message_id, "引用应设置"
+    assert win._quote_bar.isVisible(), "引用条应显示"
+    assert "↪ 回复" in win._quote_label.text() and "被引用" in win._quote_label.text()
+
+    # 2) 引用已撤消息 → 提示 + 不设置引用
+    w2 = win._append_parsed_message("你", "将被撤回的内容", "user")
+    win._on_recall_request(w2.message_id)  # 先撤回（question 已 patch Yes）
+    before = win._quote
+    win._on_quote_request(w2.message_id)
+    assert win._quote is before, "已撤消息不应覆盖当前引用"
+
+    # 3) × 取消 → 引用条隐藏 + 状态清空
+    win._clear_quote()
+    assert win._quote is None and not win._quote_bar.isVisible(), "取消后应清空并隐藏"
+
+    # 4) 发送消费：quote → reply_to 透传 + 一次性清除
+    w3 = win._append_parsed_message("蕾 姆", "第二句可引用的", "rem")
+    win._on_quote_request(w3.message_id)
+    captured = {}
+
+    def fake_send(text, reply_to=None):
+        captured["reply_to"] = reply_to
+
+    win._send_llm_stream = fake_send
+    win.input_box.setPlainText("回应这句")
+    win._send_message()
+    assert captured["reply_to"] == {"id": w3.message_id, "preview": "第二句可引用的"}, \
+        f"应透传引用: {captured['reply_to']}"
+    assert win._quote is None, "发送后引用应一次性清除"
+    assert not win._quote_bar.isVisible(), "发送后引用条应隐藏"
+
+
 def main() -> int:
     tests = [
         ("回合间距五档 V12.1", test_turn_rhythm_five_levels_v121),
@@ -235,6 +280,7 @@ def main() -> int:
         ("空输入取消回归 V13.0.1", test_cancel_with_empty_input_v1301),
         ("撤回/删除/失败态 V14.0", test_recall_delete_failed_v140),
         ("搜索命中词黄高亮 V14.1", test_search_highlight_v141),
+        ("引用回复 V14.2", test_quote_reply_v142),
     ]
     failed = 0
     for name, fn in tests:

@@ -149,7 +149,7 @@ class ReZeroLLMBridge:
             logging.warning("从 ConversationStore 恢复 LLM 历史失败: %s", e)
             self.history = []
 
-    def _build_messages(self, user_input: str) -> List[Dict[str, Any]]:
+    def _build_messages(self, user_input: str, reply_to: Optional[Dict[str, Any]] = None):
         state = self.engine.update(user_input)
         world = self.world or WorldState.now()
         profile = StructuredProfile.from_engine(self.engine)
@@ -166,6 +166,16 @@ class ReZeroLLMBridge:
                 + self._first_round_atmosphere
                 + "\n"
             )
+        # V14.2：引用注入（仅本轮 Prompt，不进 history / 不落库 / 不写 events）
+        if reply_to:
+            preview = (reply_to.get("preview") or "").strip()
+            if preview:
+                system_prompt += (
+                    "\n\n### 用户引用了你之前的话（仅本轮参考，请针对这段被引用的内容回应，"
+                    "不要复述引用标记）\n「"
+                    + preview
+                    + "」\n"
+                )
         messages: List[Dict[str, Any]] = [
             {"role": "system", "content": system_prompt}
         ]
@@ -295,8 +305,9 @@ class ReZeroLLMBridge:
         *,
         temperature: float = 0.65,
         max_tokens: int = 600,
+        reply_to: Optional[Dict[str, Any]] = None,  # V14.2：引用回复（仅本轮 Prompt 注入）
     ) -> str:
-        messages, _state = self._build_messages(user_input)
+        messages, _state = self._build_messages(user_input, reply_to=reply_to)
         try:
             reply, is_fallback = self._generate_validated(
                 user_input, messages, temperature, max_tokens
@@ -326,7 +337,8 @@ class ReZeroLLMBridge:
             self._write_scene_cooldown(None)
         return reply
 
-    def chat_stream(self, user_input: str, *, temperature: float = 0.65, max_tokens: int = 600):
+    def chat_stream(self, user_input: str, *, temperature: float = 0.65, max_tokens: int = 600,
+                    reply_to: Optional[Dict[str, Any]] = None):  # V14.2：引用回复（仅本轮 Prompt 注入）
         """流式聊天：返回 (generator, state_snapshot)。
 
         V13.0：
@@ -335,7 +347,7 @@ class ReZeroLLMBridge:
         - 取消通道：cancel_stream() 置 _stream_cancelled 并关闭底层流，
           生成器在下一个检查点静默提前结束，不校验、不写 history。
         """
-        messages, state = self._build_messages(user_input)
+        messages, state = self._build_messages(user_input, reply_to=reply_to)
         # V13.0：每次调用重置流式状态（防陈旧回传）
         self._last_stream_ok = None
         self._stream_fallback_text = ""

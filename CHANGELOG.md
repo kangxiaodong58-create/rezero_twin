@@ -6,6 +6,32 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.2] - 2026-08-07 (引用回复)
+
+> 任意气泡可引用：右键「引用」→ 输入区引用条（可取消）→ 发送时当前轮 Prompt 注入「用户引用了…」增强针对性。引用为一次性 ephemeral——不进 history、不落库、不写 events，回忆/搜索零污染。
+
+### Added
+- **右键「引用」**：`ChatMessageWidget` / `SystemLabelWidget` 菜单项 + `quote_requested` 信号（仅 normal 且有 DB id；recalled 占位不可引用）
+- **引用条**（输入区顶部，accent 左边线样式）：`↪ 回复 {sender}：{preview(≤30字)}` + × 取消
+- **bridge 引用注入**：`chat` / `chat_stream` 加 `reply_to: Optional[Dict] = None`（默认 None 零感知）→ `_build_messages` 向 system prompt 追加「### 用户引用了你之前的话（仅本轮参考…）「{preview}」」（沿用首轮氛围先例）
+- **双重状态校验**：发起引用时 + 发送时（`get_by_id` status）——已删/已撤 → transient「原消息已撤回，无法引用/引用已取消」
+- 测试：`tests/test_quote_reply.py` 4 用例（流式/非流式注入、无引用不注入、引用不进 history）+ offscreen 1 用例（引用条显示/已撤提示/取消/发送一次性消费）
+
+### Changed
+- `LLMWorker` 加 `reply_to` 透传；`_send_message` / `_send_llm_stream` 链路携带
+- 引用一次性消费：发送后（无论成功与否）清 `_quote` + 隐藏引用条
+
+### 不变项
+- 用户句 content 落库保持原文（引用标记只在 system prompt，ephemeral）→ 搜索/回忆无双份污染
+- 事件记忆不因引用写入（engine 机制零改动）；本地模板模式忽略引用（不注入）
+- V14.0/V14.1 全部语义（status 过滤差、删除/撤回/失败态、搜索高亮）零改动
+
+### 验收
+1. pytest **70/70**（65 既有 + 5 新增）
+2. 真机待验：右键引用 → 引用条 → 发送 → 双子回复点题（如引用「蕾姆做的茶」再问细节）
+
+---
+
 ## [V14.1] - 2026-08-07 (搜索命中词临时黄高亮)
 
 > 搜索增强：命中词在正文内黄底高亮（主聊天 + 回忆浮层摘要同一工具函数），取消/清空搜索即全部清除。纯 UI 临时态——不写 DB、不改 status、不改 content。
