@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import sys
+from PySide6.QtWidgets import QLabel  # V14.1：搜索高亮测试取 bubble label
 
 # ── 必须在 import PySide6 之前设置 ──
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -184,6 +185,48 @@ def test_recall_delete_failed_v140() -> None:
     assert w4._status == "failed", "取消后 widget 应标记未送达"
 
 
+def test_search_highlight_v141() -> None:
+    """V14.1：命中词黄高亮——escape 防注入 / 多命中 / 空关键词 / clear 恢复。"""
+    import tempfile
+
+    # ── 纯函数层（highlight_plain_text）──
+    h = gui.highlight_plain_text
+    # 中文精确命中
+    r = h("今天去野外散步", "野外")
+    assert "<span" in r and "野外" in r, f"命中词应包 span: {r}"
+    assert r.count("<span") == 1
+    # 多命中全部标黄
+    r2 = h("野外和野外", "野外")
+    assert r2.count("<span") == 2, f"多命中应全部标黄: {r2}"
+    # escape 防注入：HTML 标签原样转义，关键词仍可命中
+    r3 = h("讲 <b>野外</b> 的事", "野外")
+    assert "<b>" not in r3 and "&lt;b&gt;" in r3, f"HTML 应被转义: {r3}"
+    assert r3.count("<span") == 1 and "&lt;/b&gt;" in r3
+    # 空 keyword / 未命中 → 原样（escape 后）
+    assert h("普通文本", "") == "普通文本"
+    assert h("普通文本", "不存在") == "普通文本"
+
+    # ── widget 级：高亮 → clear 往返 ──
+    win = _make_window()
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(db_path)
+    win.conv_store = gui.ConversationStore(db_path=db_path)
+    w = win._append_parsed_message("蕾 姆", "今天去野外散步，野外很美", "rem")
+    win.highlight_hits("野外")
+    label = w._bubble.findChild(QLabel, "bubble_text")
+    assert label is not None and "<span" in label.text(), f"高亮后 label 应含 span: {label.text()}"
+    win.clear_all_highlights()
+    assert "<span" not in label.text() and "野外" in label.text(), f"clear 应恢复原文: {label.text()}"
+    assert not hasattr(w, "_search_hit_text"), "clear 后应删除原文留存"
+    # recalled widget 不参与高亮（占位无原文）
+    w2 = win._append_parsed_message("你", "要被撤回的高亮句", "user")
+    w2.set_recalled()
+    win.highlight_hits("高亮")
+    label2 = w2._bubble.findChild(QLabel, "bubble_text")
+    assert label2 is not None and "<span" not in label2.text(), "recalled 占位不应参与高亮"
+
+
 def main() -> int:
     tests = [
         ("回合间距五档 V12.1", test_turn_rhythm_five_levels_v121),
@@ -191,6 +234,7 @@ def main() -> int:
         ("回合间距裁剪+基线 V12.1", test_turn_rhythm_cap_and_spacing_v121),
         ("空输入取消回归 V13.0.1", test_cancel_with_empty_input_v1301),
         ("撤回/删除/失败态 V14.0", test_recall_delete_failed_v140),
+        ("搜索命中词黄高亮 V14.1", test_search_highlight_v141),
     ]
     failed = 0
     for name, fn in tests:

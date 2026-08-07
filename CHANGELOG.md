@@ -6,6 +6,35 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.1] - 2026-08-07 (搜索命中词临时黄高亮)
+
+> 搜索增强：命中词在正文内黄底高亮（主聊天 + 回忆浮层摘要同一工具函数），取消/清空搜索即全部清除。纯 UI 临时态——不写 DB、不改 status、不改 content。
+
+### Added
+- **`highlight_plain_text(text, keyword)`**（模块级纯函数）：`html.escape` 全文 → 转义后精确匹配关键词 → 黄底 span 包装（多命中全部标黄；空 keyword/未命中返回原样）；**先 escape 再高亮防注入**
+- **`COLORS['search_hit'] = '#FFEB3B'`**（黄底 + 深色文字保证可读）
+- `TwinChatApp.highlight_hits(keyword)`：遍历可见 widget（仅 normal 且有 DB id；recalled 占位/failed 不参与）→ label 设富文本；原文存 `_search_hit_text`
+- `TwinChatApp.clear_all_highlights()`：恢复原文 + 清留存（幂等）
+- **回忆浮层**：`HistoryItemWidget(record, keyword=...)`——预览摘要 + 展开全文复用同一函数（构造期渲染）
+- 测试：`test_search_highlight_v141`（escape 防注入 / 多命中 / 空词 / clear 往返 / recalled 不参与）
+
+### Changed
+- 顶栏 `_do_search`：先清旧高亮 → 高亮命中词 → **定位第一条结果**（`_locate_message` 滚动 + 金色 2s，补此前"搜索不滚动"缺口）
+- 顶栏搜索框 `textChanged`：清空 → clear
+- `_load_history` 末尾 / `_close_history`：自动 clear（防残留）
+- 黄高亮（label 内词级）与定位金色（widget 外层背景）不同层级，可叠加不互覆
+
+### 不变项
+- FTS/LIKE 检索逻辑与 `status='normal'` 过滤、HardStateEngine、bridge 契约、好感公式、删除/撤回/失败态语义——零改动
+- 高亮是 UI 临时态：DB/status/content 零写入
+
+### 验收
+1. pytest **65/65**（64 既有 + 1 新增）
+2. 离屏：纯函数 6 断言 + widget 级高亮→clear 往返 + recalled 不参与
+3. 真机待验：搜「野外」→ 滚动定位 + 黄底高亮；清空搜索框/关浮层 → 高亮消失
+
+---
+
 ## [V14.0.1] - 2026-08-07 (热修：撤回连带同轮助手回复)
 
 > 真机契约抽测 T2 暴露：撤回用户句后，同轮残留助手句仍含该信息（模型可据此答出已撤内容）。修复：撤回时连带「同一次发送产生的助手回复」一并 recalled（占位），随后 `_restore_history_from_store` 剪枝——已撤轮完整退出 LLM 上下文。

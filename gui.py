@@ -12,6 +12,7 @@
 from __future__ import annotations
 
 import ctypes
+import html
 import os
 import sys
 
@@ -143,6 +144,7 @@ COLORS = {
     "btn_disabled_bg":  "#4a4a4a",               # 按钮 disabled 背景
     "btn_disabled_fg":  "#888",                  # 按钮 disabled 文字
     "locate_highlight": "rgba(255,215,0,0.15)",   # 定位高亮金色半透明
+    "search_hit":       "#FFEB3B",                # V14.1：搜索命中词黄底
     "overlay_mask":     "rgba(0,0,0,0.65)",       # 历史浮层遮罩
 }
 
@@ -242,11 +244,38 @@ SURFACE_TINT = {
 
 
 def _rgba_to_qcolor(rgba_str: str):
-    """解析 rgba(r,g,b,a) 字符串为 QColor，a 为 0-1 浮点。"""
+    """解析 'rgba(r,g,b,a)' 字符串为 QColor（供 QPainter 使用）。"""
     s = rgba_str.strip()[5:-1]  # 去掉 "rgba(" 和 ")"
     r, g, b, a = s.split(",")
     from PySide6.QtGui import QColor
     return QColor(int(r), int(g), int(b), int(float(a) * 255))
+
+
+def highlight_plain_text(text: str, keyword: str) -> str:
+    """V14.1：HTML escape 后把命中词包装为黄底 span（多命中全部标黄）。
+
+    防注入：先 html.escape 全文，再在转义后的文本上精确匹配转义后的关键词
+    （命中词的转义形态与原文一致，直接切片包裹）。空 keyword 或未命中时
+    返回 escape 后的文本（QLabel PlainText 渲染与原文一致）。
+    """
+    escaped = html.escape(text)
+    if not keyword:
+        return escaped
+    kw = html.escape(keyword)
+    if kw not in escaped:
+        return escaped
+    hit_style = f"background-color: {COLORS['search_hit']}; color: #1a1a1a;"
+    parts: list = []
+    pos = 0
+    while True:
+        idx = escaped.find(kw, pos)
+        if idx < 0:
+            parts.append(escaped[pos:])
+            break
+        parts.append(escaped[pos:idx])
+        parts.append(f'<span style="{hit_style}">{escaped[idx:idx + len(kw)]}</span>')
+        pos = idx + len(kw)
+    return "".join(parts)
 
 # ═══════════════════════════════════════════════
 #  DIM 尺寸 token（V10.15c：布局尺寸唯一真源，消除魔法数）
@@ -1164,7 +1193,7 @@ class HistoryItemWidget(QFrame):
     SPACING = 6  # 内部元素间距
     # V10.15a：角色色引用全局 ROLE_COLORS，不再局部定义
 
-    def __init__(self, record: dict, parent=None):
+    def __init__(self, record: dict, keyword: str = "", parent=None):
         super().__init__(parent)
         self._record = record
         self._expanded = False
@@ -1176,6 +1205,8 @@ class HistoryItemWidget(QFrame):
         created = record.get("created_at", "")
         time_str = created[5:16] if len(created) >= 16 else created
         msg_id = record.get("id", 0)
+        # V14.1：搜索命中词黄高亮（同一 highlight_plain_text，仅构造期渲染）
+        content_display = highlight_plain_text(content, keyword)
 
         sender_color = ROLE_COLORS.get(role, COLORS['text_muted'])  # V10.15a：引用全局 ROLE_COLORS
         content_color = COLORS['text_muted'] if role == "system" else COLORS['text_secondary']
@@ -1226,14 +1257,14 @@ class HistoryItemWidget(QFrame):
 
         # ── 第二行：正文摘要（最多约 2 行，可换行）──
         preview = content[:self.PREVIEW_WORDS] + ("…" if len(content) > self.PREVIEW_WORDS else "")
-        self._preview_label = QLabel(preview)
+        self._preview_label = QLabel(highlight_plain_text(preview, keyword) if keyword else preview)
         self._preview_label.setFont(self.FONT_CONTENT)
         self._preview_label.setStyleSheet(f"color: {content_color};")
         self._preview_label.setWordWrap(True)
         self._layout.addWidget(self._preview_label)
 
         # ── 展开态全文（初始隐藏，独立区域 + 左边线着色）──
-        self._detail_label = QLabel(content)
+        self._detail_label = QLabel(content_display if keyword else content)
         self._detail_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
         self._detail_label.setWordWrap(True)
         self._detail_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
@@ -1409,8 +1440,8 @@ class HistoryOverlay(QWidget):
         self._search_box.clear()
         self._load_data([])
 
-    def _load_data(self, records: list) -> None:
-        """清空列表并填充记录（倒序：最新在上）。"""
+    def _load_data(self, records: list, keyword: str = "") -> None:
+        """清空列表并填充记录（倒序：最新在上）。keyword 非空时摘要高亮命中词。"""
         # 清空旧 widget
         while self._list_layout.count() > 1:
             item = self._list_layout.takeAt(0)
@@ -1429,7 +1460,7 @@ class HistoryOverlay(QWidget):
 
         # records 来自 get_recent 已是正序，倒序插入实现最新在上
         for record in reversed(records):
-            item_widget = HistoryItemWidget(record)
+            item_widget = HistoryItemWidget(record, keyword=keyword)  # V14.1：keyword 透传高亮
             item_widget.locate_clicked.connect(self.locate_requested)  # V10.12
             self._list_layout.insertWidget(self._list_layout.count() - 1, item_widget)
 
@@ -1465,7 +1496,7 @@ class HistoryOverlay(QWidget):
         if not results:
             self._show_no_result(keyword)
             return
-        self._load_data(results)
+        self._load_data(results, keyword=keyword)  # V14.1：命中词黄高亮
 
     def _show_no_result(self, keyword: str) -> None:
         """清空列表并显示无结果提示。"""
@@ -1694,8 +1725,11 @@ class TwinChatApp(QMainWindow):
             }}
         """)
         self.search_box.returnPressed.connect(self._do_search)
+        # V14.1：清空搜索框 → 清除全部黄高亮
+        self.search_box.textChanged.connect(self._on_top_search_changed)
         header_layout.addWidget(self.search_box)
 
+        # 搜索按钮
         search_btn = QPushButton("🔍")
         search_btn.setFixedSize(DIM['icon_btn'], DIM['icon_btn'])
         search_btn.setCursor(Qt.PointingHandCursor)
@@ -2117,11 +2151,17 @@ class TwinChatApp(QMainWindow):
 
     # ── 历史搜索 ────────────────────────────
 
+    def _on_top_search_changed(self, text: str) -> None:
+        """V14.1：顶栏搜索框清空 → 清除全部黄高亮。"""
+        if not text.strip():
+            self.clear_all_highlights()
+
     def _do_search(self) -> None:
         query = self.search_box.text().strip()
         if not query:
             return
         results = self.conv_store.search(query, limit=10)
+        self.clear_all_highlights()  # V14.1：新搜索先清旧高亮
         if not results:
             self._append_parsed_message("系统", f"未找到包含「{query}」的对话。", "system", save=False, transient=True)
             return
@@ -2129,6 +2169,9 @@ class TwinChatApp(QMainWindow):
         self._append_parsed_message(
             "系统", f"🔍 搜索「{query}」找到 {len(results)} 条", "system", save=False, transient=True
         )
+        # V14.1：命中词黄高亮 + 定位第一条结果（滚动 + 金色 2s）
+        self.highlight_hits(query)
+        self._locate_message(results[0]["id"])
         for r in results:
             sender = r["sender"]
             text = r["content"]
@@ -2139,6 +2182,54 @@ class TwinChatApp(QMainWindow):
             self._append_parsed_message(
                 "系统", f"{time_str} · {sender} → {preview}", "system", save=False, transient=True
             )
+
+    # ── V14.1：搜索命中词黄高亮 ────────────────────
+
+    def highlight_hits(self, keyword: str) -> None:
+        """遍历可见消息 widget，把命中词标为黄底（DB/status/content 零改动）。
+
+        仅处理 ChatMessageWidget 且 message_id 且 _status=='normal'
+        （recalled 占位无原文、deleted 已移除、failed 不命中搜索）。
+        """
+        if not keyword:
+            return
+        for i in range(self.chat_layout.count()):
+            item = self.chat_layout.itemAt(i)
+            w = item.widget() if item else None
+            if not isinstance(w, ChatMessageWidget):
+                continue
+            if not getattr(w, "message_id", None) or getattr(w, "_status", "normal") != "normal":
+                continue
+            try:
+                record = self.conv_store.get_by_id(w.message_id)
+                if not record:
+                    continue
+                content = record.get("content", "")
+                if not content:
+                    continue
+                label = w._bubble.findChild(QLabel, "bubble_text")
+                if label is None:
+                    continue
+                label.setText(highlight_plain_text(content, keyword))
+                w._search_hit_text = content  # 原文留存，供 clear 恢复
+            except Exception as e:
+                _log(f"高亮异常 #{getattr(w, 'message_id', '?')}: {e}")
+
+    def clear_all_highlights(self) -> None:
+        """清除全部黄高亮（恢复原文）。幂等；无高亮时无副作用。"""
+        for i in range(self.chat_layout.count()):
+            item = self.chat_layout.itemAt(i)
+            w = item.widget() if item else None
+            if not isinstance(w, ChatMessageWidget):
+                continue
+            orig = getattr(w, "_search_hit_text", None)
+            if orig is None:
+                continue
+            label = w._bubble.findChild(QLabel, "bubble_text")
+            if label is not None:
+                label.setText(orig)
+            if hasattr(w, "_search_hit_text"):
+                del w._search_hit_text
 
     # ── 消息处理 ────────────────────────────
 
@@ -2551,6 +2642,7 @@ class TwinChatApp(QMainWindow):
                 w.set_failed()
             shown += 1
         _log(f"历史显示: {shown} 条")
+        self.clear_all_highlights()  # V14.1：历史重载后清除可能残留的黄高亮
         if shown == 0:
             # V11.6.5: 有上次摘要时不显示欢迎语（续聊卡接管，避免双卡叠放）
             last_summary = None
@@ -2882,6 +2974,7 @@ class TwinChatApp(QMainWindow):
         """关闭历史浮层。"""
         if self._history_overlay:
             self._history_overlay.hide()
+            self.clear_all_highlights()  # V14.1：关闭回忆浮层 → 清除黄高亮
             self.input_box.setFocus()
             _log("历史浮层已关闭")
 
