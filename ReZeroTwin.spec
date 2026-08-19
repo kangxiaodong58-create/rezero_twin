@@ -23,10 +23,10 @@ a = Analysis(
         'shared.vignette',
         'shared.validators',
         'shared.world_state',
+        'shared.scene_manager',     # V14.7：空间场景系统
+        'shared.letter_manager',    # V14.3：主动来信
+        'shared.template_registry', # V14.4：篇章模板注册表
         'llm.bridge',
-        'local.rem_ai',
-        'local.twin_system',
-        'local',
         'shared',
         'llm',
         'PySide6',

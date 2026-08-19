@@ -32,6 +32,18 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - **字体回退链**：FONT_FAMILY.ui 微软雅黑 → PingFang SC → Noto Sans CJK SC → WenQuanYi → sans-serif（跨平台）；emoji 同理
 - **title 12→13px**：浮层标题与正文拉开层级；**caption 8→9px**：辅助文字可读性
 
+
+### H-1 修复（来信回应语感对齐）
+- **根因**：prompt 只有「篇章：late_arc」英文枚举，LLM 默认按宅邸蕾姆回应（后期来信回应偏宅邸日常）
+- **修复**：新增 `_build_arc_flavor_section`——按 arc 注入篇章语感（后期战友托付/帝国失忆疏离），后期篇强化「**禁止**打扫/泡茶/整理书架等宅邸女仆日常」
+- **验证**：后期来信回应「营地周围的风有些大……阳光照在帐篷上」——后期营地语境，无宅邸日常（后期语感 1/宅邸 0）
+- 真机 ≈¥0.01；138/138 全绿
+
+### 打包配置（EXE）
+- **ReZeroTwin.spec 更新**：移除已退场 local 引用（rem_ai/twin_system）；补 V14.7/14.8 新模块（scene_manager/letter_manager/template_registry）
+- **构建成功**：dist/ReZeroTwin.exe（56MB，PyInstaller 6.21）
+- **冒烟验证**：无 key 弹窗不闪退；带 key GUI+LLM 正常；frozen 数据目录正确（EXE 同级 data/）
+- **V14.8 全能力随 EXE 打包**：场景/事件/来信/名场面/角色卡全部生效
 ### 深度测试 Trial #5（LLM 12 轮 ≈¥0.04）
 - **T5-A 跨篇章漫游**：宅邸→帝国（营地/失忆试探）→后期（营火/战友托付）→回宅邸——场景切换+语感联动+道具延续全对
 - **T5-C 综合联动**：鬼化名场面（后期语境）/事件角色倾向/拉姆托付全过；**角色卡网络词世界观内化**（蕾姆「不太明白这个词的意思」+ 拉姆「yyds？连罗兹瓦尔大人都不用的新词」）

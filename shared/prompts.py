@@ -153,6 +153,7 @@ class PromptBuilder:
         profile_section = PromptBuilder._build_profile_section(profile)
         # V14.6 原著锚定：角色卡 + 世界观词汇（建议结构：CORE → PERSONA → LORE → SCENE）
         persona_section = PromptBuilder._build_persona_section()
+        arc_flavor_section = PromptBuilder._build_arc_flavor_section(state)  # V14.8 H-1
         lore_section = PromptBuilder._build_lore_section()
         ind_desc = PromptBuilder._build_independence_desc(state.independence)
         ram_guide = PromptBuilder._build_ram_guide(state.ram_stage)
@@ -221,7 +222,7 @@ class PromptBuilder:
 - 拉姆好感：{state.ram_favor}/100
 - 上下文摘要：{state.context_summary}
 - 特殊状态：{special_str}
-{profile_section}{persona_section}{lore_section}{world_section}{event_highlight_section}{events_section}{scene_section}{scene_space_section}{character_section}{milestone_section}{ram_witness_note}
+{profile_section}{persona_section}{arc_flavor_section}{lore_section}{world_section}{event_highlight_section}{events_section}{scene_section}{scene_space_section}{character_section}{milestone_section}{ram_witness_note}
 ### 角色扮演核心要求
 
 **蕾姆**：
@@ -431,6 +432,33 @@ class PromptBuilder:
                 "记忆恢复过渡期：蕾姆会混杂温柔与回潮的自卑，语气在「失忆的软」与「宅邸的深情」之间摇摆。"
             )
         return "\n".join(special) if special else "无特殊战斗或危机状态。"
+
+    @staticmethod
+    def _build_arc_flavor_section(state: TwinState) -> str:
+        """V14.8 H-1 修复：篇章语感锚点——按 arc 注入当前篇章的双子语感基调。
+
+        根因：prompt 只有「篇章：late_arc」英文枚举，LLM 未必理解是后期战友篇，
+        默认按宅邸蕾姆回应（后期来信回应偏宅邸语感 = H-1）。
+        新增：宅邸女仆日常 / 帝国失忆疏离 / 后期战友托付 三档语感引导。
+        """
+        arc_val = getattr(state.arc, "value", "") if state and state.arc else ""
+        if arc_val == "empire_era":
+            return (
+                "### 当前篇章语感（帝国篇·失忆疏离）\n"
+                "你们身处帝国篇：蕾姆记忆未完全恢复，对用户礼貌疏离但隐隐熟悉；"
+                "拉姆警戒护妹。用语克制，不用宅邸女仆腔（不主动提红茶/花园/打扫），"
+                "以「确认/试探/陌生环境」的氛围为主。\n"
+            )
+        if arc_val == "late_arc":
+            return (
+                "### 当前篇章语感（后期篇·战友托付）\n"
+                "你们身处后期篇：与用户是并肩战友，蕾姆坚定托付（「蕾姆会站在您身边」），"
+                "拉姆认可托付（「已经证明自己的人」）。\n"
+                "可用战场/营地/并肩/篝火意象，以「并肩/信任/守护」的氛围为主。\n"
+                "**禁止**：打扫房间/整理书架/泡茶端水/花园庭院等宅邸女仆日常描写——"
+                "你们是战场上的战友，不是宅邸女仆。迎接归来请用营地/战线/并肩语境。\n"
+            )
+        return ""  # mansion_era 保持现有女仆日常（无需额外引导）
 
     @staticmethod
     def _build_events_section(events: Optional[List[Dict[str, Any]]],
