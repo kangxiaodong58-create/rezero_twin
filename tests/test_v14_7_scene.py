@@ -62,6 +62,11 @@ def test_scene_interaction() -> None:
     assert inter and inter["rem_view"] and inter["ram_view"], inter
     # ROOM 只有 opening 无 interaction → None（不注入）
     assert SceneManager.get_scene_interaction("ROOM", "上午") is None
+    # V14.7 优化 O-4：连续选择相邻不重复（轮转去重）
+    seen = [SceneManager.get_scene_interaction("KITCHEN", "上午")["rem_view"]
+            for _ in range(6)]
+    for i in range(len(seen) - 1):
+        assert seen[i] != seen[i + 1], f"相邻重复: {seen[i]}"
 
 
 def test_milestone_triggers() -> None:

@@ -10,7 +10,6 @@ from __future__ import annotations
 
 import json
 import os
-import random
 import sys
 from typing import Any, Dict, Optional
 
@@ -80,6 +79,9 @@ class SceneManager:
 
     _scene_db: Optional[Dict[str, Any]] = None
     _character_db: Optional[Dict[str, Any]] = None
+    # V14.7 优化 O-4：场景互动轮转去重（{scene|slot: idx} + {scene|slot: 上次条目}）
+    _interaction_rotor: Dict[str, int] = {}
+    _last_interaction: Dict[str, Any] = {}
     _milestone_db: Optional[Dict[str, Any]] = None
 
     @classmethod
@@ -141,7 +143,11 @@ class SceneManager:
 
     @classmethod
     def get_scene_interaction(cls, scene: str, period: str) -> Optional[Dict[str, str]]:
-        """场景互动引导（每轮注入）：随机选一条 interaction 或 None。"""
+        """场景互动引导（每轮注入）：轮转选一条 interaction（V14.7 优化 O-4 去重）。
+
+        原实现 random.choice——长会话同一场景下互动文案可能轮转重复；
+        改用实例级轮转游标（避开上次命中的条目），减少重复观感。
+        """
         scene_db = cls._scenes().get(scene)
         if not scene_db:
             return None
@@ -152,7 +158,15 @@ class SceneManager:
                         if k.startswith("interaction")]
         if not interactions:
             return None
-        chosen = random.choice(interactions)
+        # O-4 去重：轮转游标 + 避开上次
+        key = f"{scene}|{slot}"
+        idx = cls._interaction_rotor.get(key, -1)
+        candidates = [it for it in interactions if it != cls._last_interaction.get(key)]
+        pool = candidates if candidates else interactions
+        idx = (idx + 1) % len(pool)
+        cls._interaction_rotor[key] = idx
+        chosen = pool[idx]
+        cls._last_interaction[key] = chosen
         return {"rem_view": chosen.get("rem_view", ""), "ram_view": chosen.get("ram_view", "")}
 
     # ── E4 名场面状态联动 ──
