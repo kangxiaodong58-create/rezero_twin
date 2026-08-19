@@ -124,6 +124,17 @@
 
 - **test_ui_offscreen.py::test_quote_reply_v142**（V14.2 引用透传）在无 DEEPSEEK_API_KEY 环境下失败：`_create_bot` 降级 local（ReZeroTwinSystem 无 chat_stream）→ `_send_message` 走 `_send_sync` → mock 的 `_send_llm_stream` 不被调用。**测试隔离性缺陷**（依赖 LLM bot 存在），产品逻辑本身正确。待后续补 mock LLM bot 修复。
 
+## ✅ 方向决策（2026-08-19）：本地模式退场，LLM 优先
+
+**用户决策**：本地模式过于模板化，最初仅作为 LLM 模式的地基——准备适时放弃，内容投入转向 LLM 内容资产。
+**研判**：docs/design/本地模式退场与LLM优先内容路线_2026-08-19.md
+
+执行：
+- **A-02 从修复队列移除**（LLM↔local 体验差 = 接受差异，local 退场）
+- **local 文案扩池冻结**（ResponseLibrary/RamAI 不再加新档位，S-01 已修池保持）
+- **P0 内容工作**：SCENE_GUIDES 场景库扩充（4→12+）+ 事件语义召回
+- **Phase C（local 移除）**：用户确认后执行，前置条件=LLM 测试全 mock
+
 ## ✅ Trial #1 状态
 
 | Phase | 状态 |

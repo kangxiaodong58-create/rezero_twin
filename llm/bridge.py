@@ -189,19 +189,38 @@ class ReZeroLLMBridge:
         "hug_accept": ["抱", "拥抱", "抱住", "抱抱"],
         "headpat_comfort": ["摸头", "抚头", "摸摸头", "摸摸"],
         "identity_affirm": ["你是蕾姆", "不是影子", "你就是蕾姆"],
+        # V14.4（LLM 优先内容路线 P0）：场景库扩充 4→12
+        "farewell_weight": ["离开", "告别", "分别", "走了", "再见", "如果有一天我"],
+        "reunion_tenderness": ["我回来了", "我回宅邸了", "回来了"],
+        "battle_weary": ["好累", "太累了", "战斗", "虚脱", "撑不住", "筋疲力尽"],
+        "midnight_confession": ["睡不着", "月色真美", "月色很美", "深夜", "说说话"],
+        "wish_offer": ["想一直", "希望", "如果", "就好了", "愿望"],
+        "apology_accept": ["对不起", "抱歉", "我错了", "请原谅"],
+        "guardian_vow": ["会保护", "会珍惜", "不会让", "守护你们", "保护你们"],
+        "daily_glow": ["真好喝", "真好吃", "今天很开心", "普通的幸福", "岁月静好"],
     }
     SCENE_FAVOR_MIN = {
         "hug_accept": 3,       # FavorLevel.DEAR
         "headpat_comfort": 2,  # FavorLevel.CLOSE
         "identity_affirm": 2,  # FavorLevel.CLOSE
         "breaker_promise": 3,  # FavorLevel.DEAR
+        # V14.4：新场景好感门槛（farewell/battle/daily 低门槛，亲密类高门槛）
+        "farewell_weight": 1,      # FAMILIAR（离别是基础情感）
+        "reunion_tenderness": 1,   # FAMILIAR
+        "battle_weary": 1,         # FAMILIAR
+        "midnight_confession": 2,  # CLOSE
+        "wish_offer": 2,           # CLOSE
+        "apology_accept": 1,       # FAMILIAR
+        "guardian_vow": 3,         # DEAR（守护誓言是高重量场景）
+        "daily_glow": 1,           # FAMILIAR（日常闪光低门槛，调剂场景）
     }
     SCENE_COOLDOWN_HOURS = 24
 
     def _detect_scene(self, user_input: str, state, world) -> tuple:
         """检测本轮情感场景，返回 (scene_id | None, ram_witness: bool)。
 
-        优先级（互斥）：breaker > identity > hug > headpat。
+        优先级（互斥）：breaker > identity > hug > headpat > 高重量(guardian/farewell) > 亲密(confession/wish) > 轻场景。
+        V14.4：场景库扩充 4→12，新增场景按重量降序接入；低门槛调剂场景（daily_glow）最后兜底。
         复用 engine._is_negated 检测「不是替代品」式肯定句。
         """
         text = user_input
@@ -234,6 +253,15 @@ class ReZeroLLMBridge:
             if favor_level >= self.SCENE_FAVOR_MIN["headpat_comfort"]:
                 if not self._is_cooled_down("headpat_comfort", world):
                     return "headpat_comfort", ram_witness
+
+        # V14.4：新场景（按重量降序）
+        for scene_id in ("guardian_vow", "farewell_weight", "midnight_confession",
+                         "wish_offer", "battle_weary", "reunion_tenderness",
+                         "apology_accept", "daily_glow"):
+            if any(k in text for k in self.SCENE_KEYWORDS[scene_id]):
+                if favor_level >= self.SCENE_FAVOR_MIN[scene_id]:
+                    if not self._is_cooled_down(scene_id, world):
+                        return scene_id, ram_witness
 
         return None, False
 
