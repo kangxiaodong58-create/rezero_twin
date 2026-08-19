@@ -170,6 +170,29 @@ def test_amnesia_prompt_v927() -> None:
     assert "防备" not in normal, "正常篇章 prompt 不应含失忆防备指令"
 
 
+def test_name_extract_v144() -> None:
+    """V14.4（Trial #2-B）：口语化自我介绍的名字提取——「我是X」「请叫我X」。"""
+    from shared.state import HardStateEngine
+    cases = [
+        ("你好，我是小东", "小东"),
+        ("我叫小明", "小明"),
+        ("我的名字是小红", "小红"),
+        ("请叫我小刚", "小刚"),
+        ("我是小华，请多指教", "小华"),
+    ]
+    for text, expect in cases:
+        eng = HardStateEngine()
+        got = eng._extract_name(text)
+        assert got == expect, f"{text!r} 应提取 {expect}，实际 {got}"
+    # 角色自称不误判为名字
+    eng = HardStateEngine()
+    assert eng._extract_name("我是蕾姆") is None, "「我是蕾姆」是角色扮演，不应提取为名字"
+    assert eng._extract_name("我是客人") is None
+    # 已有名字后不再重复提取（S-01 修复回归）
+    eng.user_name = "小东"
+    assert eng._extract_name("我叫小明") is None, "已有名字后不应返回旧名"
+
+
 def test_event_memory_v930() -> None:
     """v9.3.0：长期事件记忆——记录、钉住淘汰、prompt 注入、持久化。"""
     from shared.state import TwinState

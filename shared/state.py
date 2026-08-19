@@ -550,10 +550,20 @@ class HardStateEngine:
 
     def _extract_name(self, text: str) -> Optional[str]:
         if self.user_name is not None:
-            return self.user_name
-        m = re.search(r"(?:我叫|称呼我|我的名字是)\s*([^\s,，。！?]{1,8})", text)
-        if m:
-            return m.group(1).strip()
+            return None
+        # V14.4（Trial #2-B 暴露）：补「我是X」「请叫我X」——最口语化的自我介绍
+        # （原仅支持 我叫/称呼我/我的名字是，「你好，我是小东」漏提取 → 跨天全用「客人大人」）
+        patterns = [
+            r"(?:我叫|称呼我|我的名字是)\s*([^\s,，。！?]{1,8})",
+            r"(?:我是|请叫我)\s*([^\s,，。！?]{1,8})(?=[，。！？\s]|$)",
+        ]
+        for pat in patterns:
+            m = re.search(pat, text)
+            if m:
+                name = m.group(1).strip()
+                # 排除角色自称（用户说「我是蕾姆」是角色扮演，非告知名字）
+                if name not in ("蕾姆", "拉姆", "女仆", "客人"):
+                    return name
         return None
 
     def _is_negated(self, text: str, keyword: str, window: int = 6) -> bool:
