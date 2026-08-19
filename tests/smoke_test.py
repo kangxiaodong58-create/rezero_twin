@@ -497,6 +497,12 @@ def test_response_validator_v1051() -> None:
     # 第一人称「我」拦截
     assert not validator.validate('【蕾姆】: "我觉得你很温柔。"').ok
 
+    # V14.4（Trial #2-A）：拉姆「我」放行（傲娇人设合法自称，prompt 仅蕾姆段要求第三人称）
+    assert validator.validate('【拉姆】: "姐姐我可没那么容易相信一个刚认识的人。"').ok
+    assert validator.validate('【拉姆】: "哼，我可不会轻易放过你。"').ok
+    # 蕾姆「我」仍拦截（第三人称是蕾姆的灵魂设定）
+    assert not validator.validate('【蕾姆】: "我可不会离开您。"').ok
+
     # 正常描写「自己/自我/我们」不拦截（误杀防护）
     assert validator.validate('【蕾姆】: "蕾姆觉得自己……"').ok
     assert validator.validate('【蕾姆】: "我们相信您。"').ok
