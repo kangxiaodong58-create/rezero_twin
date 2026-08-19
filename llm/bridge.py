@@ -49,6 +49,7 @@ class ReZeroLLMBridge:
         arc: StoryArc = StoryArc.MANSION_ERA,
         max_history: int = 8,
         conversation_store: Optional[ConversationStore] = None,
+        world: Optional[WorldState] = None,  # V14.7：持久化世界状态注入（场景切换）
     ) -> None:
         key = api_key or os.getenv("DEEPSEEK_API_KEY") or _DEFAULT_KEY
         if not key or key == _DEFAULT_KEY:
@@ -65,7 +66,7 @@ class ReZeroLLMBridge:
         self.engine = HardStateEngine(arc=arc)
         self.history: List[Dict[str, str]] = []
         self.max_history = max_history
-        self.world: Optional[WorldState] = None  # 可由 GUI 注入持久化世界状态
+        self.world: Optional[WorldState] = world  # 可由 GUI 注入持久化世界状态（V14.7）
         self.conversation_store = conversation_store
         self.validator = ResponseValidator()
         self._first_round_atmosphere: Optional[str] = None  # v10.8.1：首轮氛围（View-Only）
@@ -153,12 +154,25 @@ class ReZeroLLMBridge:
         state = self.engine.update(user_input)
         world = self.world or WorldState.now()
         profile = StructuredProfile.from_engine(self.engine)
+        # V14.7：空间场景切换识别（「去厨房」「回房间」→ 更新 world.scene + 开场）
+        scene_opening = None
+        try:
+            from shared.scene_manager import SceneManager
+            new_scene = SceneManager.parse_scene_change(user_input)
+            if new_scene and world.scene != new_scene:
+                world.scene = new_scene
+                scene_opening = SceneManager.get_scene_opening(
+                    new_scene, world.period, world.weather)
+                logging.info("V14.7 场景切换 → %s", new_scene)
+        except Exception:
+            scene_opening = None  # 场景系统故障不阻断对话
         # V11.10.0：情感场景检测（在 Prompt 构建前）
         scene_id, ram_witness = self._detect_scene(user_input, state, world)
         self._active_scene_id = scene_id
         system_prompt = PromptBuilder.build(state, world=world, profile=profile,
                                             scene_id=scene_id, ram_witness=ram_witness,
-                                            user_input=user_input)  # V14.4：事件语义召回
+                                            user_input=user_input,
+                                            scene_opening=scene_opening)  # V14.4/14.7
         # v10.8.1：首轮氛围注入（View-Only，不进 history，不写 ConversationStore）
         if not self.history and self._first_round_atmosphere:
             system_prompt += (

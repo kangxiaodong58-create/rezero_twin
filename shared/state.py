@@ -178,6 +178,7 @@ class WorldState:
     weather: str = "晴朗"
     active_event: str = ""          # 当前活跃事件（如"花园的花开了"）
     active_event_id: str = ""       # V14.5：活跃事件 id（角色视角反查用）
+    scene: str = ""                 # V14.7：当前空间场景（KITCHEN/ROOM/DINING/…，空=未切换）
     event_generated_at: float = 0.0  # 事件生成时间戳，用于 TTL 过期判断
     last_real_ts: float = 0.0       # 上次保存的现实时间戳
     weather_seed: int = 42          # 天气确定性种子（随时间推演）
@@ -307,6 +308,7 @@ class WorldState:
             # 活跃事件：空 / 过期 / 用户离线归来 时重新选择
             active_event = saved.get("active_event", "") or ""
             active_event_id = saved.get("active_event_id", "") or ""
+            scene = saved.get("scene", "") or ""
             event_generated_at = float(saved.get("event_generated_at", 0.0) or 0.0)
             hours_since_event = (
                 (now_ts - event_generated_at) / 3600.0
@@ -333,6 +335,7 @@ class WorldState:
                 weather=weather,
                 active_event=active_event,
                 active_event_id=active_event_id,
+                scene=scene,
                 event_generated_at=event_generated_at,
                 last_real_ts=now_ts,
                 weather_seed=seed,
@@ -392,6 +395,7 @@ class WorldState:
             "weather": self.weather,
             "active_event": self.active_event,
             "active_event_id": self.active_event_id,
+            "scene": self.scene,
             "event_generated_at": self.event_generated_at,
             "last_real_ts": self.last_real_ts or _dt.now().timestamp(),
             "weather_seed": self.weather_seed,

@@ -6,6 +6,28 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.7] - 2026-08-19 (场景化体验：空间场景 + 名场面 + 关键人物)
+
+> 文案资产三件套（用户/文案组产出 V14.7-A1/E3/E4）落地：宅邸空间场景系统（用户可主动「去厨房」「回房间」）、名场面状态联动语感、关键人物互动引导。场景从「事件随机掉落的被动结果」升级为「用户可主动选择的沉浸空间」。
+
+### Added
+- **空间场景系统**（shared/scene_manager.py + content/scene_dialogue.json）：7 场景（厨房/房间/餐厅/书库/走廊/洗衣房/花园）× 时段 slot 开场与互动文案（rem/ram 视角）
+  - 场景切换：用户输入「去厨房」「回房间」「到花园」→ 移动动词前缀识别（闲聊提及不误触）→ 更新 `WorldState.scene`（持久化，跨会话保持）
+  - 切换时注入「场景开场」一次性画面；每轮注入「当前场景互动倾向」引导 LLM 场景语感
+- **名场面状态联动**（content/milestone_lines.json + SceneManager.get_milestone）：鬼化解放（oni_stage）/ 失忆重逢（recovery≤0.35）/ 忠诚锁定（favor≥95）/ 拉姆托付（ram_stage ACKNOWLEDGED）/ 「从零开始」灵魂状态（wants_push）——按优先级触发，注入 prompt 引导 + 参考台词
+- **关键人物互动**（content/character_dialogue.json + SceneManager.get_character_lines）：贝蒂/罗兹瓦尔/爱蜜莉雅/帕克（含猫）——用户提及人物时注入双子语气参考
+- **prompts 注入**：`scene_space_section`/`character_section`/`milestone_section` 三节（情感场景 SCENE_GUIDES 之后）；bridge `_build_messages` 场景切换接线（故障降级不阻断对话）
+
+### 不变项
+- 情感场景 SCENE_GUIDES（触发式）与空间场景（地点式）双轨并存互不干扰
+- 场景系统仅 LLM 模式生效；存档新增 scene 字段（旧存档兼容空值）
+
+### 验收
+1. 测试 +7（test_v14_7_scene.py：切换识别/开场/互动/E4 触发优先级/E3 识别/prompts 注入/持久化）→ pytest **127/127**
+2. 资产文件随 `('content','content')` 自动进 EXE（frozen 兼容）
+
+---
+
 ## [V14.6] - 2026-08-19 (原著锚定文案包落地)
 
 > V14.6-Character-Anchoring-01 文案包（用户/文案组产出）全量注入：蕾姆/拉姆角色卡 + Re0 世界观词汇规范 + E-5 原著一致性软 OOC 检查。LLM 输出从「base model 先验依赖」升级为「显式锚定」。

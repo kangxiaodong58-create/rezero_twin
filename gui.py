@@ -1707,6 +1707,7 @@ class TwinChatApp(QMainWindow):
                 arc=StoryArc(self.mem.get("arc", "mansion_era")),
                 max_history=8,
                 conversation_store=self.conv_store,
+                world=self.world,  # V14.7：注入持久化世界状态（场景切换跨会话保持）
             )
             bot.engine.favor = self.mem.get("favor", 15)
             bot.engine.ram_favor = self.mem.get("ram_favor", 8)

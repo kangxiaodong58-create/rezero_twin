@@ -129,6 +129,11 @@ class PromptBuilder:
         ),
     }
 
+    SCENE_CN = {
+        "KITCHEN": "厨房", "ROOM": "房间", "DINING": "餐厅", "LIBRARY": "书库",
+        "HALLWAY": "走廊", "LAUNDRY": "洗衣房", "GARDEN": "花园",
+    }
+
     @staticmethod
     def build(
         state: TwinState,
@@ -137,6 +142,7 @@ class PromptBuilder:
         scene_id: Optional[str] = None,
         ram_witness: bool = False,
         user_input: str = "",  # V14.4：事件记忆语义召回（按输入相关性选事件）
+        scene_opening: Optional[Dict] = None,  # V14.7：刚切换场景的开场画面
     ) -> str:
         name = state.user_name or "客人大人"
         world_section = PromptBuilder._build_world_section(world)
@@ -150,6 +156,45 @@ class PromptBuilder:
         events_section = PromptBuilder._build_events_section(state.events, user_input)
         # V11.10.0：情感场景短节
         scene_section = PromptBuilder.SCENE_GUIDES.get(scene_id, "") if scene_id else ""
+        # V14.7：空间场景（场景互动引导每轮注入 + 切换开场一次性）
+        from shared.scene_manager import SceneManager
+        scene_space_section = ""
+        if world and world.scene:
+            inter = SceneManager.get_scene_interaction(world.scene, world.period)
+            if inter:
+                scene_name = PromptBuilder.SCENE_CN.get(world.scene, world.scene)
+                scene_space_section = (
+                    f"\n### 当前场景：{scene_name}（{world.period}）\n"
+                    f"- 蕾姆在此场景的倾向：{inter['rem_view']}\n"
+                    f"- 拉姆在此场景的倾向：{inter['ram_view']}\n"
+                    "双子应自然地融入这个场景的氛围展开对话。\n"
+                )
+        if scene_opening:
+            scene_name = PromptBuilder.SCENE_CN.get(world.scene, "") if world else ""
+            scene_space_section += (
+                f"\n### 场景开场（您刚来到{scene_name}）\n"
+                f"- 蕾姆视角：{scene_opening['rem_view']}\n"
+                f"- 拉姆视角：{scene_opening['ram_view']}\n"
+                "双子应从这个开场画面自然接续展开对话。\n"
+            )
+        # V14.7：关键人物互动引导（E3）
+        character_section = ""
+        char = SceneManager.get_character_lines(user_input)
+        if char and char.get("rem_lines") and char.get("ram_lines"):
+            character_section = (
+                f"\n### 关键人物互动引导（{char['person']}）\n"
+                f"- 蕾姆提及该人物时可参考的语气：{char['rem_lines'][0]}\n"
+                f"- 拉姆提及该人物时可参考的语气：{char['ram_lines'][0]}\n"
+            )
+        # V14.7：名场面状态联动语感（E4）
+        milestone_section = ""
+        ms = SceneManager.get_milestone(state)
+        if ms:
+            lines = "；".join(ms.get("rem_lines", [])[:2])
+            milestone_section = (
+                f"\n### 名场面语感（{ms['name']}）\n{ms['prompt_guide']}\n"
+                f"可参考台词语气：{lines}\n"
+            )
         ram_witness_note = ""
         if ram_witness and scene_id:
             ram_witness_note = (
@@ -171,7 +216,7 @@ class PromptBuilder:
 - 拉姆好感：{state.ram_favor}/100
 - 上下文摘要：{state.context_summary}
 - 特殊状态：{special_str}
-{profile_section}{persona_section}{lore_section}{world_section}{events_section}{scene_section}{ram_witness_note}
+{profile_section}{persona_section}{lore_section}{world_section}{events_section}{scene_section}{scene_space_section}{character_section}{milestone_section}{ram_witness_note}
 ### 角色扮演核心要求
 
 **蕾姆**：
