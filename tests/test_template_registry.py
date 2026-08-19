@@ -36,7 +36,7 @@ def _registry():
 def test_load_and_validate() -> None:
     reg = _registry()
     assert reg["schema_version"] == "1.0"
-    assert len(reg["items"]) == 30, f"首批应 30 条，实际 {len(reg['items'])}"
+    assert len(reg["items"]) == 58, f"Step3 扩池后应 58 条，实际 {len(reg['items'])}"
     ids = [it["id"] for it in reg["items"]]
     assert len(ids) == len(set(ids)), "id 应唯一"
     for it in reg["items"]:
@@ -64,10 +64,12 @@ def test_deterministic_same_seed() -> None:
 
 def test_arc_bucket_and_mansion_fallback() -> None:
     reg = _registry()
-    # 帝国低 recovery vignette
+    # 帝国低 recovery vignette：命中低档（route 正确 + 疏离语感标志）
     it = pick(reg, arc="empire_era", slot="vignette", recovery=0.1, seed="s")
     assert it is not None and it["arc"] == "empire_era", "帝国低档应命中"
-    assert "想不起来" in it["text"], "低档应为疏离基调"
+    assert it["recovery_range"] == [0.0, 0.35], f"应命中低档: {it['id']}"
+    aloof_marks = ("想不起来", "移开", "走错", "靠得太近", "后退", "退到一旁", "欠了欠身", "辨认", "听过")
+    assert any(w in it["text"] for w in aloof_marks), f"低档应为疏离基调: {it['text']}"
     # 未知 arc → 兜底 mansion_era
     it2 = pick(reg, arc="unknown_era", slot="vignette", seed="s")
     assert it2 is not None and it2["arc"] == "mansion_era", "未知 arc 应兜底宅邸"
@@ -76,15 +78,47 @@ def test_arc_bucket_and_mansion_fallback() -> None:
 
 
 def test_recovery_ranges() -> None:
-    """recovery 档位：0.1 低档疏离 / 0.5 恢复期 / 1.0 不命中帝国。"""
+    """recovery 档位路由：0.1 → 低档 / 0.5 → 恢复期 / 1.0 不命中帝国。"""
     reg = _registry()
+    aloof_marks = ("想不起来", "移开", "走错", "靠得太近", "后退", "退到一旁", "欠了欠身", "辨认", "听过")
     low = pick(reg, arc="empire_era", slot="vignette", recovery=0.1, seed="s")
     mid = pick(reg, arc="empire_era", slot="vignette", recovery=0.5, seed="s")
-    assert "想不起来" in low["text"], "低档疏离"
-    assert "记起了红茶" in mid["text"], "恢复期记忆碎片"
+    assert low["recovery_range"] == [0.0, 0.35], f"0.1 应命中低档: {low['id']}"
+    assert any(w in low["text"] for w in aloof_marks), "低档疏离"
+    assert mid["recovery_range"] == [0.35, 0.85], f"0.5 应命中恢复期: {mid['id']}"
     # recovery=1.0（宅邸）→ 帝国条目 recovery_range 全不匹配 → 兜底 mansion
     high = pick(reg, arc="empire_era", slot="vignette", recovery=1.0, seed="s")
     assert high is not None and high["arc"] == "mansion_era", "满恢复应兜底宅邸"
+
+
+def test_empire_arc_tone_guard() -> None:
+    """V14.4 Step3：帝国两档语感守卫——低档零深情/宅邸腔；高档记忆碎片。"""
+    reg = _registry()
+    deep_words = ("呼吸都困难", "喜欢您", "好想", "缺了一块", "欢迎回家")
+    mansion_words = ("客人大人", "宅邸", "巴鲁斯", "女仆")
+
+    # 低档 8 条 vignette + 8 条 proactive：全部疏离克制
+    low_items = [it for it in reg["items"]
+                 if it["arc"] == "empire_era" and it.get("recovery_range") == [0.0, 0.35]]
+    assert len(low_items) == 17, f"低档应 17 条: {len(low_items)}"
+    for it in low_items:
+        assert not any(w in it["text"] for w in deep_words), f"低档深情越界: {it['id']}"
+        assert not any(w in it["text"] for w in ("客人大人", "巴鲁斯")), f"低档宅邸腔越界: {it['id']}"
+
+    # 高档 8 条 vignette + 8 条 proactive：记忆碎片语感——两档互斥断言
+    # （不含深情词 + 不含低档专属疏离标志「想不起来/走错/靠得太近/后退/退到一旁」）
+    mid_items = [it for it in reg["items"]
+                 if it["arc"] == "empire_era" and it.get("recovery_range") == [0.35, 0.85]]
+    assert len(mid_items) == 16, f"高档应 16 条: {len(mid_items)}"
+    aloof_marks = ("想不起来", "走错", "靠得太近", "后退", "退到一旁", "请让蕾姆继续工作")
+    for it in mid_items:
+        assert not any(w in it["text"] for w in deep_words), f"高档深情越界: {it['id']}"
+        assert not any(w in it["text"] for w in aloof_marks), f"高档不应有疏离标志: {it['id']}"
+    # 高档代表性记忆碎片抽样（关键条目语感正向确认）
+    mid_by_id = {it["id"]: it["text"] for it in mid_items}
+    assert "记起了红茶" in mid_by_id["empire_vignette_mid_01"]
+    assert "梦见" in mid_by_id["empire_proactive_mid_01"]
+    assert "会想起来的" in mid_by_id["empire_proactive_mid_07"]
 
 
 def test_relaxation_chain() -> None:
@@ -128,6 +162,7 @@ def main() -> int:
         ("确定性 hash（同 seed 稳定）", test_deterministic_same_seed),
         ("arc 分桶 + mansion 兜底", test_arc_bucket_and_mansion_fallback),
         ("recovery 档位（低档/恢复期/满恢复兜底）", test_recovery_ranges),
+        ("帝国两档语感守卫（互斥断言）", test_empire_arc_tone_guard),
         ("逐级放松链路", test_relaxation_chain),
         ("offline_bucket 硬过滤", test_offline_bucket_match),
         ("缓存 key arc/recovery 分桶（§3.3 回归）", test_cache_key_arc_partition),

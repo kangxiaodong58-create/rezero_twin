@@ -36,19 +36,27 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - **时间边界缺陷修复**：`datetime.now().timestamp()` 微秒截断在整 72h 边界产生 71.99999x 误差 → 误落 DAYS_1_3（实测踩坑）；改用全精度 `time.time()`
 - 测试 +6（`tests/test_vignette_registry.py`）：短开场注册表优先（确定性）/ 旧池兜底 / 归来感五桶命中 / 0 天空串 / 兜底粗桶 / **分布不劣化**（40 组合新池命中 ≥ 旧池，30+/40）
 
+### Step 3：帝国两档扩池（疏离 / 记忆碎片）
+
+### Added
+- **registry 扩至 58 条**（帝国 33）：低档 `[0,0.35]` vignette 8 + proactive 8（疏离/迷茫/陌生感：走错房间、靠得太近、退到一旁、雨声似曾相识）+ 高档 `[0.35,0.85]` vignette 8 + proactive 8（记忆碎片/迟疑靠近/自卑试探：红茶味道、姐姐脱口而出、梦里敲门、多放一点糖）+ return_flavor 1
+- **生成链路 arc 透传**：`_pick_short_opening(arc)` / `_pick_return_flavor(arc)` / `fill_dynamic_template(arc)` / `generate(arc)` 全链路——帝国低 recovery 引言/归来感命中疏离档（pick 内置 arc 级回落，满恢复回落宅邸）
+- 测试 +2：帝国两档语感守卫（低档零深情零宅邸腔「客人大人/巴鲁斯」；两档互斥反向断言）/ arc 透传路由（帝国 vignette 16 条、宅邸不串池）
+
 ### 不变项
 - 30% 短开场概率门、L0-L3 弹力网络结构、PERIOD_DESC/WEATHER_DESC 母板——零改动
-- 帝国/后期 arc 条目已就绪但未接入生成链路（Step 3 启用）
 - 冷却三红线、离线五桶、发件人权重、twins 拆分、白名单插值——零改动
 - 宅邸篇行为零变化（arcs 过滤对 mansion_era 全放行；缓存 key 增量字段仅影响分区）
 - `content/templates/` 随 `('content','content')` 自动进 EXE
 
 ### 验收
-1. pytest **102/102**（96 既有 + 6 新增；多轮连跑无 flaky）
+1. pytest **104/104**（102 既有 + 2 新增；多轮连跑无 flaky）
 2. 止血断言：帝国 arc 300 次采样永不出现「呼吸都困难/喜欢您/好想/缺了一块」
 3. 注册表断言：同 seed 同日同时段选型稳定；逐级放松全覆盖；无匹配 None 不抛
 4. 迁移断言：40 组合分布不劣化；registry 空时回落旧逻辑不崩
-5. 后续：Step 3 帝国两档扩池（empire_era × recovery_range vignette/proactive 各 8-12 条 + 生成链路 arc 透传）
+5. 语感断言：低档 17 条零深情零宅邸腔；高档 16 条与低档互斥（无疏离标志）
+6. 手工冒烟待真机：帝国篇低 recovery 启动引言/来信疏离；恢复期记忆碎片
+7. 后续：Step 4 后期轻量（late_era 扩池 5-8 条）+ Step 5 偶发一句（ambient_remark 事件触发）
 
 ---
 

@@ -308,18 +308,21 @@ def _pick_ram_mansion_action(period: str, days_since_last: int) -> str:
     return random.choice(RAM_DEFAULT)
 
 
-def _pick_short_opening(period: str, weather: str, days_since_last: int) -> Optional[str]:
+def _pick_short_opening(period: str, weather: str, days_since_last: int,
+                        arc: str = "mansion_era", recovery: Optional[float] = None) -> Optional[str]:
     """尝试从内容池匹配短开场段。~30% 概率使用，无命中返回 None。
 
-    V14.4 Step2：注册表 slot=vignette 优先（确定性 hash，同日同时段稳定，
-    池 10 条含天气/时段条件）；无命中回落旧 openings 硬匹配（防御兜底）。
+    V14.4 Step2：注册表 slot=vignette 优先（确定性 hash，同日同时段稳定）；
+    Step3：按 arc×recovery 选型（帝国低 recovery 命中疏离档/恢复期记忆碎片，
+    pick 内置 arc 级回落）；无命中回落旧 openings 硬匹配（防御兜底）。
     """
     if random.random() > 0.3:
         return None
     reg = _get_registry()
     seed = f"{_dt.now().strftime('%Y-%m-%d')}_{period}"
-    hit = registry_pick(reg, arc="mansion_era", slot="vignette",
-                        period=period, weather=weather, seed=seed)
+    hit = registry_pick(reg, arc=arc, slot="vignette",
+                        period=period, weather=weather,
+                        recovery=recovery, seed=seed)
     if hit and hit.get("text"):
         return hit["text"]
     loader = ContentLoader()
@@ -467,11 +470,14 @@ def _pick_return_awareness(days: int) -> str:
     ])
 
 
-def _pick_return_flavor(ws: WorldState) -> str:
+def _pick_return_flavor(ws: WorldState, arc: str = "mansion_era",
+                        recovery: Optional[float] = None) -> str:
     """V14.4 Step2：归来感走注册表 slot=return_flavor（复用来信五桶口径）。
 
     hours_since 由 last_interaction_ts 精确计算 → LetterManager 五桶映射
     （CROSS_PERIOD/HALF_DAY/DAYS_1_3/DAYS_3_7/LONG_ABSENCE）；
+    Step3：按 arc×recovery 选型（帝国低 recovery 命中疏离档 return_flavor，
+    恢复期无对应档位时 pick 回落宅邸——设计语义）；
     无匹配回落旧 _pick_return_awareness 粗桶（防御兜底）。
     0 天离线返回空串（不插入）。
     """
@@ -488,8 +494,9 @@ def _pick_return_flavor(ws: WorldState) -> str:
         return _pick_return_awareness(ws.days_since_last)
     reg = _get_registry()
     seed = f"{_dt.now().strftime('%Y-%m-%d')}_{ws.period}"
-    hit = registry_pick(reg, arc="mansion_era", slot="return_flavor",
-                        offline_bucket=bucket, period=ws.period, seed=seed)
+    hit = registry_pick(reg, arc=arc, slot="return_flavor",
+                        offline_bucket=bucket, period=ws.period,
+                        recovery=recovery, seed=seed)
     if hit and hit.get("text"):
         return hit["text"]
     return _pick_return_awareness(ws.days_since_last)
@@ -529,15 +536,18 @@ def fill_dynamic_template(
     oni_warning: bool = False,
     witch_scent: int = 0,
     ram_stage: str = "观察中",
+    arc: str = "mansion_era",  # V14.4 Step3：篇章透传（帝国低 recovery → 疏离档）
 ) -> str:
     """L2 动态槽位填充模板（V11.5：状态化动作 + 去「正在在」铁律）。
 
     动作本体不以「在」开头，模板统一「正在{动作本体}」格式。
     保留 V11.0 的归来感与 active_event 融入。
     V11.6：~30% 概率优先使用短开场段（JSON 内容池），无命中回退模板。
+    V14.4 Step3：短开场/归来感按 arc 选型。
     """
     # V11.6：尝试短开场段（~30% 概率，JSON → None 回退模板）
-    short_op = _pick_short_opening(ws.period, ws.weather, ws.days_since_last)
+    short_op = _pick_short_opening(ws.period, ws.weather, ws.days_since_last,
+                                   arc=arc, recovery=recovery)
     if short_op:
         return short_op
 
@@ -545,8 +555,8 @@ def fill_dynamic_template(
     weather_desc = random.choice(WEATHER_DESC.get(ws.weather, ["天气如常"]))
     extra = random.choice(EXTRA_ATMOSPHERE)
 
-    # V11.0：离线归来感（0 天返回空串，不插入）；V14.4 Step2：注册表五桶口径
-    return_desc = _pick_return_flavor(ws)
+    # V11.0：离线归来感（0 天返回空串，不插入）；V14.4 Step2/3：注册表五桶口径 + arc×recovery
+    return_desc = _pick_return_flavor(ws, arc=arc, recovery=recovery)
 
     # V11.0：活跃事件氛围（EVENT_POOL 文案已文学化，直接作为独立短句）
     event_part = f"{ws.active_event}。" if ws.active_event and ws.active_event.strip() else ""
@@ -796,6 +806,7 @@ class VignetteGenerator:
                 oni_warning=oni_warning,
                 witch_scent=witch_scent,
                 ram_stage=ram_stage,
+                arc=arc,  # V14.4 Step3：篇章透传（帝国 → 疏离/记忆碎片档）
             )
             if vignette:
                 self._session_cache = vignette

@@ -6,80 +6,126 @@
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "蕾姆把红茶放在您手边，轻轻问：『今天……要先休息，还是先说说话？』",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "vignette_mansion_rem_rain_01",
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "雨声里，蕾姆把窗边的灯拨亮了些。『下雨天，宅邸总是格外安静呢。』",
-      "periods": ["all"],
-      "weathers": ["小雨", "大雨"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "小雨",
+        "大雨"
+      ]
     },
     {
       "id": "vignette_mansion_ram_tea_01",
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "拉姆端着茶盘经过，脚步顿了顿：『巴鲁斯要是能有您一半自觉，拉姆就能少操一半的心。』",
-      "periods": ["上午", "午后"],
-      "weathers": ["all"]
+      "periods": [
+        "上午",
+        "午后"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "vignette_mansion_rem_evening_01",
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "『夕阳把走廊染成暖色了。姐姐说这种时候，最适合想一些温柔的事。』蕾姆轻声说道。",
-      "periods": ["傍晚", "夜晚"],
-      "weathers": ["all"]
+      "periods": [
+        "傍晚",
+        "夜晚"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "vignette_mansion_ram_night_01",
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "『这么晚还醒着？……哼，拉姆只是路过，才不是特意来看您睡了没有。』",
-      "periods": ["夜晚", "深夜"],
-      "weathers": ["all"]
+      "periods": [
+        "夜晚",
+        "深夜"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "vignette_mansion_rem_afternoon_01",
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "『午后总是让人犯困呢。蕾姆准备了薄饼，客人大人要配着茶吃一点吗？』",
-      "periods": ["午后", "下午"],
-      "weathers": ["all"]
+      "periods": [
+        "午后",
+        "下午"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "vignette_mansion_twins_garden_01",
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "花园里传来姐妹的声音：『蕾姆，那丛玫瑰该剪了。』『是，姐姐。……不过客人大人好像很喜欢它们，蕾姆想再留几天。』",
-      "periods": ["上午"],
-      "weathers": ["all"]
+      "periods": [
+        "上午"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "vignette_mansion_rem_morning_01",
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "『早安。蕾姆已经把晨间打扫做完了，今天想先从哪里开始？』",
-      "periods": ["清晨"],
-      "weathers": ["all"]
+      "periods": [
+        "清晨"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "vignette_mansion_rem_gloomy_01",
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "天空灰沉沉的。蕾姆把灯点了起来，小声说：『这样的天，总觉得更适合安静地待在一起。』",
-      "periods": ["all"],
-      "weathers": ["阴沉"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "阴沉"
+      ]
     },
     {
       "id": "vignette_mansion_ram_sunny_01",
       "arc": "mansion_era",
       "slot": "vignette",
       "text": "『天气这么好，巴鲁斯大概又在院子里偷懒。……您要是有空，去把那个笨蛋叫起来。』",
-      "periods": ["上午", "午后"],
-      "weathers": ["晴朗"]
+      "periods": [
+        "上午",
+        "午后"
+      ],
+      "weathers": [
+        "晴朗"
+      ]
     },
     {
       "id": "return_cross_rem_01",
@@ -87,8 +133,12 @@
       "slot": "return_flavor",
       "text": "『才一会儿不见，您就回来了。……蕾姆的茶，刚好还是温的。』",
       "offline_bucket": "CROSS_PERIOD",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_cross_ram_01",
@@ -96,8 +146,12 @@
       "slot": "return_flavor",
       "text": "『这么快就折返？……哼，拉姆还以为您会更有骨气一些。』",
       "offline_bucket": "CROSS_PERIOD",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_cross_twins_01",
@@ -105,8 +159,12 @@
       "slot": "return_flavor",
       "text": "【拉姆】这么快就回来，是忘了什么吧。\n【蕾姆】姐姐……客人大人回来就好。",
       "offline_bucket": "CROSS_PERIOD",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_half_rem_01",
@@ -114,8 +172,12 @@
       "slot": "return_flavor",
       "text": "『半天不见……蕾姆把窗帘拉开来看了好几回。您回来了，真是太好了。』",
       "offline_bucket": "HALF_DAY",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_half_ram_01",
@@ -123,8 +185,12 @@
       "slot": "return_flavor",
       "text": "『隔了半天才露面。……算了，反正拉姆也习惯了等人的日子。』",
       "offline_bucket": "HALF_DAY",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_half_twins_01",
@@ -132,8 +198,12 @@
       "slot": "return_flavor",
       "text": "【拉姆】半天不见人，我还以为您去追野猫了。\n【蕾姆】姐姐，蕾姆才没有……不过，客人大人回来就好。",
       "offline_bucket": "HALF_DAY",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_1_3_rem_01",
@@ -141,8 +211,12 @@
       "slot": "return_flavor",
       "text": "『这两天宅邸安静得不像话。……您回来，这里才像是有人的样子。』",
       "offline_bucket": "DAYS_1_3",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_1_3_ram_01",
@@ -150,8 +224,12 @@
       "slot": "return_flavor",
       "text": "『消失了两三天。拉姆本来想记一笔账的，后来想想，茶壶空了也没人添，就算了。』",
       "offline_bucket": "DAYS_1_3",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_3_7_rem_01",
@@ -159,8 +237,12 @@
       "slot": "return_flavor",
       "text": "『好几天没有您的消息，蕾姆把您的杯子擦得发亮，就怕您回来时觉得它蒙了灰。』",
       "offline_bucket": "DAYS_3_7",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_3_7_ram_01",
@@ -168,8 +250,12 @@
       "slot": "return_flavor",
       "text": "『快一周不见人影。……拉姆不是担心，只是宅邸里少了个使唤对象，怪不自在的。』",
       "offline_bucket": "DAYS_3_7",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_long_rem_01",
@@ -177,8 +263,12 @@
       "slot": "return_flavor",
       "text": "『您终于回来了。蕾姆……每天都会在门口站一会儿，总觉得您随时会推门进来。』",
       "offline_bucket": "LONG_ABSENCE",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_long_ram_01",
@@ -186,8 +276,12 @@
       "slot": "return_flavor",
       "text": "『这么久不见，拉姆还以为您把宅邸忘在脑后了。……既然回来了，就先去把灰掸一掸。』",
       "offline_bucket": "LONG_ABSENCE",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "return_long_twins_01",
@@ -195,69 +289,564 @@
       "slot": "return_flavor",
       "text": "【拉姆】蕾姆，别发呆，把茶端过去。\n【蕾姆】……是，姐姐。您说，客人大人会记得宅邸的路吗？\n【拉姆】哼，他要是迷路，拉姆可不会去接。",
       "offline_bucket": "LONG_ABSENCE",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "empire_vignette_low_01",
       "arc": "empire_era",
       "slot": "vignette",
       "text": "她看着您，像在看一个本该认识却想不起来的人。风从走廊尽头吹来，她轻轻侧开了目光。",
-      "recovery_range": [0.0, 0.35],
-      "periods": ["all"],
-      "weathers": ["all"]
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "empire_proactive_low_01",
       "arc": "empire_era",
       "slot": "proactive",
       "text": "您……似乎很熟悉这里。虽然蕾姆想不起来为什么，但请至少，别再露出那种寂寞的表情。",
-      "recovery_range": [0.0, 0.35],
-      "periods": ["all"],
-      "weathers": ["all"]
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "empire_return_low_01",
       "arc": "empire_era",
       "slot": "return_flavor",
       "text": "她站在门边停了几秒，像在确认什么，最终只是轻声说：您回来了。",
-      "recovery_range": [0.0, 0.35],
-      "periods": ["all"],
-      "weathers": ["all"]
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "empire_vignette_mid_01",
       "arc": "empire_era",
       "slot": "vignette",
       "text": "她记起了红茶的味道，却想不起是谁教她沏的。她看着您，欲言又止。",
-      "recovery_range": [0.35, 0.85],
-      "periods": ["all"],
-      "weathers": ["all"]
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "empire_proactive_mid_01",
       "arc": "empire_era",
       "slot": "proactive",
       "text": "最近总梦见这座宅邸。梦里有您，也有姐姐……蕾姆分不清那是记忆，还是愿望。",
-      "recovery_range": [0.35, 0.85],
-      "periods": ["all"],
-      "weathers": ["all"]
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "late_vignette_01",
       "arc": "late_era",
       "slot": "vignette",
       "text": "风停了。拉姆把剑还鞘，难得没有挖苦。有些并肩的路，走着走着就成了习惯。",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     },
     {
       "id": "late_proactive_01",
       "arc": "late_era",
       "slot": "proactive",
       "text": "今天没有战斗，蕾姆反而不知道该怎么消磨时间了。……您要是不忙，陪蕾姆坐一会儿吧。",
-      "periods": ["all"],
-      "weathers": ["all"]
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_low_02",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "陌生的房间里，她站在窗边，听见脚步声便回过头。那目光停了一瞬，又轻轻移开了。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_low_03",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "她似乎想说什么，最终只是欠了欠身：『……您走错房间了吗？』",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_low_04",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "风从门缝里漏进来。她把烛台往自己这边挪了挪，像是不习惯与人靠得太近。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_low_05",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "『女仆长说今天有客人来。』她低声重复着这句话，像是在确认一件与自己无关的事。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_low_06",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "她端着茶进来，放下的动作很轻，后退的动作却更快。『请用。』说完便安静地退到一旁。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_low_07",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "檐外落着雨。她望着雨幕出神，良久才说：『……总觉得，这样的雨在哪里听过。』",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_low_08",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "走廊尽头，她驻足片刻，像在辨认什么，最终只是垂下眼帘，继续向前走去。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_low_02",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "您……一直在看这边。是蕾姆脸上有什么吗？如果没有的话，请让蕾姆继续工作了。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_low_03",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "听闻客人是远道而来。虽然蕾姆帮不上什么忙……但如果有需要，请尽管吩咐。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_low_04",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "您说蕾姆以前认识您？……抱歉，蕾姆想不起来。不过您看起来很疲倦，要休息一下吗？",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_low_05",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "请不要靠得太近。……不，没有冒犯的意思，只是蕾姆还不习惯。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_low_06",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "您知道蕾姆的姐姐在哪里吗？……不，没什么，只是随口问问。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_low_07",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "每次您出现，蕾姆的心都会莫名地跳快一些。这很奇怪……蕾姆不明白为什么。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_low_08",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "如果您在找什么人，蕾姆帮不上忙。但如果您只是累了……这间屋子可以借您休息。",
+      "recovery_range": [
+        0.0,
+        0.35
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_mid_02",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "她盯着自己的手看了很久，忽然说：『这双手，好像很熟悉泡茶的步骤。』",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_mid_03",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "『姐姐……』她脱口而出，随即怔住，『……不，没什么。』",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_mid_04",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "她远远地望着您，嘴唇动了动，终究没有出声，只是把一盘刚烤好的薄饼往您的方向推了推。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_mid_05",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "夜里她惊醒过来，望着天花板发呆。梦里有人叫她的名字，声音带着哭腔——可她怎么也想不起那人的脸。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_mid_06",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "她擦拭着茶杯，忽然停下来：『这个花纹……蕾姆好像在哪里见过。』",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_mid_07",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "『巴鲁斯……』她低声念着这个名字，然后摇了摇头，像是要把什么念头赶走。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_vignette_mid_08",
+      "arc": "empire_era",
+      "slot": "vignette",
+      "text": "她站在您房门外，抬手又放下，反复几次，最终还是轻轻敲了敲门。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_mid_02",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "您今天……还是坐在老位置。蕾姆没有别的意思，只是……那样比较方便看您。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_mid_03",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "蕾姆知道自己不该问。但……我们以前，是不是真的很要好？",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_mid_04",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "这杯茶是按照梦里学会的步骤沏的。如果不好喝，请……请不要告诉蕾姆。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_mid_05",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "姐姐说蕾姆最近总是发呆。其实蕾姆在想……在想一个总是对蕾姆笑的人。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_mid_06",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "您要走了吗？……不，蕾姆没有不舍得。只是……下次，还请记得回来。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_mid_07",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "蕾姆会想起来的。关于您的事，蕾姆一定会一点点想起来的……所以，请再等等蕾姆。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "empire_proactive_mid_08",
+      "arc": "empire_era",
+      "slot": "proactive",
+      "text": "今天的茶，蕾姆多放了一点点糖。……因为总觉得，您喜欢甜的。",
+      "recovery_range": [
+        0.35,
+        0.85
+      ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     }
   ]
 }

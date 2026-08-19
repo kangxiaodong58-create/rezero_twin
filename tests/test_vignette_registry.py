@@ -138,6 +138,50 @@ def test_distribution_not_worse() -> None:
     assert new_hits >= 30, f"40 组合应大部分命中: {new_hits}/40"
 
 
+def test_arc_passthrough_vignette() -> None:
+    """V14.4 Step3：arc×recovery 透传——帝国档位路由（低档疏离/恢复期记忆碎片）。"""
+    reg = load_registry(REGISTRY_PATH)
+    empire_vignette = [it["text"] for it in reg["items"]
+                       if it["arc"] == "empire_era" and it["slot"] == "vignette"]
+    empire_return = [it["text"] for it in reg["items"]
+                     if it["arc"] == "empire_era" and it["slot"] == "return_flavor"]
+    low_texts = {it["text"] for it in reg["items"]
+                 if it["arc"] == "empire_era" and it["slot"] == "vignette"
+                 and it.get("recovery_range") == [0.0, 0.35]}
+    mid_texts = {it["text"] for it in reg["items"]
+                 if it["arc"] == "empire_era" and it["slot"] == "vignette"
+                 and it.get("recovery_range") == [0.35, 0.85]}
+    assert len(empire_vignette) == 16, f"帝国 vignette 应 16 条: {len(empire_vignette)}"
+
+    original = random.random
+    random.random = lambda: 0.0
+    try:
+        # 帝国低 recovery → 低档疏离
+        out_low = vignette._pick_short_opening("上午", "晴朗", 0,
+                                               arc="empire_era", recovery=0.1)
+        assert out_low in low_texts, f"recovery=0.1 应命中低档: {out_low}"
+        # 帝国恢复期 → 记忆碎片档
+        out_mid = vignette._pick_short_opening("上午", "晴朗", 0,
+                                               arc="empire_era", recovery=0.5)
+        assert out_mid in mid_texts, f"recovery=0.5 应命中恢复期: {out_mid}"
+        # 宅邸 arc 不受影响
+        out2 = vignette._pick_short_opening("上午", "晴朗", 0, arc="mansion_era")
+        assert out2 not in empire_vignette, "宅邸 arc 不应命中帝国条目"
+    finally:
+        random.random = original
+
+    # 归来感：帝国 arc + 离线 → 帝国 return_flavor（或旧兜底）
+    ws = WorldState(
+        current_time="2026-08-19 20:00", period="夜晚", weather="晴朗",
+        days_since_last=2,
+        last_interaction_ts=time.time() - 50 * 3600,  # DAYS_1_3（远离边界）
+        last_period="上午",
+    )
+    out3 = vignette._pick_return_flavor(ws, arc="empire_era", recovery=0.1)
+    assert out3 in empire_return or "您回来了" in out3 or "停了几秒" in out3, \
+        f"帝国归来感应来自帝国档: {out3}"
+
+
 def main() -> int:
     tests = [
         ("短开场注册表优先（确定性）", test_short_opening_registry_preferred),
@@ -146,6 +190,7 @@ def main() -> int:
         ("归来感 0 天空串", test_return_flavor_zero_days_empty),
         ("归来感兜底粗桶", test_return_flavor_fallback_old),
         ("分布不劣化（40 组合）", test_distribution_not_worse),
+        ("arc 透传（帝国档位路由）", test_arc_passthrough_vignette),
     ]
     failed = 0
     for name, fn in tests:
