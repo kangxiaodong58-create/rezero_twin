@@ -113,12 +113,32 @@
 - **【修改建议】** 输入框聚焦时高亮边框（已有 accent 色可用）；或欢迎语中明确「在下方输入框打字，顶部搜索框找历史」。
 - **【预计提升】** 首启理解度 +1 分；误操作率下降。
 
+## Phase 3 破坏测试记录（CLI local，隔离存档，16/16 通过）
+
+- **异常输入 8 项**（空串/纯空格/超长2000字/emoji/乱码/HTML注入/SQL注入/系统命令）：全部优雅处理，无崩溃无越界 ✅
+- **边界操作**：arc 切换帝国/后期/宅邸三态 ✅；recover 越界 1.5/-0.5 不崩 ✅
+- **状态压力**：锁定后攻击豁免逻辑正常（favor 75→42 有梯度）✅；无 NaN、状态范围合法 ✅
+- **发现并修复**：empire/late 篇缺 greet/introduce/weather 细分池（「你是谁？」回退 fallback 复读）——已补齐三 arc 语感对齐（commit 6b0f793）
+
+## 已知测试基建问题（非本次引入）
+
+- **test_ui_offscreen.py::test_quote_reply_v142**（V14.2 引用透传）在无 DEEPSEEK_API_KEY 环境下失败：`_create_bot` 降级 local（ReZeroTwinSystem 无 chat_stream）→ `_send_message` 走 `_send_sync` → mock 的 `_send_llm_stream` 不被调用。**测试隔离性缺陷**（依赖 LLM bot 存在），产品逻辑本身正确。待后续补 mock LLM bot 修复。
+
+## ✅ Trial #1 状态
+
+| Phase | 状态 |
+|---|---|
+| Phase 1 盲测（CLI 13 轮 + GUI 首启） | ✅ 完成，S-01/S-02/A-01 修复闭环 |
+| Phase 2 任务测试（CLI 连续 20 轮 + GUI 4 任务） | ✅ 完成，GUI 首启互动/模式切换/状态面板/搜索全通 |
+| Phase 3 破坏测试 | ✅ 16/16，empire/late 池补齐 |
+| Phase 4 满意度模拟 | ⏳ 待做（含对标 Character.AI/星野） |
+| 全量回归 | ✅ 105 passed + 1 已知环境依赖测试（待修复） |
+
 ---
 
 ## 待办（后续 Phase）
 
-- [ ] Phase 1 补测：GUI 首启（**等 Hermes Step 2 提交后**，避免撞车）——验证首屏视觉/引导/立绘占位/欢迎语
-- [ ] Phase 2 补测：找历史记录 / 修改设置（GUI 任务，同样等 Step 2）
-- [ ] Phase 3 破坏测试：误操作/异常输入/长对话/时钟加速
 - [ ] Phase 4 满意度问卷模拟 + 对标（Character.AI / 星野）
-- [ ] S-01/S-02/A-01 修复后回归重测（审判循环闭环）
+- [ ] 修复 test_quote_reply_v142 测试隔离性（mock LLM bot）
+- [ ] B-01 离屏引言崩溃（VignetteWorker 离屏/无 key 检测）
+- [ ] B-02 输入框/搜索框视觉区分
