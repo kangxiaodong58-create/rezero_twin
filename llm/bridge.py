@@ -448,6 +448,7 @@ class ReZeroLLMBridge:
             def _generator():
                 # Forensic M1：异步链起点捕获 generation（stale 检测锚点）
                 gen = self._generation
+                stale_reported = False
                 full = ""
                 try:
                     if gen != self._generation:
@@ -458,6 +459,13 @@ class ReZeroLLMBridge:
                         if self._stream_cancelled:
                             # V13.0：用户取消——静默结束，不校验、不写 history
                             return
+                        # Forensic M3：chunk 级 stale 观测（generation 中途变化，
+                        # 如旧流在会话重置后继续产出；只记录不拦截）
+                        if gen != self._generation and not stale_reported:
+                            stale_reported = True
+                            record("STALE_CALLBACK_OBSERVED", component="bridge",
+                                   generation=gen,
+                                   payload_summary=f"current_gen={self._generation}")
                         delta = chunk.choices[0].delta.content
                         if delta:
                             full += delta
@@ -519,6 +527,8 @@ class ReZeroLLMBridge:
 
             return _generator(), state
         except Exception as e:
+            record("API_ERROR", component="bridge", generation=self._generation,
+                   exception=str(e)[:500])
             logging.warning("chat_stream API 调用失败: %s", e)
             self._active_scene_id = None
             self._last_stream_ok = False
@@ -542,6 +552,17 @@ class ReZeroLLMBridge:
                 self._active_stream.close()
             except Exception:
                 pass
+
+    def reset_session(self) -> None:
+        """Forensic M3：新会话——generation 递增（stale 检测锚点），清空对话历史。
+
+        旧流式回调若仍在运行，其捕获的旧 generation 将与当前值不符，
+        在 chunk 检查点被记录为 STALE_CALLBACK_OBSERVED（只观测不拦截）。
+        """
+        self._generation += 1
+        self.history = []
+        self._active_stream = None
+        self._stream_cancelled = False
 
     def status(self) -> str:
         state = self.engine.snapshot()

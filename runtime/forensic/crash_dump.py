@@ -77,21 +77,27 @@ class IncidentWriter:
         self._prepare()
 
     def _prepare(self) -> None:
-        """启动时一次性准备（可失败，静默降级为无取证）。"""
+        """启动时一次性准备（可失败，静默降级为无取证）。
+
+        支持"重新武装"（dump 后再次调用）：环境快照只拍一次（git
+        子进程是重活），后续复用；多崩溃场景（headless 战役）每次
+        dump 后重新准备，保证连续取证。
+        """
         try:
             os.makedirs(self.incidents_dir, exist_ok=True)
             self._pending_dir = os.path.join(self.incidents_dir, PENDING_DIR)
             os.makedirs(self._pending_dir, exist_ok=True)
             buf = get_buffer()
             self._startup_id = buf.startup_id if buf else "no-buffer"
-            self._environment = {
-                "python": sys.version.split()[0],
-                "platform": sys.platform,
-                "cwd": os.getcwd(),
-                "pid": os.getpid(),
-                "git": _git_summary(),
-                "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
-            }
+            if not self._environment:  # git 快照只拍一次，复用
+                self._environment = {
+                    "python": sys.version.split()[0],
+                    "platform": sys.platform,
+                    "cwd": os.getcwd(),
+                    "pid": os.getpid(),
+                    "git": _git_summary(),
+                    "started_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+                }
             dump_path = os.path.join(self._pending_dir, "dump.json")
             self._fh = open(dump_path, "w", encoding="utf-8")
             self._fh.write(json.dumps({"status": "RUNNING", "startup_id": self._startup_id}))
@@ -175,8 +181,10 @@ class IncidentWriter:
             if renamed:
                 self._pending_dir = None
                 self._prepared = False
+                self._prepare()  # 重新武装：支持同进程多崩溃（headless 战役）
                 return incident_id
-            # 降级：rename 失败，证据留在 pending/（manifest 可发现）
+            # 降级：rename 失败，证据留在 pending/（manifest 可发现）。
+            # 不重新武装：pending 里的证据不能被覆盖。
             self._prepared = False
             return incident_id
         except Exception as e:

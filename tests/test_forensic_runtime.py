@@ -124,8 +124,12 @@ def test_crash_dump_creates_incident(forensic):
     # 环境快照（git 摘要启动时已拍）
     assert "git" in dump["environment"]
     assert "commit" in dump["environment"]["git"]
-    # pending 占位已被 rename 走
-    assert not (forensic / "pending").exists()
+    # 重新武装：pending 重新创建为 RUNNING 占位（支持同进程多崩溃）
+    assert (forensic / "pending").exists()
+    pending_dump = json.loads(
+        (forensic / "pending" / "dump.json").read_text(encoding="utf-8")
+    )
+    assert pending_dump["status"] == "RUNNING"
 
 
 def test_crash_dump_worker_thread(forensic):
