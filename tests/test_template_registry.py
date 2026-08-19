@@ -36,7 +36,7 @@ def _registry():
 def test_load_and_validate() -> None:
     reg = _registry()
     assert reg["schema_version"] == "1.0"
-    assert len(reg["items"]) == 69, f"Step4 扩池后应 69 条，实际 {len(reg['items'])}"
+    assert len(reg["items"]) == 73, f"V14.4 late proactive 扩池后应 73 条，实际 {len(reg['items'])}"
     ids = [it["id"] for it in reg["items"]]
     assert len(ids) == len(set(ids)), "id 应唯一"
     for it in reg["items"]:
@@ -46,6 +46,10 @@ def test_load_and_validate() -> None:
     valid = {a.value for a in StoryArc}
     for it in reg["items"]:
         assert it["arc"] in valid, f"arc 值非法（与枚举不一致）: {it['id']} → {it['arc']}"
+    # V14.4：late proactive 扩池 6→10（LLM 优先内容路线 P1）
+    late_proactive = [it for it in reg["items"]
+                      if it["arc"] == "late_arc" and it["slot"] == "proactive"]
+    assert len(late_proactive) >= 10, f"late proactive 应 ≥10 条: {len(late_proactive)}"
 
 
 def test_load_bad_json_degrades() -> None:

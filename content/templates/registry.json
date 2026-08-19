@@ -979,6 +979,54 @@
       "weathers": [
         "all"
       ]
+    },
+    {
+      "id": "late_proactive_07",
+      "arc": "late_arc",
+      "slot": "proactive",
+      "text": "战斗结束后的营地，安静得有些不真实。蕾姆守着火堆，等您回来添一根柴。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_proactive_08",
+      "arc": "late_arc",
+      "slot": "proactive",
+      "text": "今天没有战斗，蕾姆反而不知道该怎么消磨时间了。……您要是不忙，陪蕾姆坐一会儿吧。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_proactive_09",
+      "arc": "late_arc",
+      "slot": "proactive",
+      "text": "蕾姆想过了。不管前面是哪条路，只要您走在前面，蕾姆就没有犹豫的理由。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_proactive_10",
+      "arc": "late_arc",
+      "slot": "proactive",
+      "text": "您的披风旧了。蕾姆连夜补好了，针脚也许不好看，但很结实——就像蕾姆对您的这份心。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     }
   ]
 }

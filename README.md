@@ -188,6 +188,9 @@ Remove-Item data\memory.json -ErrorAction SilentlyContinue
 
 程序会重新生成 `mode: "llm"` 的默认记忆文件，再次启动即为 LLM 桥接模式。也可以在窗口里直接输入 `/llm` 切换。
 
+### Q: 本地模板模式（local）是什么定位？
+A: **开发调试模式**（V14.4 起）：local 最初作为 LLM 模式的状态机地基，现已完成使命——产品体验以 LLM 模式为主，local 仅用于零 API 的冒烟测试与状态机调试（GUI 状态栏会标注「本地·开发」）。日常使用请保持 LLM 模式；local 的回复为模板化内容，不代表最终体验。
+
 ### Q: 提示 `Insufficient Balance`
 A: Deepseek 账号余额不足，需要充值。
 

@@ -2096,7 +2096,7 @@ class TwinChatApp(QMainWindow):
             self.store.set("mode", target)
             self._append_parsed_message(
                 "系统",
-                f"→ 已切换至{'LLM 桥接' if target == 'llm' else '本地模板'}模式（状态已迁移）",
+                f"→ 已切换至{'LLM 桥接' if target == 'llm' else '本地模板（开发模式）'}模式（状态已迁移）",
                 "system",
             )
             self._update_status_bar()  # V10.14：统一走 RichText 刷新，不再手动 setText
@@ -2832,10 +2832,13 @@ class TwinChatApp(QMainWindow):
                 event_short = ev[:16] + '…' if len(ev) > 16 else ev
                 ram_part += f"  ·  {event_short}"
             # V10.14：RichText 主次分层（金色模式 / 次亮主信息 / 弱化次信息）
-            mode_text = "LLM" if self.mode == "llm" else "本地"
+            # V14.4（LLM 优先路线 Phase B）：本地模式降级为「开发调试」标注——
+            # local 已从产品功能转为开发地基（本地模式退场研判）
+            mode_text = "LLM" if self.mode == "llm" else "本地·开发"
+            mode_color = COLORS["accent"] if self.mode == "llm" else COLORS["text_muted"]
             sep = f'<span style="color:{COLORS["text_muted"]};">  ·  </span>'
             self._mode_label.setText(
-                f'<span style="color:{COLORS["accent"]};">{mode_text}</span>'
+                f'<span style="color:{mode_color};">{mode_text}</span>'
                 f'{sep}'
                 f'<span style="color:{COLORS["text_secondary"]};">{w.period} · {w.weather}  ·  好感 {state.favor}/100</span>'
                 f'{sep}'
