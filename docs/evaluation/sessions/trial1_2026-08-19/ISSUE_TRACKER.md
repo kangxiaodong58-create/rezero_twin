@@ -131,8 +131,16 @@
 | Phase 1 盲测（CLI 13 轮 + GUI 首启） | ✅ 完成，S-01/S-02/A-01 修复闭环 |
 | Phase 2 任务测试（CLI 连续 20 轮 + GUI 4 任务） | ✅ 完成，GUI 首启互动/模式切换/状态面板/搜索全通 |
 | Phase 3 破坏测试 | ✅ 16/16，empire/late 池补齐 |
-| Phase 4 满意度模拟 | ⏳ 待做（含对标 Character.AI/星野） |
+| Phase 4 满意度模拟（LLM 真机） | ✅ 完成，详见 SATISFACTION_SURVEY.md，新增 A-02/B-03 |
 | 全量回归 | ✅ 105 passed + 1 已知环境依赖测试（待修复） |
+
+## Phase 4 满意度问卷模拟（LLM 模式真机，~¥0.042）
+
+- 15 轮真实 API 旅程（probe_llm_satisfaction.py + llm_satisfaction.txt 全 transcript）
+- **评分**：首启 7/10 ｜ 角色吸引力 9.5/10 ｜ 长期动力 8.5/10 ｜ 视觉 6.5/10 ｜ 对标商业产品 7/10 ｜ 愿意每天使用 7.5/10
+- 规则轨 15/15 全过（第三人称/称呼一致/记忆验证/边界处理/异常输入）
+- 新增问题：**A-02 LLM↔local 体验差过大**（降级断裂）、**B-03 括号体密度偏高**（LLM 模式复现）
+- 详细报告：`docs/evaluation/sessions/trial1_2026-08-19/SATISFACTION_SURVEY.md`
 
 ---
 
