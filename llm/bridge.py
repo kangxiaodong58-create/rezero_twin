@@ -318,6 +318,13 @@ class ReZeroLLMBridge:
             )
             reply = response.choices[0].message.content.strip()
             result = self.validator.validate(reply)
+            # V14.6 E-5：软检查（WARNING 不阻断，仅记录提示）
+            if result.ok and result.ooc_warnings:
+                logging.warning(
+                    "V14.6 原著一致性软检查命中 %d 项: %s",
+                    len(result.ooc_warnings),
+                    ", ".join(result.ooc_warnings[:5]),
+                )
             if result.ok:
                 return result.cleaned or reply, False
             logging.warning(
@@ -409,6 +416,13 @@ class ReZeroLLMBridge:
 
                     # 流式完整输出结束后校验；失败仅记录日志，不污染 history
                     result = self.validator.validate(full)
+                    # V14.6 E-5：软检查（WARNING 不阻断，仅记录提示）
+                    if result.ok and result.ooc_warnings:
+                        logging.warning(
+                            "V14.6 原著一致性软检查命中 %d 项: %s",
+                            len(result.ooc_warnings),
+                            ", ".join(result.ooc_warnings[:5]),
+                        )
                     if result.ok:
                         self._last_stream_ok = True
                         final = result.cleaned or full

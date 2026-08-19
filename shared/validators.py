@@ -23,11 +23,13 @@ class ValidationResult(NamedTuple):
         ok: 是否通过校验。
         reason: 失败原因（通过时为 None）。
         cleaned: 轻度清洗后的文本（失败时也可能返回，供日志使用）。
+        ooc_warnings: V14.6 E-5 软检查——原著一致性警告（A-E 级命中词，不阻断）。
     """
 
     ok: bool
     reason: Optional[str] = None
     cleaned: Optional[str] = None
+    ooc_warnings: Optional[list] = None
 
 
 class ResponseValidator:
@@ -56,6 +58,28 @@ class ResponseValidator:
 
     # 上下文敏感词：角色可能合法地在「否认」中提及（如「不是AI」）
     _CONTEXT_SENSITIVE = frozenset({"AI", "系统"})
+
+    # V14.6 E-5：原著一致性软检查词表（A-E 级，WARNING 不阻断，仅提示）
+    # A 级：现代网络污染 / B 级：AI 身份污染 / C 级：角色人格污染
+    # D 级：其他作品污染（用户主动讨论时豁免）/ E 级：世界观冲突
+    OOC_WARNINGS_A = ["yyds", "绝绝子", "破防", "笑死", "哈哈哈", "666",
+                      "太秀了", "逆天", "蚌埠住了", "安排上", "整活"]
+    OOC_WARNINGS_B = ["作为AI", "我的数据库", "根据算法", "系统检测",
+                      "用户体验", "模型认为", "程序判断"]
+    OOC_WARNINGS_C = ["蕾姆永远属于你", "主人只能喜欢蕾姆", "蕾姆离不开主人",
+                      "拉姆最喜欢主人了", "主人说什么都对", "拉姆愿意一切服从"]
+    OOC_WARNINGS_D = ["桐人", "亚丝娜", "五条悟", "路飞", "鸣人", "炭治郎"]
+    OOC_WARNINGS_E = ["手机APP", "互联网", "服务器", "AI助手", "程序代码",
+                      "数据库", "现代公司"]
+
+    # 汇总（含等级标注）
+    OOC_WARNINGS = {
+        "A级·网络污染": OOC_WARNINGS_A,
+        "B级·AI身份": OOC_WARNINGS_B,
+        "C级·人格污染": OOC_WARNINGS_C,
+        "D级·作品串场": OOC_WARNINGS_D,
+        "E级·世界观冲突": OOC_WARNINGS_E,
+    }
 
     # 否定词：出现在敏感词前方 4 字符内时视为「否认」语境
     # 仅保留 2 字否定词（3 字词在 window=4 下可能被截断）
@@ -215,4 +239,14 @@ class ResponseValidator:
                 cleaned=cleaned,
             )
 
-        return ValidationResult(ok=True, cleaned=cleaned)
+        # V14.6 E-5：软检查（WARNING 不阻断）——扫描 A-E 级词，命中仅提示
+        warnings = []
+        for level, words in self.OOC_WARNINGS.items():
+            for w in words:
+                if w in cleaned:
+                    warnings.append(f"{level}:{w}")
+        return ValidationResult(
+            ok=True,
+            cleaned=cleaned,
+            ooc_warnings=warnings or None,
+        )
