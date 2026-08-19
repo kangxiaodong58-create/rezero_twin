@@ -1,0 +1,33 @@
+=== T+1.2s（首屏） ===
+窗口标题: ❄ Re:Zero 双子系统 — Rem × Ram
+[截图已保存 gui_first_1s.png]
+
+=== T+7s（引言后） ===
+[截图已保存 gui_after_7s.png]
+
+=== 首屏可见文本 ===
+[label] ❄  Re:Zero 双子系统  —  Rem × Ram
+[label] Arc I · 罗兹瓦尔宅邸
+[label] 蕾 姆
+[label] 😊
+[label] 好感 15/100
+[label] 「陌生人」
+[label] ❄ 欢迎来到 Re:Zero 双子系统。
+左侧是蕾姆面板，右侧是拉姆面板。
+输入消息开始对话，或使用底部快捷按钮。
+[label] 拉 姆
+[label] 😒
+[label] 好感 8/100
+[label] 「可疑」
+[label] 就绪
+[label] <span style="color:#c9a96e;">LLM</span><span style="color:#64748B;">  ·  </span><span style="color:#94A3B8;">午后 · 多云  ·  好感 15/100</span><span style="color:#64748B;">  ·  </span><span style="color:#64748B;">可疑  ·  午后的阳光特别好，木地板被晒得温…</span>
+[button] 🔍
+[button] 📖 回忆
+[button] ×
+[button] 📊 状态
+[button] 🏠 宅邸篇
+[button] 🗡️ 帝国篇
+[button] ⏳ 后期
+[button] 🔄 切换模式
+[button] 发 送
+[input-placeholder] 搜索对话…

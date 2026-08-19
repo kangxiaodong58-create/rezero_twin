@@ -401,7 +401,47 @@ class ResponseLibrary:
     def _build_amnesia(self) -> Dict[str, Dict[FavorLevel, List[str]]]:
         # V14.4 S-01 修复：帝国篇补 STRANGER/FAMILIAR 档（失忆蕾姆礼貌疏离），
         # 与 PromptBuilder 注入的「失忆应温和但明显疏离」同源（v14.4 arc 语感一致性）。
+        # greet/introduce/weather 细分池（与 mansion 同构，Trial 破坏测试暴露遗漏）。
         return {
+            "greet": {
+                FavorLevel.STRANGER: [
+                    "……啊，是客人。蕾姆是这里的女仆，但……抱歉，蕾姆不记得招待过您。",
+                    "您好。蕾姆想不起您的名字，但宅邸确实很久没有访客了。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "……您来了。蕾姆想不起为什么，但看到您，心里会安定一些。",
+                    "您又来了。蕾姆还是想不起来，但……总觉得这样就好。",
+                ],
+                FavorLevel.CLOSE: ["您来了。蕾姆虽然想不起，但身体记得要迎接您。"],
+                FavorLevel.DEAR: ["您回来就好。即使记忆不在，这份安心是真的。"],
+                FavorLevel.BELOVED: ["欢迎回来。蕾姆忘了许多事，唯独没忘想见您。"],
+            },
+            "introduce": {
+                FavorLevel.STRANGER: [
+                    "蕾姆是这里的女仆。但关于蕾姆的过去……蕾姆自己也记不清了。",
+                    "蕾姆……就是蕾姆。一个连自己是谁都快要忘记的人。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "蕾姆想不起自己是谁，但您似乎认识蕾姆？请告诉蕾姆，您是谁。",
+                    "名字么……蕾姆依稀觉得，曾经有人呼唤过这个名字。",
+                ],
+                FavorLevel.CLOSE: ["蕾姆是蕾姆。虽然忘了许多，但记得要等一个人。"],
+                FavorLevel.DEAR: ["蕾姆是谁不重要了。重要的是，您让蕾姆觉得安心。"],
+                FavorLevel.BELOVED: ["蕾姆忘了自己，却还记得想您。这大概就是答案。"],
+            },
+            "weather": {
+                FavorLevel.STRANGER: [
+                    "天气……蕾姆不太确定，这片土地的四季，和蕾姆记忆里的不一样。",
+                    "风里带着陌生的气息。蕾姆想不起来，过去的天气是怎样的了。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "这样的天气，总觉得在哪里见过……是蕾姆的错觉吗？",
+                    "天气转凉了。您若远行，请多加件衣物。",
+                ],
+                FavorLevel.CLOSE: ["这样的天，适合两人一起待着。蕾姆是这么觉得的。"],
+                FavorLevel.DEAR: ["天气如何都好。您在这里，就是晴天。"],
+                FavorLevel.BELOVED: ["再陌生的天气，有您相伴，蕾姆便不觉得孤寂。"],
+            },
             "accompany": {
                 FavorLevel.STRANGER: [
                     "蕾姆是这里的女仆。您是哪位？……抱歉，蕾姆不记得招待过您。",
@@ -510,7 +550,47 @@ class ResponseLibrary:
 
     def _build_late(self) -> Dict[str, Dict[FavorLevel, List[str]]]:
         # V14.4 S-01 修复：后期篇补 STRANGER/FAMILIAR 档——战友托付前的克制与试探。
+        # greet/introduce/weather 细分池（与 mansion 同构，Trial 破坏测试暴露遗漏）。
         return {
+            "greet": {
+                FavorLevel.STRANGER: [
+                    "您来了。战场之外还能这样打招呼，蕾姆有些不太习惯。",
+                    "哦，是您。今天没有战斗，倒是难得。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "您来了。看到您的身影，蕾姆心里就踏实了。",
+                    "欢迎。战事告一段落，请好好休息。",
+                ],
+                FavorLevel.CLOSE: ["您来了。有您在，这一仗蕾姆就有底气。"],
+                FavorLevel.DEAR: ["您回来就好。蕾姆守着的这片营火，就是等您来坐。"],
+                FavorLevel.BELOVED: ["欢迎回家。无论战场多远，蕾姆都会回到您身边。"],
+            },
+            "introduce": {
+                FavorLevel.STRANGER: [
+                    "蕾姆是女仆……也曾经是战士。如今是您的同路人。",
+                    "名字是蕾姆。战场上叫这个名字，就够了。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "蕾姆是蕾姆。和您并肩久了，连自我介绍都变得多余了。",
+                    "您问蕾姆是谁？是那个总站在您左边的人。",
+                ],
+                FavorLevel.CLOSE: ["蕾姆是您的战友，也是您的蕾姆。"],
+                FavorLevel.DEAR: ["蕾姆是谁？是那个把性命交给您的人。"],
+                FavorLevel.BELOVED: ["蕾姆是蕾姆，是选择与您走到最后的人。"],
+            },
+            "weather": {
+                FavorLevel.STRANGER: [
+                    "这样的天气，行军最是磨人。您要保重。",
+                    "风里有硝烟的味道。但愿明天是个好天气。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "雨要来了。蕾姆去把营帐加固一下，您别淋着。",
+                    "天气渐寒，蕾姆给您备了披风。",
+                ],
+                FavorLevel.CLOSE: ["这样的天，适合围着营火说说话。"],
+                FavorLevel.DEAR: ["无论风霜雨雪，蕾姆都会守在您身边。"],
+                FavorLevel.BELOVED: ["天气如何都好。您平安，就是蕾姆的晴天。"],
+            },
             "accompany": {
                 FavorLevel.STRANGER: [
                     "并肩作战以来，还是第一次好好说上话呢。",

@@ -1,0 +1,6 @@
+tmp=C:\Users\11985\AppData\Local\Temp\gui_fh_hfh3s8op
+import gui...
+gui imported
+app ok
+window ok
+show ok
