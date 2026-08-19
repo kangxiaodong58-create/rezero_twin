@@ -169,17 +169,20 @@ SPACING = {
 # ═══════════════════════════════════════════════
 #  Font Tokens（V10.15a：字体族 + 语义刻度，消除 30+ 处字面量）
 # ═══════════════════════════════════════════════
+# V14.8 体验侧收尾：字体回退链（微软雅黑 → 中文回退 → 系统兜底）
+# 跨平台：Windows 雅黑 / macOS 苹方 / Linux Noto CJK；QFont 用逗号分隔 family 列表
 FONT_FAMILY = {
-    "ui":    "Microsoft YaHei",   # 正文/UI
-    "emoji": "Segoe UI Emoji",    # 表情/立绘占位
+    "ui":    "Microsoft YaHei, PingFang SC, Noto Sans CJK SC, WenQuanYi Micro Hei, sans-serif",
+    "emoji": "Segoe UI Emoji, Apple Color Emoji, Noto Color Emoji, sans-serif",
 }
 
+# V14.8 体验侧收尾：caption 8→9（可读性）、title 12→13（与正文 12 拉开层级）
 FONT_SIZE = {
-    "caption":   8,   # 时间戳、最弱辅助
+    "caption":   9,   # 时间戳、最弱辅助
     "small":     9,   # 角色名、按钮文字、状态栏
     "body":     10,   # 历史正文、面板数值、搜索框、系统标签(长)
     "body_lg":  12,   # V14.5：气泡正文、输入框、发送按钮（11→12 中文阅读优化）
-    "title":    12,   # 浮层标题
+    "title":    13,   # V14.8：浮层标题（12→13 与正文分层）
     "title_lg": 14,   # 顶栏标题、面板角色名
     "emoji_sm": 20,   # 头像 emoji（AvatarLabel）
     "emoji_md": 28,   # 情绪 emoji（历史面板）

@@ -1,4 +1,4 @@
-# Changelog
+﻿# Changelog
 
 All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in this file.
 
@@ -27,6 +27,16 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 3. arc 读取：帝国 CAMP 夜 opening（营火旁听故事）/ 后期 BATTLEFIELD interaction（并肩行动）
 4. 篇章均衡：帝国/后期场景语感区分（无宅邸元素 / 无早期「可疑客人」腔）
 
+
+### 体验侧收尾（V14.8）
+- **字体回退链**：FONT_FAMILY.ui 微软雅黑 → PingFang SC → Noto Sans CJK SC → WenQuanYi → sans-serif（跨平台）；emoji 同理
+- **title 12→13px**：浮层标题与正文拉开层级；**caption 8→9px**：辅助文字可读性
+
+### 深度测试 Trial #5（LLM 12 轮 ≈¥0.04）
+- **T5-A 跨篇章漫游**：宅邸→帝国（营地/失忆试探）→后期（营火/战友托付）→回宅邸——场景切换+语感联动+道具延续全对
+- **T5-C 综合联动**：鬼化名场面（后期语境）/事件角色倾向/拉姆托付全过；**角色卡网络词世界观内化**（蕾姆「不太明白这个词的意思」+ 拉姆「yyds？连罗兹瓦尔大人都不用的新词」）
+- **T5-B 后期来信闭环**：离线 5 天触发后期来信 → 用户回应 → 蕾姆接住（落库→LLM 上下文恢复→回应）
+- 观察项 H-1（来信回应语感漂移，低优先）；报告 docs/evaluation/sessions/trial5_2026-08-19/REPORT.md
 ### 体验侧（V14.8 ③）
 - **气泡段间空行**：同角色多段回复（LLM 多句）用 `<p>` 段落包裹（margin 6px）——段间视觉间距，长回复不挤；流式路径保持纯文本（不破坏流式）
 - **距下一阶段提示**：状态面板好感显示升级「好感 45/100 · 距亲密还差 5」（按 FAVOR_THRESHOLDS）——提升成长期待感
