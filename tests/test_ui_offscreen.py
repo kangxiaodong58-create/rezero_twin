@@ -1,4 +1,4 @@
-"""Re:Zero 双子系统 UI 离屏测试（无框架，直接运行）。
+﻿"""Re:Zero 双子系统 UI 离屏测试（无框架，直接运行）。
 
 用法：
     python tests/test_ui_offscreen.py
@@ -413,3 +413,15 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def test_panel_favor_format_v148() -> None:
+    """V14.8 面板排版：距下一阶段提示换行到 stage_label（不挤 favor_label 单行）。"""
+    app = QApplication.instance() or QApplication([])
+    panel = gui.CharacterPanel("蕾 姆", "🩵", gui.COLORS["rem_accent"])
+    panel.update_state(favor=45, stage="熟悉", emotion="😊")
+    assert panel.favor_label.text() == "好感 45/100", f"favor_label 应单行: {panel.favor_label.text()}"
+    assert "距亲密还差 5" in panel.stage_label.text(), f"距提示应在 stage_label: {panel.stage_label.text()}"
+    # 满好感无距提示
+    panel.update_state(favor=100, stage="深爱", emotion="😊")
+    assert "距" not in panel.stage_label.text(), "满好感不应显示距提示"

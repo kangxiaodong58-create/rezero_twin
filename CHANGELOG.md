@@ -33,6 +33,10 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - **title 12→13px**：浮层标题与正文拉开层级；**caption 8→9px**：辅助文字可读性
 
 
+
+### 面板排版修正（V14.8 体验侧）
+- **距下一阶段提示换行**：原「好感 45/100 · 距亲密还差 5」拼单行长串（视觉拥挤）→ favor_label 保持单行「好感 45/100」；距提示移至 stage_label 第二行「「熟悉」\n距亲密还差 5」（弱化分层）；满好感不显示距提示
+- 测试 +1（test_ui_offscreen.py：favor_label 单行 / 距提示在 stage_label / 满好感隐藏）
 ### H-1 修复（来信回应语感对齐）
 - **根因**：prompt 只有「篇章：late_arc」英文枚举，LLM 默认按宅邸蕾姆回应（后期来信回应偏宅邸日常）
 - **修复**：新增 `_build_arc_flavor_section`——按 arc 注入篇章语感（后期战友托付/帝国失忆疏离），后期篇强化「**禁止**打扫/泡茶/整理书架等宅邸女仆日常」

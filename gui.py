@@ -1052,7 +1052,10 @@ class CharacterPanel(QFrame):
         条件标记互斥优先级：记忆模糊 > 锁定 > 独立。
         """
         self.favor_label.setText(f"好感 {favor}/100")
-        # V14.8 体验侧：距下一阶段提示（如「距亲密还差 5」）——提升成长期待感
+        # V14.8 体验侧：距下一阶段提示（如「距亲密还差 5」）——提升成长期待感。
+        # V14.8 排版修正：不拼进 favor_label 单行长串（视觉拥挤），改放 stage_label
+        # 第二行弱化呈现（「「亲密」\n距亲密还差 5」）。
+        stage_text = f"「{stage}」"
         try:
             from shared.state import HardStateEngine, FAVOR_LEVEL_CN, FavorLevel
             thresholds = HardStateEngine.FAVOR_THRESHOLDS
@@ -1065,11 +1068,11 @@ class CharacterPanel(QFrame):
             if next_lv is not None and favor < 100:
                 gap = next_th - favor
                 cn = FAVOR_LEVEL_CN.get(next_lv.name, next_lv.name)
-                self.favor_label.setText(f"好感 {favor}/100 · 距{cn}还差 {gap}")
+                stage_text = f"「{stage}」\n距{cn}还差 {gap}"
         except Exception:
             pass  # 提示失败不影响主显示
         self.favor_bar.setValue(favor)
-        self.stage_label.setText(f"「{stage}」")
+        self.stage_label.setText(stage_text)
         self.emotion_label.setText(emotion)
 
         # 互斥标记
