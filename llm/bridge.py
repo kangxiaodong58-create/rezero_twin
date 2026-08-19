@@ -19,6 +19,8 @@ from shared.prompts import PromptBuilder
 from shared.state import HardStateEngine
 from shared.conversation_store import ConversationStore
 from shared.validators import ResponseValidator
+# Forensic M1：对话事件流（未初始化时安全 no-op，GUI/CLI 共用）
+from runtime.forensic import record
 
 
 _DEFAULT_KEY = "your-api-key-here"
@@ -77,6 +79,8 @@ class ReZeroLLMBridge:
         self._stream_fallback_text: str = ""   # 流式校验失败回避文案（View-Only）
         self._active_stream = None             # 当前流式请求（取消用）
         self._stream_cancelled = False         # 取消标志（生成器内检查）
+        # Forensic M1：会话 generation（stale callback 检测锚点；新会话/重置时递增）
+        self._generation = 1
         self._restore_history_from_store()
 
     def set_opening_atmosphere(self, text: str) -> None:
@@ -372,12 +376,18 @@ class ReZeroLLMBridge:
         max_tokens: int = 600,
         reply_to: Optional[Dict[str, Any]] = None,  # V14.2：引用回复（仅本轮 Prompt 注入）
     ) -> str:
+        record("MESSAGE_RECEIVED", component="bridge", generation=self._generation,
+               payload_summary=f"len={len(user_input)}")
         messages, _state = self._build_messages(user_input, reply_to=reply_to)
         try:
+            record("API_REQUEST", component="bridge", generation=self._generation,
+                   payload_summary="chat")
             reply, is_fallback = self._generate_validated(
                 user_input, messages, temperature, max_tokens
             )
         except Exception as e:
+            record("API_ERROR", component="bridge", generation=self._generation,
+                   exception=str(e)[:500])
             logging.warning("chat API 调用失败: %s", e)
             # V11.10.0：错误返回角色格式，不写【系统】（避免被解析器误分类）
             self._active_scene_id = None
@@ -386,6 +396,7 @@ class ReZeroLLMBridge:
         if is_fallback:
             # V13.0：校验失败兜底 = View-Only——不写 history、不清首轮氛围、
             # 不写场景冷却（mark_interaction 保留：用户确实产生了互动）。
+            record("VALIDATION_FAILED", component="bridge", generation=self._generation)
             logging.warning("chat 校验失败重试耗尽，返回 View-Only 兜底（不写 history）")
             self._last_chat_fallback = True
             self._active_scene_id = None
@@ -400,6 +411,8 @@ class ReZeroLLMBridge:
             self.world.mark_interaction()
         else:
             self._write_scene_cooldown(None)
+        record("REPLY_COMPLETED", component="bridge", generation=self._generation,
+               payload_summary=f"reply_len={len(reply)}")
         return reply
 
     def chat_stream(self, user_input: str, *, temperature: float = 0.65, max_tokens: int = 600,
@@ -413,12 +426,16 @@ class ReZeroLLMBridge:
           生成器在下一个检查点静默提前结束，不校验、不写 history。
         """
         messages, state = self._build_messages(user_input, reply_to=reply_to)
+        record("MESSAGE_RECEIVED", component="bridge", generation=self._generation,
+               payload_summary=f"len={len(user_input)}")
         # V13.0：每次调用重置流式状态（防陈旧回传）
         self._last_stream_ok = None
         self._stream_fallback_text = ""
         self._stream_cancelled = False
         self._active_stream = None
         try:
+            record("API_REQUEST", component="bridge", generation=self._generation,
+                   payload_summary="stream")
             stream = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=messages,
@@ -429,8 +446,14 @@ class ReZeroLLMBridge:
             self._active_stream = stream
 
             def _generator():
+                # Forensic M1：异步链起点捕获 generation（stale 检测锚点）
+                gen = self._generation
                 full = ""
                 try:
+                    if gen != self._generation:
+                        record("STALE_CALLBACK_DETECTED", component="bridge",
+                               generation=gen, payload_summary="stream generator started stale")
+                    record("STREAM_START", component="bridge", generation=gen)
                     for chunk in stream:
                         if self._stream_cancelled:
                             # V13.0：用户取消——静默结束，不校验、不写 history
@@ -462,10 +485,14 @@ class ReZeroLLMBridge:
                         if self.world is not None:
                             self._write_scene_cooldown(self.world)
                             self.world.mark_interaction()
+                        record("STREAM_END", component="bridge", generation=gen,
+                               payload_summary=f"reply_len={len(final)}")
                     else:
                         # V13.0：校验失败回传 GUI，由 GUI 展示 View-Only 回避文案
                         self._last_stream_ok = False
                         self._stream_fallback_text = self._fallback_reply()
+                        record("STREAM_VALIDATION_FAILED", component="bridge",
+                               generation=gen, payload_summary=result.reason)
                         logging.warning(
                             "流式 LLM 回复校验失败，跳过写入 history: %s | input: %s | full: %s",
                             result.reason,
@@ -473,12 +500,14 @@ class ReZeroLLMBridge:
                             full[:200],
                         )
                         self._active_scene_id = None
-                except Exception:
+                except Exception as e:
                     # V13.1（真机抽测暴露）：cancel_stream() 关闭底层 socket 后，
                     # 进行中的迭代会抛 httpx.ReadError（WinError 10038）——取消引发的
                     # 读中断应静默结束（V13.0「取消=安静」契约）；真实异常继续上抛。
                     if self._stream_cancelled:
                         return
+                    record("STREAM_ERROR", component="bridge", generation=gen,
+                           exception=str(e)[:500])
                     raise
                 finally:
                     # V13.0：无论取消/异常/正常结束，关闭底层流并释放引用
@@ -507,6 +536,7 @@ class ReZeroLLMBridge:
         检查点静默提前结束（不校验、不写 history）。
         """
         self._stream_cancelled = True
+        record("STREAM_CANCELLED", component="bridge", generation=self._generation)
         if self._active_stream is not None:
             try:
                 self._active_stream.close()
