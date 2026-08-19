@@ -39,6 +39,13 @@ def test_parse_scene_change() -> None:
     assert SceneManager.parse_scene_change("去书库找本书") == "LIBRARY"
     assert SceneManager.parse_scene_change("厨房的茶很好喝") is None, "闲聊不应触发切换"
     assert SceneManager.parse_scene_change("罗兹瓦尔宅邸") is None
+    # V14.7 修复（验收 O-3）：「在X」是位置陈述非移动意图，不应误触
+    assert SceneManager.parse_scene_change("在厨房喝茶") is None, "「在厨房喝茶」不应切场景"
+    assert SceneManager.parse_scene_change("在花园散步") is None
+    assert SceneManager.parse_scene_change("刚才在厨房泡的茶") is None
+    # 真实移动组合仍识别
+    assert SceneManager.parse_scene_change("进厨房看看") == "KITCHEN"
+    assert SceneManager.parse_scene_change("来到花园") == "GARDEN"
 
 
 def test_scene_opening() -> None:

@@ -28,6 +28,10 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 ### 验收
 1. 测试 +7（test_v14_7_scene.py：切换识别/开场/互动/E4 触发优先级/E3 识别/prompts 注入/持久化）→ pytest **127/127**
 2. 资产文件随 `('content','content')` 自动进 EXE（frozen 兼容）
+3. **真机验收 17/17 达标**（LLM 23 轮 ≈¥0.06，docs/evaluation/sessions/accept_v1457_2026-08-19/）：A1-A8 场景切换/语境持续/闲聊不误触/贝蒂场景声明/人物互动全过；B1 大雨 300 采样零冲突 + B3 野猫事件→蕾姆留食/拉姆嫌弃但允许（rem_view/ram_view 锚定）；C1-C5 角色卡语感全过（女仆腔/克制无病娇/负面接住/从零开始/拉姆毒舌护妹）；F1 场景持久化；失忆重逢疏离+心口隐痛
+
+### Fixed（真机验收发现 O-3）
+- **「在X」误触场景切换**：`_MOVE_PREFIXES` 原含「在」——「在厨房喝茶」「在花园散步」是位置陈述却被误判为移动意图（场景被错误切换）；已移除「在」（保留 去/到/回/进/来到/走去），位置陈述零误触、真实移动仍识别；测试 +5 断言
 
 ---
 
