@@ -665,7 +665,17 @@ class BubbleWidget(QFrame):
         # 纯文本渲染不应用 line-height）；文本需 HTML 转义防注入（highlight_plain_text 已转义）
         label.setTextFormat(Qt.RichText)
         if "<" not in text:  # 纯文本（无高亮 span）→ 转义后渲染
-            label.setText(html.escape(text))
+            escaped = html.escape(text)
+            # V14.8 体验侧：多段回复（同角色多句）段间空行——用 <p> 段落 margin
+            if "\n" in escaped:
+                paras = [p for p in escaped.split("\n") if p.strip()]
+                if len(paras) > 1:
+                    body = "".join(f'<p style="margin:0 0 6px 0;">{p}</p>' for p in paras)
+                    label.setText(f'<div style="line-height:150%;">{body}</div>')
+                else:
+                    label.setText(escaped)
+            else:
+                label.setText(escaped)
         label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg']))
         label.setContentsMargins(0, 0, 0, 0)  # V10.14：去除双重 padding，统一由 QSS 控制
@@ -1039,6 +1049,22 @@ class CharacterPanel(QFrame):
         条件标记互斥优先级：记忆模糊 > 锁定 > 独立。
         """
         self.favor_label.setText(f"好感 {favor}/100")
+        # V14.8 体验侧：距下一阶段提示（如「距亲密还差 5」）——提升成长期待感
+        try:
+            from shared.state import HardStateEngine, FAVOR_LEVEL_CN, FavorLevel
+            thresholds = HardStateEngine.FAVOR_THRESHOLDS
+            next_lv, next_th = None, None
+            for lv in FavorLevel:
+                th = thresholds.get(lv)
+                if th is not None and favor < th:
+                    next_lv, next_th = lv, th
+                    break
+            if next_lv is not None and favor < 100:
+                gap = next_th - favor
+                cn = FAVOR_LEVEL_CN.get(next_lv.name, next_lv.name)
+                self.favor_label.setText(f"好感 {favor}/100 · 距{cn}还差 {gap}")
+        except Exception:
+            pass  # 提示失败不影响主显示
         self.favor_bar.setValue(favor)
         self.stage_label.setText(f"「{stage}」")
         self.emotion_label.setText(emotion)
