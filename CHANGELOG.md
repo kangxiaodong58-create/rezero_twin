@@ -6,6 +6,60 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.5] - 2026-08-19 (审判循环闭环 + LLM 优先内容路线 + 本地模式退场)
+
+> 用户决策三连：① 引入 UX 审判委员会（ux-trial-committee 技能），Trial #1-3 全闭环修复 11 个体验问题；② LLM 模式确认为唯一体验主模式，内容投入转向 LLM 内容资产；③ 本地模板模式（local）完成历史使命（状态机地基）后整体退场。本版本 = 审判产出修复 + 内容升级 + 架构简化。
+
+### 审判循环：Trial #1（盲测/任务/破坏/满意度）
+
+### Fixed（S-01：本地模式复读机——全部意图桶缺低好感档）
+- **ResponseLibrary 文案池化重构**（S-01）：全部 23 桶由单句改为 `List[str]` 池 + 补齐 STRANGER/FAMILIAR 档（陌生礼貌疏离 → 熟悉有温度）；新增 `get_pool()`（精确档 → 更低档 → 桶内最低档，杜绝 fallback 复读）
+- **细分人格池**（greet/introduce/weather）：问候/问身份/问天气不再全部落 accompany——「输入≠输出变化」；`rem_ai._pick` 用 MD5 输入哈希 + 池内 LRU 去重（20 轮连续对话重复率 **0%**）
+- **名字提取拦截修复**：`_extract_name` 返回旧名导致陪伴通道永久失效（好感停滞元凶）；`_extract_name` 补「我是X/请叫我X」口语化模式 + 排除角色自称误判（E-02）
+
+### Fixed（S-02：核心剧情触发失败）
+- **FROM_ZERO 触发条件放宽**：不再要求「吧/啊」字尾（`test_cases.md` 标准句「从零开始……如果可以的话，我想和你一起。」原被判 NORMAL）；排除学习语境（「从零开始学习 Python」不触发）
+- **剧情契约测试**（新 `tests/test_story_contracts.py`）：7 剧情 × 3 篇章 = 21 断言——trigger 全命中 / forbidden 全不命中，防文案-案例-意图三系统脱节
+- 契约暴露并修复：替代品被 MENTION_RAM 抢先 / 「危险的时候记得小心」误判 DANGER（危险需紧急信号）
+
+### Fixed（A-01：边界试探零代价）
+- **边界词库扩池**（滚开/闭嘴/走开/讨厌你/滚蛋等）+ **三级分级回应**：首次温和难过 / 二次理解提醒 / 三次严肃表态 + 关系下降 -6
+
+### Fixed（LLM 真机测试产出，Trial #2-3）
+- **E-01 validator 误禁拉姆第一人称**：prompt 第三人称约束只属于蕾姆，拉姆傲娇人设合法用「我/我可」——`_has_first_person` 仅检查【蕾姆】行（32 轮长会话中 2 轮 6% 被拦回退兜底，归零）
+- **F-01 OOC 词表过宽**：「请问有什么」误杀女仆台词「请问有什么需要帮忙的吗」→ 收窄为完整客服腔「请问有什么可以帮您/帮你」
+- **E-03 关闭**：跨天「你还记得我是谁吗？」误拦 = E-01 同根因，随 E-01 修复关闭；34 轮长上下文压力测试零「我」误拦
+
+### Fixed（B-03：括号体密度）
+- **prompt 输出格式硬约束**：每轮最多 1 处括号动作描写，其余用台词承载情绪；样例去括号化（原样例全是括号，被 LLM 当风格样板）——真机密度 1.0 → 0.0 处/行
+
+### 基建（B-01/B-02/测试隔离性）
+- **B-01 离屏引言崩溃**：offscreen/无 key 环境引言 QThread+LLM 原生崩溃（0xC0000409）→ 安全路径条件扩展（frozen/offscreen/无key 统一走主线程 L2/L3 模板）
+- **B-02 输入框聚焦高亮**：聚焦时金色 accent 边框（小白首启区分输入框与搜索框）
+- **test_quote_reply_v142 隔离性**：无 key 降级 local bot 致引用透传断言失效 → 测试内 mock LLM bot + mode=llm
+
+### 内容路线（LLM 优先）
+- **SCENE_GUIDES 场景库 4→12**：新增 farewell_weight/reunion_tenderness/battle_weary/midnight_confession/wish_offer/apology_accept/guardian_vow/daily_glow（prompts.py + bridge `_detect_scene` 关键词/好感门槛/重量降序优先级）；测试 +2
+- **事件记忆语义召回**（README 遗留）：`_build_events_section(events, user_input)`——钉住保底 + 用户输入 × 事件关键词重叠度动态召回（EVENT_TYPE_TOPICS 9 类主题词 + `_event_words` 中文 2-4 字滑动窗分词）；无相关回落最近；测试 +3
+- **后期篇 proactive 扩池 6→10**：战斗间隙/安静陪伴/托付确认/日常温情 4 条战友语感（registry 69→73）
+
+### 本地模式退场（Phase A/B/C）
+- **Phase A 冻结**：停止 local 文案扩池（ResponseLibrary/RamAI 不再加档位）
+- **Phase B 降级**：GUI 状态栏 local 标注「本地·开发」（弱化色）；README 补 FAQ 定位说明（开发调试模式）
+- **Phase C 整体移除**：`local/` 目录删除（rem_ai/twin_system）；prompts.py ResponseLibrary+RamAI 删除（955→330 行）；gui.py LLM-only（无 key 明确报错，不再降级 local）；main.py `--mode local` 移除；存档残留 local 强制回 LLM
+- A-02（LLM↔local 体验差）从修复队列移除（接受差异，local 退场）
+
+### 验收
+1. pytest **109/109** 全绿（106 既有 + 契约/场景/召回测试 + 引用测试恢复；V14.4 遗留 1 项环境依赖测试已修复）
+2. 20 轮连续对话重复率 **0%**（S-01）；核心剧情 100% 触发（S-02）
+3. 真机 LLM 15-34 轮旅程：角色吸引力 9.5/10（满意度问卷）；跨天记忆细节准确（七十五度茶）；帝国篇 recovery 梯度语感全过
+4. GUI 离屏 LLM-only 启动正常；107→109 测试数含新场景/召回测试
+
+### 已知遗留（调研发现，待后续）
+- 场景=被动事件驱动无主动选择；事件无结构化回应/不落长期记忆；天气×事件冲突（cat_visitor 雨天晒太阳）——调研报告 docs/design/场景体验与原著贴合调研_2026-08-19.md，13 项文案需求待对接文案组
+
+---
+
 ## [V14.4] - 2026-08-19 (来信 arc 感知止血 + 篇章模板注册表骨架)
 
 > 研判报告（docs/design/场景化内容密度与篇章模版池研判_2026-08-19.md）执行：Step 0 堵帝国篇来信 OOC 漏洞（arc 维度 + 帝国克制来信）；Step 1 注册表骨架（template_registry + registry.json 30 条首批 + 缓存 key 补 arc/recovery 分桶）。
