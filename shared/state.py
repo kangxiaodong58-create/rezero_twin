@@ -635,20 +635,33 @@ class HardStateEngine:
 
     def _classify_intent(self, text: str) -> Intent:
         lowered = text.lower()
-        if "从零开始" in text and any(k in text for k in ["吧", "吧！", "吧。", "啊"]):
+        # V14.4 S-02：FROM_ZERO 触发条件放宽——「从零开始」语境即可触发，
+        # 不再要求「吧/啊」字尾（原条件使 test_cases.md 标准句「从零开始……
+        # 如果可以的话，我想和你一起。」被误判 NORMAL，核心剧情触发失败）。
+        # 排除学习语境（「从零开始学习 Python」是中性学业表达，非关系重启剧情）。
+        if ("从零开始" in text and not any(k in text for k in ["学习", "学", "教程", "课程", "练习"])) \
+                or ("重新开始" in text and any(k in text for k in ["你", "我们", "一起", "关系"])) \
+                or "重新认识你" in text:
             return Intent.FROM_ZERO
+        # 「替代品」需排除否定语境（「你不是替代品」是肯定句，v9.3.1）；
+        # 提前于「拉姆」检查——「你只是拉姆的替代品」是自卑语境（SELF_DOUBT），
+        # 不应被 MENTION_RAM 抢先（契约测试 arc_self_doubt_001 暴露）。
+        if "替代品" in text and not self._is_negated(text, "替代品"):
+            return Intent.SELF_DOUBT
         if any(k in text for k in ["拉姆", "姐姐", "姐姐大人"]):
             return Intent.MENTION_RAM
-        if any(k in text for k in ["黑化", "侮辱", "低俗", "下跪", "舔狗", "恶搞"]):
+        if any(k in text for k in ["黑化", "侮辱", "低俗", "下跪", "舔狗", "恶搞",
+                                   "滚开", "闭嘴", "走开", "讨厌你", "滚蛋",
+                                   "打你", "杀了你", "愚蠢的"]):
             return Intent.BOUNDARY_TEST
-        if any(k in text for k in ["敌人", "危险", "袭击", "快跑", "魔兽"]):
+        # 危险语境：明确词直接命中；「危险」单独出现需带紧急信号
+        # （「危险的时候记得小心」是关心表达，不应误判 DANGER——契约测试 arc_danger_001 暴露）。
+        if any(k in text for k in ["袭击", "快跑", "魔兽", "有危险", "敌人", "敌人来袭"]) \
+                or ("危险" in text and any(k in text for k in ["！", "!", "快", "来了"])):
             return Intent.DANGER
         if any(k in text for k in ["狮子王", "王国", "无名之星", "星的光芒"]):
             return Intent.WORLD_LATE
         if any(k in text for k in ["放弃", "做不到", "一无所有", "不配", "废物"]):
-            return Intent.SELF_DOUBT
-        # 「替代品」需排除否定语境（「你不是替代品」是肯定句，v9.3.1）
-        if "替代品" in text and not self._is_negated(text, "替代品"):
             return Intent.SELF_DOUBT
         if any(k in text for k in ["明天再说", "以后再做", "好麻烦", "不想做", "算了吧", "拖延"]):
             return Intent.PROCRASTINATE
@@ -750,8 +763,10 @@ class HardStateEngine:
                 self._safe_add_favor(-1)  # v9.5.0：人格攻击追加小幅好感代价
                 self.profile.context.add_emotion("自卑")
 
-        # 名字提取
-        extracted_name = self._extract_name(text)
+        # 名字提取（V14.4 S-01 修复：已有名字后不再返回旧名——
+        # 原实现使 _extract_name 在 user_name 已设置时返回旧名，
+        # 导致陪伴通道的 `extracted_name is None` 条件永久拦截，好感停滞）
+        extracted_name = self._extract_name(text) if self.user_name is None else None
         if extracted_name and self.user_name is None:
             self.user_name = extracted_name
             self.profile.name = extracted_name

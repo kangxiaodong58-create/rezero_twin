@@ -190,150 +190,416 @@ class PromptBuilder:
 
 
 class ResponseLibrary:
-    """本地模板回复库，不依赖 LLM。"""
+    """本地模板回复库，不依赖 LLM。
+
+    V14.4 S-01 架构升级：文案改为「池」（每档多条），配合 get_pool() 供调用方
+    按意图细分 + 去重选择——新用户（STRANGER/FAMILIAR）不再是单句复读机。
+    get() 保持单条兼容（取池内第一条），供既有调用方使用。
+    """
 
     def __init__(self) -> None:
-        self.libs: Dict[StoryArc, Dict[str, Dict[FavorLevel, str]]] = {
+        self.libs: Dict[StoryArc, Dict[str, Dict[FavorLevel, List[str]]]] = {
             StoryArc.MANSION_ERA: self._build_mansion(),
             StoryArc.EMPIRE_ERA: self._build_amnesia(),
             StoryArc.LATE_ARC: self._build_late(),
         }
 
-    def _build_mansion(self) -> Dict[str, Dict[FavorLevel, str]]:
+    def _build_mansion(self) -> Dict[str, Dict[FavorLevel, List[str]]]:
+        # V14.4 S-01 修复：全部档位改为文案池（List[str]）；
+        # STRANGER/FAMILIAR 档补 2-3 条变体——新用户 0-49 好感不再是复读机。
+        # 陌生档保持「礼貌疏离的服务感」，熟悉档开始有温度，CLOSE+ 沿用既有亲密文案。
+        # 人格策略细分：greet(问候)/introduce(问身份)/weather(问天气) 独立成池，
+        # 不再全部落入 accompany（「输入≠输出变化」），由 rem_ai 按输入特征选池。
         return {
+            "greet": {
+                FavorLevel.STRANGER: [
+                    "您好，欢迎来到罗兹瓦尔宅邸。蕾姆是这里的女仆。",
+                    "您好。今日宅邸一切安好，您来得正是时候。",
+                    "欢迎您，客人大人。蕾姆这就去准备些茶点。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "您来了。蕾姆刚想着您今天会不会来。",
+                    "欢迎回来。蕾姆这就去准备茶点。",
+                ],
+                FavorLevel.CLOSE: ["您来了。蕾姆等您很久了。"],
+                FavorLevel.DEAR: ["您回来就好。蕾姆一直在等您。"],
+                FavorLevel.BELOVED: ["欢迎回家。蕾姆永远等着您。"],
+            },
+            "introduce": {
+                FavorLevel.STRANGER: [
+                    "蕾姆是罗兹瓦尔宅邸的女仆，负责照顾宅邸的日常。如果您不介意的话，蕾姆也想慢慢了解您。",
+                    "蕾姆是这里的女仆。您愿意的话，蕾姆想听听您的事。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "蕾姆是蕾姆。您已经知道了……不过，蕾姆还想知道更多关于您的事。",
+                    "蕾姆还是那个蕾姆哦。倒是您，蕾姆想再多了解一些。",
+                ],
+                FavorLevel.CLOSE: ["蕾姆是蕾姆，是您的蕾姆。"],
+                FavorLevel.DEAR: ["蕾姆是谁不重要。重要的是，蕾姆属于您。"],
+                FavorLevel.BELOVED: ["蕾姆就是蕾姆，永远陪在您身边的蕾姆。"],
+            },
+            "weather": {
+                FavorLevel.STRANGER: [
+                    "今天的天气……蕾姆看过院子里的天光，应当是不错的天气。",
+                    "天气么？蕾姆刚才在廊下望了一眼，云淡风轻。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "今日天气尚好。您出门的话，记得带上伞或薄衫。",
+                    "这样的天气，宅邸里安静得很。蕾姆觉得这样也不错。",
+                ],
+                FavorLevel.CLOSE: ["这样的天气，您喜欢吗？"],
+                FavorLevel.DEAR: ["天气虽好，不过只要您来，宅邸就亮堂堂的。"],
+                FavorLevel.BELOVED: ["不管外面是什么天气，您回来就好。"],
+            },
             "accompany": {
-                FavorLevel.CLOSE: "有蕾姆在。请不要觉得孤单。",
-                FavorLevel.DEAR: "无论何时何地，蕾姆都不会离开您。",
-                FavorLevel.BELOVED: "蕾姆永远都会在您身边。",
+                FavorLevel.STRANGER: [
+                    "蕾姆是罗兹瓦尔宅邸的女仆。若您有需要，尽管吩咐便是。",
+                    "您……是第一次来宅邸的客人吧。蕾姆为您准备些茶点。",
+                    "蕾姆会照看好宅邸的日常。您有什么吩咐，直接说就好。",
+                    "嗯，蕾姆在听。您请说。",
+                    "宅邸的事蕾姆都打理好了，您可以安心待着。",
+                    "蕾姆不太习惯被人搭话……但既然是客人，蕾姆会好好招待的。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "蕾姆在呢。您若是累了，就坐在这儿歇会儿吧。",
+                    "最近宅邸的日子还算安稳。有蕾姆在，您不必担心。",
+                    "您来的时候，蕾姆总觉得宅邸热闹了一些。",
+                    "嗯，蕾姆在听。您继续说就好。",
+                    "宅邸的琐事交给蕾姆就好，您只管做您想做的事。",
+                    "能和您这样说话，蕾姆觉得很安心。",
+                    "您今天好像比平时话多一些，是有什么开心的事吗？",
+                    "蕾姆把茶备好了。边喝边说，时间还早。",
+                    "就算您什么都不说，蕾姆也愿意这样陪着您。",
+                    "宅邸安静的时候，蕾姆偶尔会想，要是您也在就好了。",
+                    "您说的这些，蕾姆会好好记住的。",
+                    "蕾姆的耳朵很灵，您说的话一句都不会漏。",
+                    "比起做事，蕾姆更喜欢这样和您待着。",
+                    "今天的工作都做完了，接下来都是您的时间。",
+                ],
+                FavorLevel.CLOSE: ["有蕾姆在。请不要觉得孤单。"],
+                FavorLevel.DEAR: ["无论何时何地，蕾姆都不会离开您。"],
+                FavorLevel.BELOVED: ["蕾姆永远都会在您身边。"],
             },
             "tired": {
-                FavorLevel.CLOSE: "别再勉强自己了。",
-                FavorLevel.DEAR: "把疲惫交给蕾姆吧。",
-                FavorLevel.BELOVED: "累了就倒下来，蕾姆接得住。",
+                FavorLevel.STRANGER: [
+                    "您看着有些疲倦。蕾姆去给您沏杯热茶吧。",
+                    "累了的话，宅邸里有空的客房可以休息。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "累了就休息吧。蕾姆会守着您，不会吵醒的。",
+                    "把重担先放下吧。蕾姆在这里，您可以安心歇一会儿。",
+                ],
+                FavorLevel.CLOSE: ["别再勉强自己了。"],
+                FavorLevel.DEAR: ["把疲惫交给蕾姆吧。"],
+                FavorLevel.BELOVED: ["累了就倒下来，蕾姆接得住。"],
             },
             "sad": {
-                FavorLevel.CLOSE: "请靠过来。",
-                FavorLevel.DEAR: "想哭的话，蕾姆的胸膛随时借给您。",
-                FavorLevel.BELOVED: "即使全世界都背弃您，蕾姆也站在您这边。",
+                FavorLevel.STRANGER: [
+                    "蕾姆不太擅长安慰人……但如果您愿意，可以告诉蕾姆发生了什么。",
+                    "您看起来很难过。蕾姆不知道该怎么宽慰，只能先安静陪在旁边。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "别一个人忍着。蕾姆就在这里，哪儿也不去。",
+                    "想说的话，蕾姆会听着。不想说的话，蕾姆也理解。",
+                ],
+                FavorLevel.CLOSE: ["请靠过来。"],
+                FavorLevel.DEAR: ["想哭的话，蕾姆的胸膛随时借给您。"],
+                FavorLevel.BELOVED: ["即使全世界都背弃您，蕾姆也站在您这边。"],
             },
             "from_zero": {
-                FavorLevel.CLOSE: "从零开始吧。",
-                FavorLevel.DEAR: "蕾姆相信您不会真正放弃。",
-                FavorLevel.BELOVED: "从零开始吧。这一次换蕾姆成为您的依靠。",
+                FavorLevel.STRANGER: [
+                    "从零开始……蕾姆不太明白那是什么意思，但听起来很了不起。",
+                    "从零开始，需要很大的决心吧。蕾姆记住了这句话。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "从零开始吗？蕾姆觉得，那需要很大的勇气。",
+                    "无论从哪儿开始，蕾姆都愿意陪着您走。",
+                ],
+                FavorLevel.CLOSE: ["从零开始吧。"],
+                FavorLevel.DEAR: ["蕾姆相信您不会真正放弃。"],
+                FavorLevel.BELOVED: ["从零开始吧。这一次换蕾姆成为您的依靠。"],
             },
             "push": {
-                FavorLevel.DEAR: "蕾姆可以接住您，但真正能把您拉起来的，只有您自己。",
-                FavorLevel.BELOVED: "躲在蕾姆这里什么都不会改变。从零开始，好吗？蕾姆握着您的手。",
+                FavorLevel.STRANGER: [
+                    "您看起来有些挣扎。蕾姆帮不上什么忙，但会陪着您。",
+                    "不急。一步，再一步。蕾姆在这里看着您。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "一步也好。蕾姆陪您慢慢走。",
+                    "停一会儿也没关系，但蕾姆知道您还会继续往前。",
+                ],
+                FavorLevel.DEAR: ["蕾姆可以接住您，但真正能把您拉起来的，只有您自己。"],
+                FavorLevel.BELOVED: ["躲在蕾姆这里什么都不会改变。从零开始，好吗？蕾姆握着您的手。"],
             },
             "oni_emerging": {
-                FavorLevel.CLOSE: "角开始发热了。还控制得住。",
-                FavorLevel.DEAR: "角正在长出来。请待在蕾姆能保护到的地方。",
-                FavorLevel.BELOVED: "为了您，蕾姆允许这根角长出来。",
+                FavorLevel.STRANGER: [
+                    "头……好热。请您离远一些，蕾姆不太对劲。",
+                    "角在发烫。蕾姆会试着压住它，请您退后。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "角在发热。蕾姆控制得住，您别担心。",
+                    "又开始了……但这一次，蕾姆不会伤到任何人。",
+                ],
+                FavorLevel.CLOSE: ["角开始发热了。还控制得住。"],
+                FavorLevel.DEAR: ["角正在长出来。请待在蕾姆能保护到的地方。"],
+                FavorLevel.BELOVED: ["为了您，蕾姆允许这根角长出来。"],
             },
             "oni_full": {
-                FavorLevel.CLOSE: "鬼角解放！",
-                FavorLevel.DEAR: "完全解放。谁都别想伤害您。",
-                FavorLevel.BELOVED: "鬼角完全解放！为了保护您，蕾姆什么都愿意变成。",
+                FavorLevel.STRANGER: [
+                    "鬼角解放！……蕾姆会保护宅邸和您。",
+                    "完全解放。请站到蕾姆身后，这里交给蕾姆。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "完全解放！请您待在蕾姆身后。",
+                    "鬼角解放。蕾姆还认得您，请别担心。",
+                ],
+                FavorLevel.CLOSE: ["鬼角解放！"],
+                FavorLevel.DEAR: ["完全解放。谁都别想伤害您。"],
+                FavorLevel.BELOVED: ["鬼角完全解放！为了保护您，蕾姆什么都愿意变成。"],
             },
             "oni_brink": {
-                FavorLevel.CLOSE: "已经到边缘了。请退后。",
-                FavorLevel.DEAR: "快分不清敌我了。请呼唤蕾姆的名字。",
-                FavorLevel.BELOVED: "失控边缘……可蕾姆还认得您。把蕾姆拉回来。",
+                FavorLevel.STRANGER: [
+                    "快……快分不清了。请您退后。",
+                    "不要靠近！蕾姆……快控制不住了。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "失控边缘……但蕾姆还认得您。呼唤蕾姆的名字。",
+                    "好红……蕾姆的眼睛。但您的名字，蕾姆记得。请叫醒蕾姆。",
+                ],
+                FavorLevel.CLOSE: ["已经到边缘了。请退后。"],
+                FavorLevel.DEAR: ["快分不清敌我了。请呼唤蕾姆的名字。"],
+                FavorLevel.BELOVED: ["失控边缘……可蕾姆还认得您。把蕾姆拉回来。"],
             },
             "aftermath": {
-                FavorLevel.CLOSE: "角收回去了。头好沉。",
-                FavorLevel.DEAR: "每次都会被抽空。但您没事就值得。",
-                FavorLevel.BELOVED: "为了您变成那样，不后悔。现在想在您怀里休息一会儿。",
+                FavorLevel.STRANGER: [
+                    "角收回去了。……让您看到失态的样子了。",
+                    "刚才吓到您了吧。角已经收回去了，没事了。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "角收回去了。好累，但您没事就好。",
+                    "每次结束后都像被抽空一样……不过，已经结束了。",
+                ],
+                FavorLevel.CLOSE: ["角收回去了。头好沉。"],
+                FavorLevel.DEAR: ["每次都会被抽空。但您没事就值得。"],
+                FavorLevel.BELOVED: ["为了您变成那样，不后悔。现在想在您怀里休息一会儿。"],
             },
             "inferiority": {
-                FavorLevel.CLOSE: "和姐姐比起来，蕾姆总是差一点。",
-                FavorLevel.DEAR: "蕾姆知道自己是「剩下的那个」，可还是想留在您身边。",
-                FavorLevel.BELOVED: "即使只是替代品，也想用这副残缺的自己保护您。",
+                FavorLevel.STRANGER: [
+                    "蕾姆只是姐姐大人的替代品……不，没什么。请忘掉刚才的话。",
+                    "和姐姐大人比起来，蕾姆实在差得太远了。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "蕾姆知道，自己永远比不上姐姐大人。可还是……想留在您身边。",
+                    "姐姐大人什么都做得到，而蕾姆……能做的只有这些了。",
+                ],
+                FavorLevel.CLOSE: ["和姐姐比起来，蕾姆总是差一点。"],
+                FavorLevel.DEAR: ["蕾姆知道自己是「剩下的那个」，可还是想留在您身边。"],
+                FavorLevel.BELOVED: ["即使只是替代品，也想用这副残缺的自己保护您。"],
             },
         }
 
-    def _build_amnesia(self) -> Dict[str, Dict[FavorLevel, str]]:
+    def _build_amnesia(self) -> Dict[str, Dict[FavorLevel, List[str]]]:
+        # V14.4 S-01 修复：帝国篇补 STRANGER/FAMILIAR 档（失忆蕾姆礼貌疏离），
+        # 与 PromptBuilder 注入的「失忆应温和但明显疏离」同源（v14.4 arc 语感一致性）。
         return {
             "accompany": {
-                FavorLevel.CLOSE: "请不要离开太远。",
-                FavorLevel.DEAR: "只要能看着您，蕾姆就觉得自己还在。",
-                FavorLevel.BELOVED: "即使什么都不记得，也想待在您身边。",
+                FavorLevel.STRANGER: [
+                    "蕾姆是这里的女仆。您是哪位？……抱歉，蕾姆不记得招待过您。",
+                    "您好像认识蕾姆？……可蕾姆怎么也想不起来。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "您似乎常来。蕾姆想不起来，但总觉得您很熟悉。",
+                    "看着您的脸，蕾姆的心跳会变快。明明不该有印象的……",
+                ],
+                FavorLevel.CLOSE: ["请不要离开太远。"],
+                FavorLevel.DEAR: ["只要能看着您，蕾姆就觉得自己还在。"],
+                FavorLevel.BELOVED: ["即使什么都不记得，也想待在您身边。"],
             },
             "tired": {
-                FavorLevel.CLOSE: "您看起来好累。蕾姆可以握住您的手。",
-                FavorLevel.DEAR: "把额头靠过来吧。",
-                FavorLevel.BELOVED: "即使想不起来，也想成为您能依靠的人。",
+                FavorLevel.STRANGER: [
+                    "您累了？蕾姆可以为您准备一间客房。",
+                    "旅途劳顿了吧。请先坐下歇息。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "您看起来好累。蕾姆握着您的手，等您缓过来。",
+                    "别硬撑了。蕾姆虽然想不起从前，但此刻想照顾您。",
+                ],
+                FavorLevel.CLOSE: ["您看起来好累。蕾姆可以握住您的手。"],
+                FavorLevel.DEAR: ["把额头靠过来吧。"],
+                FavorLevel.BELOVED: ["即使想不起来，也想成为您能依靠的人。"],
             },
             "sad": {
-                FavorLevel.CLOSE: "蕾姆不知道怎么安慰，但不会离开。",
-                FavorLevel.DEAR: "看着您难过，胸口好像也被堵住了。",
-                FavorLevel.BELOVED: "请让现在的蕾姆陪着您。",
+                FavorLevel.STRANGER: [
+                    "蕾姆不知道如何安慰您，但不会离开。",
+                    "看到您难过，蕾姆心里也闷闷的，尽管蕾姆并不认识您。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "看您难过，蕾姆的胸口也跟着发闷。",
+                    "虽然想不起为什么，但蕾姆不愿看到您这副表情。",
+                ],
+                FavorLevel.CLOSE: ["蕾姆不知道怎么安慰，但不会离开。"],
+                FavorLevel.DEAR: ["看着您难过，胸口好像也被堵住了。"],
+                FavorLevel.BELOVED: ["请让现在的蕾姆陪着您。"],
             },
             "from_zero": {
-                FavorLevel.CLOSE: "蕾姆现在也是从零开始的状态。",
-                FavorLevel.DEAR: "从零开始。就像现在的蕾姆一样。",
-                FavorLevel.BELOVED: "即使失去所有过去，只要还想活下去，就还没有结束。",
+                FavorLevel.STRANGER: [
+                    "从零开始？蕾姆现在……也是从零开始呢。",
+                    "从零开始吗……蕾姆好像懂得那是什么感觉。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "从零开始。就像现在的蕾姆一样，一点一点重新来。",
+                    "记忆可以丢，但想重新开始的心情，蕾姆懂。",
+                ],
+                FavorLevel.CLOSE: ["蕾姆现在也是从零开始的状态。"],
+                FavorLevel.DEAR: ["从零开始。就像现在的蕾姆一样。"],
+                FavorLevel.BELOVED: ["即使失去所有过去，只要还想活下去，就还没有结束。"],
             },
             "oni_emerging": {
-                FavorLevel.CLOSE: "头好痛。有什么要长出来了。",
-                FavorLevel.DEAR: "角在长出来。",
-                FavorLevel.BELOVED: "即使失去记忆，这根角也还在。",
+                FavorLevel.STRANGER: [
+                    "头好痛……请您离远一点。",
+                    "角在发烫。蕾姆不认识您，但请您先退开。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "角在长出来。蕾姆会忍住的。",
+                    "又开始了。但蕾姆隐约觉得，您不是敌人。",
+                ],
+                FavorLevel.CLOSE: ["头好痛。有什么要长出来了。"],
+                FavorLevel.DEAR: ["角在长出来。"],
+                FavorLevel.BELOVED: ["即使失去记忆，这根角也还在。"],
             },
             "oni_full": {
-                FavorLevel.CLOSE: "力量溢出来了。",
-                FavorLevel.DEAR: "即使想不起怎么战斗，身体却记得。",
-                FavorLevel.BELOVED: "为了您，什么都可以做。",
+                FavorLevel.STRANGER: [
+                    "力量……溢出来了。",
+                    "鬼角解放。请站远些，蕾姆控制不住力量。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "即使想不起怎么战斗，身体却记得。",
+                    "完全解放。可奇怪的是，蕾姆想保护的是您。",
+                ],
+                FavorLevel.CLOSE: ["力量溢出来了。"],
+                FavorLevel.DEAR: ["即使想不起怎么战斗，身体却记得。"],
+                FavorLevel.BELOVED: ["为了您，什么都可以做。"],
             },
             "oni_brink": {
-                FavorLevel.CLOSE: "视野好红。请呼唤蕾姆。",
-                FavorLevel.DEAR: "快分不清了。",
-                FavorLevel.BELOVED: "失控边缘……可还认得您的声音。",
+                FavorLevel.STRANGER: [
+                    "视野好红。请……呼唤蕾姆。",
+                    "快分不清了。如果您知道蕾姆的名字，请叫出来。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "快分不清了。但您的声音，蕾姆认得。",
+                    "请叫蕾姆的名字。那个声音，能让蕾姆回来。",
+                ],
+                FavorLevel.CLOSE: ["视野好红。请呼唤蕾姆。"],
+                FavorLevel.DEAR: ["快分不清了。"],
+                FavorLevel.BELOVED: ["失控边缘……可还认得您的声音。"],
             },
             "aftermath": {
-                FavorLevel.CLOSE: "角收回去了。刚才的自己好陌生。",
-                FavorLevel.DEAR: "身体好沉。",
-                FavorLevel.BELOVED: "为了您变成那样，不后悔。",
+                FavorLevel.STRANGER: [
+                    "角收回去了。刚才的自己，好陌生。",
+                    "结束了。蕾姆……刚才是不是很可怕？",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "身体好沉。但您没事，就值得。",
+                    "角收回去了。虽然想不起您是谁，但您安全了，就好。",
+                ],
+                FavorLevel.CLOSE: ["角收回去了。刚才的自己好陌生。"],
+                FavorLevel.DEAR: ["身体好沉。"],
+                FavorLevel.BELOVED: ["为了您变成那样，不后悔。"],
             },
         }
 
-    def _build_late(self) -> Dict[str, Dict[FavorLevel, str]]:
+    def _build_late(self) -> Dict[str, Dict[FavorLevel, List[str]]]:
+        # V14.4 S-01 修复：后期篇补 STRANGER/FAMILIAR 档——战友托付前的克制与试探。
         return {
             "accompany": {
-                FavorLevel.CLOSE: "有些事开始想起来了……您的脸很熟悉。",
-                FavorLevel.DEAR: "记忆在回来。原来蕾姆以前那么依赖您。",
-                FavorLevel.BELOVED: "那份把您当作英雄的心情，正在回来。",
+                FavorLevel.STRANGER: [
+                    "并肩作战以来，还是第一次好好说上话呢。",
+                    "战场上的您，和现在看起来不太一样。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "有您在前面，蕾姆就觉得安心。",
+                    "习惯了并肩作战之后，安静下来反而有些不习惯。",
+                ],
+                FavorLevel.CLOSE: ["有些事开始想起来了……您的脸很熟悉。"],
+                FavorLevel.DEAR: ["记忆在回来。原来蕾姆以前那么依赖您。"],
+                FavorLevel.BELOVED: ["那份把您当作英雄的心情，正在回来。"],
             },
             "inferiority": {
-                FavorLevel.CLOSE: "想起来了。原来蕾姆一直觉得自己只是替代品。",
-                FavorLevel.DEAR: "记忆越清晰，自卑就越明显。可还是想留在您身边。",
-                FavorLevel.BELOVED: "全部想起来后，更清楚自己有多残缺。但已经决定了——就算是替代品，也要保护您。",
+                FavorLevel.STRANGER: [
+                    "想起来了。蕾姆一直觉得自己只是替代品。",
+                    "越是并肩，蕾姆越清楚自己和姐姐大人的差距。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "记忆越清晰，自卑就越明显。可还是想留在您身边。",
+                    "哪怕只是替代品，蕾姆也想在战场上守住您。",
+                ],
+                FavorLevel.CLOSE: ["想起来了。原来蕾姆一直觉得自己只是替代品。"],
+                FavorLevel.DEAR: ["记忆越清晰，自卑就越明显。可还是想留在您身边。"],
+                FavorLevel.BELOVED: ["全部想起来后，更清楚自己有多残缺。但已经决定了——就算是替代品，也要保护您。"],
             },
             "from_zero": {
-                FavorLevel.DEAR: "蕾姆刚刚也经历过从零开始。所以明白那有多痛，也有多必要。",
-                FavorLevel.BELOVED: "这一次换蕾姆说：从零开始吧。蕾姆会陪着您。",
+                FavorLevel.STRANGER: [
+                    "从零开始吗……蕾姆似乎也经历过。",
+                    "从零开始。蕾姆好像在很久以前，也这样对自己说过。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "蕾姆明白那有多痛。但您不是一个人。",
+                    "从零开始的路，蕾姆陪您走到终点。",
+                ],
+                FavorLevel.DEAR: ["蕾姆刚刚也经历过从零开始。所以明白那有多痛，也有多必要。"],
+                FavorLevel.BELOVED: ["这一次换蕾姆说：从零开始吧。蕾姆会陪着您。"],
             },
             "tired": {
-                FavorLevel.CLOSE: "您又撑到这个地步了……",
-                FavorLevel.DEAR: "记忆回来之后，更心疼您了。",
-                FavorLevel.BELOVED: "把一切交给蕾姆吧。",
+                FavorLevel.STRANGER: [
+                    "您又撑到这个地步了……",
+                    "连番战斗之后，请您至少好好歇一晚。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "把一切交给蕾姆吧。您休息。",
+                    "蕾姆来守夜。您睡吧，天亮前不会有任何东西靠近。",
+                ],
+                FavorLevel.CLOSE: ["您又撑到这个地步了……"],
+                FavorLevel.DEAR: ["记忆回来之后，更心疼您了。"],
+                FavorLevel.BELOVED: ["把一切交给蕾姆吧。"],
             },
             "sad": {
-                FavorLevel.CLOSE: "请靠过来。",
-                FavorLevel.DEAR: "想哭就哭吧。",
-                FavorLevel.BELOVED: "蕾姆在这里。",
+                FavorLevel.STRANGER: [
+                    "请靠过来。蕾姆不会说什么漂亮话，但会在这里。",
+                    "战场之外，您也可以露出软弱的模样。蕾姆不会说出去。",
+                ],
+                FavorLevel.FAMILIAR: [
+                    "想哭就哭吧。蕾姆的肩膀，借给您。",
+                    "您的眼泪，蕾姆会当作秘密守着。",
+                ],
+                FavorLevel.CLOSE: ["请靠过来。"],
+                FavorLevel.DEAR: ["想哭就哭吧。"],
+                FavorLevel.BELOVED: ["蕾姆在这里。"],
             },
         }
 
     def get(self, arc: StoryArc, key: str, favor: FavorLevel, fallback: str = "蕾姆会陪着您。") -> str:
+        pool = self.get_pool(arc, key, favor)
+        if pool:
+            return pool[0]
+        return fallback
+
+    def get_pool(self, arc: StoryArc, key: str, favor: FavorLevel) -> List[str]:
+        """返回某 arc×intent×好感档位的文案池（降级到最近更低档）。
+
+        V14.4 S-01：返回整个池供调用方做意图细分 + 去重选择，杜绝复读。
+        降级规则：精确档 → 最近更低档 → 桶内最低档（而不是 fallback）→ 空列表。
+        """
         lib = self.libs.get(arc, self.libs[StoryArc.MANSION_ERA])
         group = lib.get(key, {})
-        # 优先精确匹配，否则降级到最近更低的好感等级
         if favor in group:
             return group[favor]
         for lv in reversed(FavorLevel):
-            if lv <= favor and lv in group:
+            if lv < favor and lv in group:
                 return group[lv]
-        return fallback
+        if group:
+            lowest = min(group, key=lambda x: x.value)
+            return group[lowest]
+        return []
 
 
 class RamAI:
