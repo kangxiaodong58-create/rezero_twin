@@ -6,9 +6,49 @@
 
 from __future__ import annotations
 
+import re
 from typing import Any, Dict, List, Optional
 
 from .state import FavorLevel, OniStage, RamStage, StoryArc, TwinState, WorldState, StructuredProfile, FAVOR_LEVEL_CN
+
+
+# V14.4（LLM 优先内容路线 P0）：事件类型 → 主题词（语义召回用）
+EVENT_TYPE_TOPICS: Dict[str, List[str]] = {
+    "name_first": ["名字", "姓名", "小东", "称呼"],
+    "favor_up": ["好感", "喜欢", "开心"],
+    "locked": ["忠诚", "锁定", "永远"],
+    "ram_up": ["拉姆", "姐姐", "评价", "托付"],
+    "reunion": ["重逢", "记忆", "恢复", "想起"],
+    "oni": ["鬼化", "鬼角", "角", "失控", "保护"],
+    "breaker": ["破局者", "独立", "影子"],
+    "affirm": ["替代品", "肯定", "独立", "蕾姆自己"],
+    "conflict": ["冲突", "魔女", "危险", "戒备"],
+}
+
+# 常见虚词/停用词（分词时剔除，避免噪音关键词）
+_STOPWORDS = frozenset(
+    "的 了 是 在 我 你 他 她 它 们 这 那 有 和 与 也 都 就 很 会 想 说 做 去 来 着 过 被 把 吗 呢 啊 吧 第 次 对话 用户 蕾姆 拉姆 大人 姐姐 宅邸".split()
+)
+
+
+def _event_words(text: str) -> List[str]:
+    """从中文文本抽取 2-4 字候选关键词（去停用词；单字词仅保留情绪/实体字）。"""
+    words: List[str] = []
+    # 2-6 字滑动窗口候选（覆盖「从零开始」「替代品」「鬼角解放」等）
+    for n in (4, 3, 2):
+        for i in range(len(text) - n + 1):
+            w = text[i:i + n]
+            if w in _STOPWORDS or any(c in w for c in "，。！？、；：\"'（）()「」…·—"):
+                continue
+            words.append(w)
+    # 去重保序
+    seen: set = set()
+    out: List[str] = []
+    for w in words:
+        if w not in seen:
+            seen.add(w)
+            out.append(w)
+    return out
 
 
 class PromptBuilder:
@@ -96,6 +136,7 @@ class PromptBuilder:
         profile: Optional[StructuredProfile] = None,
         scene_id: Optional[str] = None,
         ram_witness: bool = False,
+        user_input: str = "",  # V14.4：事件记忆语义召回（按输入相关性选事件）
     ) -> str:
         name = state.user_name or "客人大人"
         world_section = PromptBuilder._build_world_section(world)
@@ -103,7 +144,7 @@ class PromptBuilder:
         ind_desc = PromptBuilder._build_independence_desc(state.independence)
         ram_guide = PromptBuilder._build_ram_guide(state.ram_stage)
         special_str = PromptBuilder._build_special_states(state)
-        events_section = PromptBuilder._build_events_section(state.events)
+        events_section = PromptBuilder._build_events_section(state.events, user_input)
         # V11.10.0：情感场景短节
         scene_section = PromptBuilder.SCENE_GUIDES.get(scene_id, "") if scene_id else ""
         ram_witness_note = ""
@@ -225,13 +266,53 @@ class PromptBuilder:
         return "\n".join(special) if special else "无特殊战斗或危机状态。"
 
     @staticmethod
-    def _build_events_section(events: Optional[List[Dict[str, Any]]]) -> str:
+    def _build_events_section(events: Optional[List[Dict[str, Any]]],
+                              user_input: str = "") -> str:
+        """构建共同经历注入段。
+
+        V14.4（LLM 优先内容路线 P0）：语义召回升级——
+        原实现「钉住 + 最近 3 条」硬注入，用户聊 A 却注入 B 的往事（README 遗留）。
+        新实现：钉住事件保底 + 按「用户输入 × 事件关键词」重叠度动态召回；
+        无重叠时回落最近事件（保证永远有上下文锚点）。
+
+        事件关键词派生：
+        - type 映射主题词（name_first→名字, locked→忠诚, oni→鬼化, ram_up→拉姆…）
+        - summary/excerpt 抽取（去常见虚词后的 2-4 字词）
+        """
         events = events or []
         if not events:
             return ""
         pinned = [e for e in events if e.get("pinned")]
-        recent = [e for e in events if not e.get("pinned")][-3:]
-        shown = (pinned + recent)[-6:]
+        others = [e for e in events if not e.get("pinned")]
+
+        def keywords_of(e: Dict[str, Any]) -> List[str]:
+            kw = list(EVENT_TYPE_TOPICS.get(e.get("type", ""), []))
+            for src in (e.get("summary", ""), e.get("excerpt", "")):
+                kw.extend(w for w in _event_words(src) if w not in kw)
+            return kw
+
+        if user_input:
+            user_kw = _event_words(user_input)
+            # 重叠打分：命中 1 词 +2，命中所属 type 主题 +3（主题词权重更高）
+            def score(e: Dict[str, Any]) -> int:
+                s = 0
+                for w in keywords_of(e):
+                    if w in user_kw:
+                        s += 2
+                for t in EVENT_TYPE_TOPICS.get(e.get("type", ""), []):
+                    if t in user_input:
+                        s += 3
+                return s
+
+            related = sorted(others, key=score, reverse=True)
+            # 有相关事件（score>0）优先相关；否则最近事件兜底
+            scored = [e for e in related if score(e) > 0]
+            recent_pick = scored if scored else others[-3:]
+            shown = (pinned + recent_pick)[-6:]
+        else:
+            recent = others[-3:]
+            shown = (pinned + recent)[-6:]
+
         lines = []
         for e in shown:
             line = f"- {e.get('summary', '')}"

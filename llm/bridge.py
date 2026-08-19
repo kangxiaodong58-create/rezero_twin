@@ -157,7 +157,8 @@ class ReZeroLLMBridge:
         scene_id, ram_witness = self._detect_scene(user_input, state, world)
         self._active_scene_id = scene_id
         system_prompt = PromptBuilder.build(state, world=world, profile=profile,
-                                            scene_id=scene_id, ram_witness=ram_witness)
+                                            scene_id=scene_id, ram_witness=ram_witness,
+                                            user_input=user_input)  # V14.4：事件语义召回
         # v10.8.1：首轮氛围注入（View-Only，不进 history，不写 ConversationStore）
         if not self.history and self._first_round_atmosphere:
             system_prompt += (
