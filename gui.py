@@ -2150,11 +2150,15 @@ class TwinChatApp(QMainWindow):
                 except Exception as e:
                     _log(f"引言回调异常: {e}\n{traceback.format_exc()}")
 
-            # ── V10.10.4: frozen 安全路径 ──
-            # frozen EXE 下 QThread + LLM 调用触发原生崩溃（0xC0000409），
-            # 改为主线程直接走 L2/L3 模板生成，不创建线程不调 LLM。
-            if getattr(sys, "frozen", False):
-                _log("frozen 安全引言路径")
+            # ── V10.10.4 + V14.4: 安全引言路径 ──
+            # frozen EXE 下 QThread + LLM 调用触发原生崩溃（0xC0000409）；
+            # V14.4（Trial #1 B-01）：离屏环境（QT_QPA_PLATFORM=offscreen）或无
+            # API key 同样存在崩溃风险（offscreen 下 QThread+LLM 崩溃），
+            # 统一走主线程 L2/L3 模板生成，不创建线程不调 LLM。
+            is_offscreen = os.environ.get("QT_QPA_PLATFORM", "") == "offscreen"
+            no_api_key = not os.getenv("DEEPSEEK_API_KEY")
+            if getattr(sys, "frozen", False) or is_offscreen or no_api_key:
+                _log("安全引言路径 (frozen/offscreen/无key)")
                 from shared.vignette import VignetteGenerator
                 engine = self.bot.engine
                 gen = VignetteGenerator(llm_callable=None)  # None → 跳过 L1，直接 L2/L3
@@ -3065,6 +3069,15 @@ class TwinChatApp(QMainWindow):
             if event.key() == Qt.Key_Return and not event.modifiers() & Qt.ShiftModifier:
                 self._send_message()
                 return True
+        # V14.4（Trial #1 B-02）：输入框聚焦高亮——小白首启区分输入框与搜索框
+        if source is self.input_box and event.type() == QEvent.FocusIn:
+            self.input_box.setStyleSheet(
+                f"QTextEdit {{ border: 2px solid {COLORS['accent']}; border-radius: 10px;"
+                f" background-color: {COLORS['input']}; padding: 6px 10px; }}")
+        if source is self.input_box and event.type() == QEvent.FocusOut:
+            self.input_box.setStyleSheet(
+                f"QTextEdit {{ border: 1px solid {COLORS['border_subtle']}; border-radius: 10px;"
+                f" background-color: {COLORS['input']}; padding: 6px 10px; }}")
         # 樱花层跟随 viewport 大小变化
         if source is self.scroll.viewport() and event.type() == QEvent.Resize:
             self.sakura.setGeometry(self.scroll.viewport().rect())

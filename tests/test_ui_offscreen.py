@@ -42,9 +42,23 @@ SPACING = gui.SPACING
 
 
 def _make_window() -> gui.TwinChatApp:
-    """构造主窗口并清空历史（保留 stretch），使间距断言从空布局开始。"""
+    """构造主窗口并清空历史（保留 stretch），使间距断言从空布局开始。
+
+    V14.4 污染回归：MemoryStore 走临时目录——测试绝不读写真实
+    data/memory.json（并行会话盲测曾写入 mode=local 导致引用测试
+    KeyError 回归；且构造期 _save_state/migrate 会污染真实存档）。
+    临时 store 为空 → mode 默认 llm → LLM bridge 正确创建。
+    """
+    import tempfile
+
     app = QApplication.instance() or QApplication([])
-    win = gui.TwinChatApp()
+    tmp_dir = tempfile.mkdtemp(prefix="hermes-test-store-")
+    orig_store = gui.MemoryStore
+    gui.MemoryStore = lambda: orig_store(root_dir=tmp_dir)
+    try:
+        win = gui.TwinChatApp()
+    finally:
+        gui.MemoryStore = orig_store
     win.show()
     while win.chat_layout.count() > 0:
         item = win.chat_layout.takeAt(0)
@@ -228,7 +242,12 @@ def test_search_highlight_v141() -> None:
 
 
 def test_quote_reply_v142() -> None:
-    """V14.2：引用条显示 / 已撤提示 / 取消 / 发送消费（临时 DB）。"""
+    """V14.2：引用条显示 / 已撤提示 / 取消 / 发送消费（临时 DB）。
+
+    V14.4（Trial #1）：修复测试隔离性——无 DEEPSEEK_API_KEY 环境下 _create_bot
+    降级 local（ReZeroTwinSystem 无 chat_stream）→ _send_message 走 _send_sync，
+    mock 的 _send_llm_stream 永不触发。现显式 mock LLM bot + mode="llm"。
+    """
     import tempfile
 
     win = _make_window()
@@ -236,6 +255,15 @@ def test_quote_reply_v142() -> None:
     os.close(fd)
     os.remove(db_path)
     win.conv_store = gui.ConversationStore(db_path=db_path)
+
+    # V14.4：mock LLM bot（隔离性修复）——让 _send_message 走 _send_llm_stream 分支
+    class FakeLLMBot:
+        def chat_stream(self, *a, **k):
+            pass
+        def chat(self, *a, **k):
+            return "mock"
+    win.bot = FakeLLMBot()
+    win.mode = "llm"
 
     # 1) 引用 normal 消息 → 引用条显示 + _quote 设置
     w = win._append_parsed_message("蕾 姆", "这是可以被引用的内容", "rem")
