@@ -28,16 +28,27 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - **缓存 key 补 arc/recovery**（§3.3 修复）：`build_cache_key` 加 `arc` + `recovery` 参数（recovery 桶 a/r/m 三档）；`generate(..., arc="mansion_era")` 默认零感知；GUI 传 `engine.arc.value`——宅邸篇缓存不再被帝国篇命中
 - 测试 +8（`tests/test_template_registry.py`）：加载校验 30 条 / 坏 JSON 降级 / 同 seed 确定性 / arc 兜底 / recovery 档位（低档疏离·恢复期·满恢复回落）/ 逐级放松链路 / offline_bucket 硬过滤 / 缓存 key 分桶回归
 
+### Step 2：宅邸池迁移（vignette 接入注册表）
+
+### Changed
+- **`_pick_short_opening` 迁移**：内容选择从旧 openings 硬匹配（id 关键词 sun/rain/night/return/fog）→ 注册表 `slot=vignette`（10 条含天气/时段条件，确定性 hash 同日同时段稳定）；**旧池保留为防御兜底**（registry 空/缺失时行为不变）
+- **`_pick_return_flavor`（新）**：归来感从旧天级粗桶（1/2/≤7/>7）→ 注册表 `slot=return_flavor` **复用来信五桶口径**（`time.time()` 全精度算 hours → `LetterManager.calculate_offline_bucket`）；旧 `_pick_return_awareness` 保留为兜底
+- **时间边界缺陷修复**：`datetime.now().timestamp()` 微秒截断在整 72h 边界产生 71.99999x 误差 → 误落 DAYS_1_3（实测踩坑）；改用全精度 `time.time()`
+- 测试 +6（`tests/test_vignette_registry.py`）：短开场注册表优先（确定性）/ 旧池兜底 / 归来感五桶命中 / 0 天空串 / 兜底粗桶 / **分布不劣化**（40 组合新池命中 ≥ 旧池，30+/40）
+
 ### 不变项
+- 30% 短开场概率门、L0-L3 弹力网络结构、PERIOD_DESC/WEATHER_DESC 母板——零改动
+- 帝国/后期 arc 条目已就绪但未接入生成链路（Step 3 启用）
 - 冷却三红线、离线五桶、发件人权重、twins 拆分、白名单插值——零改动
 - 宅邸篇行为零变化（arcs 过滤对 mansion_era 全放行；缓存 key 增量字段仅影响分区）
 - `content/templates/` 随 `('content','content')` 自动进 EXE
 
 ### 验收
-1. pytest **96/96**（88 既有 + 8 新增；多轮连跑无 flaky）
+1. pytest **102/102**（96 既有 + 6 新增；多轮连跑无 flaky）
 2. 止血断言：帝国 arc 300 次采样永不出现「呼吸都困难/喜欢您/好想/缺了一块」
 3. 注册表断言：同 seed 同日同时段选型稳定；逐级放松全覆盖；无匹配 None 不抛
-4. 后续：Step 2 宅邸池迁移（vignette 硬匹配 → registry slot 选型）+ Step 3 帝国两档扩池
+4. 迁移断言：40 组合分布不劣化；registry 空时回落旧逻辑不崩
+5. 后续：Step 3 帝国两档扩池（empire_era × recovery_range vignette/proactive 各 8-12 条 + 生成链路 arc 透传）
 
 ---
 

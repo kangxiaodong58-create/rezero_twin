@@ -21,7 +21,22 @@ import os
 import random
 import sys
 import time
+from datetime import datetime as _dt  # V14.4 Step2：归来感/短开场确定性 seed
 from typing import Any, Callable, Dict, List, Optional, Tuple
+
+from shared.template_registry import load_registry, pick as registry_pick  # V14.4 Step2
+from shared.letter_manager import LetterManager  # V14.4 Step2：归来感复用来信五桶口径
+
+# V14.4 Step2：篇章模板注册表（懒加载单例；frozen 兼容经 ContentLoader._get_content_dir）
+_REGISTRY: Optional[Dict[str, Any]] = None
+
+
+def _get_registry() -> Dict[str, Any]:
+    global _REGISTRY
+    if _REGISTRY is None:
+        _REGISTRY = load_registry(os.path.join(
+            ContentLoader()._get_content_dir(), "templates", "registry.json"))
+    return _REGISTRY
 
 from shared.config import get_data_dir
 from shared.state import WorldState, FAVOR_LEVEL_CN
@@ -294,9 +309,19 @@ def _pick_ram_mansion_action(period: str, days_since_last: int) -> str:
 
 
 def _pick_short_opening(period: str, weather: str, days_since_last: int) -> Optional[str]:
-    """尝试从内容池匹配短开场段。~30% 概率使用，无命中返回 None。"""
+    """尝试从内容池匹配短开场段。~30% 概率使用，无命中返回 None。
+
+    V14.4 Step2：注册表 slot=vignette 优先（确定性 hash，同日同时段稳定，
+    池 10 条含天气/时段条件）；无命中回落旧 openings 硬匹配（防御兜底）。
+    """
     if random.random() > 0.3:
         return None
+    reg = _get_registry()
+    seed = f"{_dt.now().strftime('%Y-%m-%d')}_{period}"
+    hit = registry_pick(reg, arc="mansion_era", slot="vignette",
+                        period=period, weather=weather, seed=seed)
+    if hit and hit.get("text"):
+        return hit["text"]
     loader = ContentLoader()
     openings = loader.get_openings("opening_mansion")
     if not openings:
@@ -442,6 +467,34 @@ def _pick_return_awareness(days: int) -> str:
     ])
 
 
+def _pick_return_flavor(ws: WorldState) -> str:
+    """V14.4 Step2：归来感走注册表 slot=return_flavor（复用来信五桶口径）。
+
+    hours_since 由 last_interaction_ts 精确计算 → LetterManager 五桶映射
+    （CROSS_PERIOD/HALF_DAY/DAYS_1_3/DAYS_3_7/LONG_ABSENCE）；
+    无匹配回落旧 _pick_return_awareness 粗桶（防御兜底）。
+    0 天离线返回空串（不插入）。
+    """
+    if ws.days_since_last <= 0:
+        return ""
+    if ws.last_interaction_ts > 0:
+        # 用 time.time()（全精度浮点）——datetime.now().timestamp() 微秒截断
+        # 会在整 72h 边界产生 71.99999x 误差导致误落 DAYS_1_3（实测踩坑）
+        hours_since = (time.time() - ws.last_interaction_ts) / 3600.0
+    else:
+        hours_since = ws.days_since_last * 24.0
+    bucket = LetterManager.calculate_offline_bucket(hours_since, ws.last_period, ws.period)
+    if bucket is None:  # <12h 同时段：旧语义下 days>=1 也走兜底
+        return _pick_return_awareness(ws.days_since_last)
+    reg = _get_registry()
+    seed = f"{_dt.now().strftime('%Y-%m-%d')}_{ws.period}"
+    hit = registry_pick(reg, arc="mansion_era", slot="return_flavor",
+                        offline_bucket=bucket, period=ws.period, seed=seed)
+    if hit and hit.get("text"):
+        return hit["text"]
+    return _pick_return_awareness(ws.days_since_last)
+
+
 def _derive_location(active_event: str) -> str:
     """从 active_event 描述推导地点短描述（V11.8）。
 
@@ -492,8 +545,8 @@ def fill_dynamic_template(
     weather_desc = random.choice(WEATHER_DESC.get(ws.weather, ["天气如常"]))
     extra = random.choice(EXTRA_ATMOSPHERE)
 
-    # V11.0：离线归来感（0 天返回空串，不插入）
-    return_desc = _pick_return_awareness(ws.days_since_last)
+    # V11.0：离线归来感（0 天返回空串，不插入）；V14.4 Step2：注册表五桶口径
+    return_desc = _pick_return_flavor(ws)
 
     # V11.0：活跃事件氛围（EVENT_POOL 文案已文学化，直接作为独立短句）
     event_part = f"{ws.active_event}。" if ws.active_event and ws.active_event.strip() else ""
