@@ -39,6 +39,11 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 ### 文案需求（V14.8 ②，待文案组）
 - **后期篇主动来信扩池 15 条**（docs/design/后期来信扩池_文案需求_V14.8_2026-08-19.md）：五桶 × rem 7/ram 5/twins 3，战友托付语感——补齐 letters 篇章失衡（宅邸40/帝国3/后期0）最后缺口
 
+### 后期来信落地（V14.8 ② 完成，文案组交付 15 条原样落位）
+- **letters.json 43→58 条**：后期 15 条（arcs:["late_arc"]）五桶全覆盖（CROSS_PERIOD 3/HALF_DAY 3/DAYS_1_3 3/DAYS_3_7 3/LONG_ABSENCE 3）× rem 7/ram 5/twins 3——**letters 篇章失衡闭环**（宅邸40/帝国3/后期15）
+- **验证闭环**：后期离线 3 天 20 采样 18 次触发（战友托付语感）；冷却 1h 拦截生效；arc 隔离（宅邸篇收不到后期来信）
+- 测试 +3（`tests/test_late_letters.py`：加载/五桶可达/twins 双泡/占位符插值）→ pytest **138/138**
+
 ### 不变项
 - mansion_era 7 场景文案原样保留（零改动，防回归）
 - 现有场景切换/事件/名场面机制零改动（仅加 arc 维度）
