@@ -1,4 +1,4 @@
-﻿"""System Prompt 构建器（LLM 模式专用）。
+"""System Prompt 构建器（LLM 模式专用）。
 
 V14.4（Phase C）：本地模板词库（ResponseLibrary/RamAI）已随 local 模式移除，
 本文件仅保留 PromptBuilder 与事件语义召回辅助。
@@ -132,6 +132,9 @@ class PromptBuilder:
     SCENE_CN = {
         "KITCHEN": "厨房", "ROOM": "房间", "DINING": "餐厅", "LIBRARY": "书库",
         "HALLWAY": "走廊", "LAUNDRY": "洗衣房", "GARDEN": "花园",
+        # V14.8：帝国/后期场景
+        "CAMP": "营地", "INN": "旅店", "WILDERNESS": "荒野",
+        "CAMPFIRE": "营火", "BARRACKS": "军营", "BATTLEFIELD": "战场",
     }
 
     @staticmethod
@@ -157,11 +160,12 @@ class PromptBuilder:
         events_section = PromptBuilder._build_events_section(state.events, user_input)
         # V11.10.0：情感场景短节
         scene_section = PromptBuilder.SCENE_GUIDES.get(scene_id, "") if scene_id else ""
-        # V14.7：空间场景（场景互动引导每轮注入 + 切换开场一次性）
+        # V14.7：空间场景（场景互动引导每轮注入 + 切换开场一次性）；V14.8 按 arc 取场景库
         from shared.scene_manager import SceneManager
+        arc_value = getattr(state.arc, "value", None) if state else None
         scene_space_section = ""
         if world and world.scene:
-            inter = SceneManager.get_scene_interaction(world.scene, world.period)
+            inter = SceneManager.get_scene_interaction(world.scene, world.period, arc=arc_value)
             if inter:
                 scene_name = PromptBuilder.SCENE_CN.get(world.scene, world.scene)
                 scene_space_section = (

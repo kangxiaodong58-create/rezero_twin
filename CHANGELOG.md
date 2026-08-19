@@ -6,6 +6,33 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.8] - 2026-08-19 (场景互动池 arc 维度扩池——篇章均衡)
+
+> 文案组交付 V14.8 Part1（帝国 3 场景）+ Part2（后期 3 场景）72 句全量落地。scene_dialogue 加 arc 维度（1.0→2.0），帝国/后期篇用户切场景不再注入宅邸文案——篇章均衡性修复。同「用户陪伴」在不同篇章完全不同（宅邸女仆职责 / 帝国疏离试探 / 后期并肩托付）。
+
+### Added
+- **scene_dialogue.json schema 2.0（arc 维度）**：`mansion_era`（7 场景原样保留）+ `empire_era`（CAMP 营地/INN 旅店/WILDERNESS 荒野）+ `late_arc`（CAMPFIRE 营火/BARRACKS 军营/BATTLEFIELD 战场）；共 67 组 rem/ram 视角
+- **SceneManager arc 适配**：`_scenes(arc)`（未知 arc 回落 mansion）；`get_scene_opening/get_scene_interaction` 加 arc 参数（旧调用兼容）；`_PERIOD_SLOTS` 加 6 新场景时段映射；互动去重 key 含 arc（跨篇章不串用）
+- **场景切换扩展**：SCENE_KEYWORDS 加 6 场景关键词（营地/旅店/荒野/营火/军营/战场 等）；SCENE_CN + `_derive_location` 补 6 场景；bridge 传 arc、prompts 按 arc 取库
+- 测试 +5（`tests/test_v148_arc_scenes.py`：arc opening / 语感区分 / 回落 / 关键词 / JSON 结构）
+
+### Fixed（O-1 flaky 暴露的产品 bug）
+- **`refresh_active_event` 同 seed 重选可能选中同一冲突事件**（seed=42 切书库仍选走廊事件）——O-1「消除冲突」目标未达成（3 跑 1 败 flaky 暴露）
+- **修复**：`refresh_active_event(scene=None)` 带场景约束——`_derive_location` 校验事件地点，冲突换 seed 重试（最多 5 次）；所有 seed 稳定收敛到书库事件
+- O-1 测试固定 seed；**135/135 × 3 连跑全绿（flaky 消除）**
+
+### 验收
+1. pytest **135/135** × 3 连跑全绿
+2. 场景切换：去营地→CAMP / 到旅店投宿→INN / 去荒野→WILDERNESS / 去营火边→CAMPFIRE / 进军营→BARRACKS / 去战场→BATTLEFIELD
+3. arc 读取：帝国 CAMP 夜 opening（营火旁听故事）/ 后期 BATTLEFIELD interaction（并肩行动）
+4. 篇章均衡：帝国/后期场景语感区分（无宅邸元素 / 无早期「可疑客人」腔）
+
+### 不变项
+- mansion_era 7 场景文案原样保留（零改动，防回归）
+- 现有场景切换/事件/名场面机制零改动（仅加 arc 维度）
+
+---
+
 ## [V14.7] - 2026-08-19 (场景化体验：空间场景 + 名场面 + 关键人物)
 
 > 文案资产三件套（用户/文案组产出 V14.7-A1/E3/E4）落地：宅邸空间场景系统（用户可主动「去厨房」「回房间」）、名场面状态联动语感、关键人物互动引导。场景从「事件随机掉落的被动结果」升级为「用户可主动选择的沉浸空间」。

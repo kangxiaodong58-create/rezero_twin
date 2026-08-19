@@ -13,7 +13,7 @@ import os
 import sys
 from typing import Any, Dict, Optional
 
-# 场景中文关键词 → 场景键（A1 库）
+# 场景中文关键词 → 场景键（A1 库 + V14.8 帝国/后期）
 SCENE_KEYWORDS = {
     "厨房": "KITCHEN",
     "房间": "ROOM", "卧室": "ROOM",
@@ -22,6 +22,14 @@ SCENE_KEYWORDS = {
     "走廊": "HALLWAY",
     "洗衣房": "LAUNDRY",
     "花园": "GARDEN", "庭院": "GARDEN",
+    # V14.8：帝国篇（营地/旅店/荒野）
+    "营地": "CAMP", "营帐": "CAMP", "帐篷": "CAMP",
+    "旅店": "INN", "客栈": "INN", "酒馆": "INN",
+    "荒野": "WILDERNESS", "荒原": "WILDERNESS", "旷野": "WILDERNESS",
+    # V14.8：后期篇（营火/军营/战场）
+    "营火": "CAMPFIRE", "篝火": "CAMPFIRE", "火堆": "CAMPFIRE",
+    "军营": "BARRACKS", "军帐": "BARRACKS",
+    "战场": "BATTLEFIELD", "战场边缘": "BATTLEFIELD", "前线": "BATTLEFIELD",
 }
 
 # 场景移动动词前缀（「去厨房」「回房间」「到花园」）
@@ -45,6 +53,19 @@ _PERIOD_SLOTS: Dict[str, Dict[str, str]] = {
                 "傍晚": "DAY", "夜晚": "DAY", "深夜": "DAY"},
     "GARDEN": {"清晨": "SUNNY", "上午": "SUNNY", "午后": "SUNNY", "下午": "SUNNY",
                "傍晚": "SUNNY", "夜晚": "SUNNY", "深夜": "SUNNY"},
+    # V14.8：帝国/后期场景时段映射（文案组交付 V14.8 Part1/2）
+    "CAMP": {"清晨": "DAY", "上午": "DAY", "午后": "DAY", "下午": "DAY",
+             "傍晚": "DAY", "夜晚": "NIGHT", "深夜": "NIGHT"},
+    "INN": {"清晨": "DAY", "上午": "DAY", "午后": "DAY", "下午": "DAY",
+            "傍晚": "DAY", "夜晚": "NIGHT", "深夜": "NIGHT"},
+    "WILDERNESS": {"清晨": "DAY", "上午": "DAY", "午后": "DAY", "下午": "DAY",
+                   "傍晚": "DAY", "夜晚": "NIGHT", "深夜": "NIGHT"},
+    "CAMPFIRE": {"清晨": "NIGHT", "上午": "NIGHT", "午后": "NIGHT", "下午": "NIGHT",
+                 "傍晚": "NIGHT", "夜晚": "NIGHT", "深夜": "DEEP_NIGHT"},
+    "BARRACKS": {"清晨": "MORNING", "上午": "MORNING", "午后": "EVENING", "下午": "EVENING",
+                 "傍晚": "EVENING", "夜晚": "EVENING", "深夜": "EVENING"},
+    "BATTLEFIELD": {"清晨": "DAY", "上午": "DAY", "午后": "DAY", "下午": "DAY",
+                    "傍晚": "DAY", "夜晚": "NIGHT", "深夜": "NIGHT"},
 }
 
 # 人物关键词 → E3 库键
@@ -85,10 +106,22 @@ class SceneManager:
     _milestone_db: Optional[Dict[str, Any]] = None
 
     @classmethod
-    def _scenes(cls) -> Dict[str, Any]:
+    def _scenes(cls, arc: Optional[str] = None) -> Dict[str, Any]:
+        """场景库；V14.8 支持 arc 维度（mansion_era/empire_era/late_arc）。
+
+        - 新结构（schema 2.0）：顶层按 arc 分桶，返回 {arc: {scene: {...}}}
+        - 旧结构（schema 1.0）：顶层直接是场景，arc 参数忽略
+        - 未知 arc / 无该 arc 数据 → 回落 mansion_era（防内容缺失崩溃）
+        """
         if cls._scene_db is None:
             cls._scene_db = _load("scene_dialogue.json")
-        return cls._scene_db
+        data = cls._scene_db
+        # 判断是否有 arc 维度：顶层键含 "era"/"arc" 或值为嵌套场景字典
+        if any(k.endswith("_era") or k == "late_arc" for k in data.keys()):
+            if arc and arc in data:
+                return data[arc]
+            return data.get("mansion_era", {})
+        return data
 
     @classmethod
     def _characters(cls) -> Dict[str, Any]:
@@ -128,9 +161,13 @@ class SceneManager:
         return _PERIOD_SLOTS.get(scene, {}).get(period)
 
     @classmethod
-    def get_scene_opening(cls, scene: str, period: str, weather: str = "晴朗") -> Optional[Dict[str, str]]:
-        """场景开场（切换场景时注入一次）：{rem_view, ram_view} 或 None。"""
-        scene_db = cls._scenes().get(scene)
+    def get_scene_opening(cls, scene: str, period: str, weather: str = "晴朗",
+                          arc: Optional[str] = None) -> Optional[Dict[str, str]]:
+        """场景开场（切换场景时注入一次）：{rem_view, ram_view} 或 None。
+
+        V14.8：arc 参数按篇章取场景库（默认 mansion_era）。
+        """
+        scene_db = cls._scenes(arc).get(scene)
         if not scene_db:
             return None
         slot = cls._slot(scene, period)
@@ -142,13 +179,15 @@ class SceneManager:
         return {"rem_view": entry.get("rem_view", ""), "ram_view": entry.get("ram_view", "")}
 
     @classmethod
-    def get_scene_interaction(cls, scene: str, period: str) -> Optional[Dict[str, str]]:
+    def get_scene_interaction(cls, scene: str, period: str,
+                              arc: Optional[str] = None) -> Optional[Dict[str, str]]:
         """场景互动引导（每轮注入）：轮转选一条 interaction（V14.7 优化 O-4 去重）。
 
         原实现 random.choice——长会话同一场景下互动文案可能轮转重复；
         改用实例级轮转游标（避开上次命中的条目），减少重复观感。
+        V14.8：arc 参数按篇章取场景库。
         """
-        scene_db = cls._scenes().get(scene)
+        scene_db = cls._scenes(arc).get(scene)
         if not scene_db:
             return None
         slot = cls._slot(scene, period)
@@ -158,8 +197,8 @@ class SceneManager:
                         if k.startswith("interaction")]
         if not interactions:
             return None
-        # O-4 去重：轮转游标 + 避开上次
-        key = f"{scene}|{slot}"
+        # O-4 去重：轮转游标 + 避开上次（key 含 arc 防跨篇章串用）
+        key = f"{arc or 'mansion'}|{scene}|{slot}"
         idx = cls._interaction_rotor.get(key, -1)
         candidates = [it for it in interactions if it != cls._last_interaction.get(key)]
         pool = candidates if candidates else interactions

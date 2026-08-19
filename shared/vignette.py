@@ -538,6 +538,19 @@ def _derive_location(active_event: str) -> str:
         return "宅邸窗边"
     if "宅邸" in active_event:  # V14.7：泛宅邸事件（巡查/灯火/初雪/茶会）
         return "罗兹瓦尔宅邸"
+    # V14.8：帝国/后期事件地点（营地/旅店/荒野/营火/军营/战场）
+    if "营地" in active_event or "营帐" in active_event:
+        return "营地"
+    if "旅店" in active_event or "客栈" in active_event or "酒馆" in active_event:
+        return "旅店"
+    if "荒野" in active_event or "荒原" in active_event or "旷野" in active_event:
+        return "荒野"
+    if "营火" in active_event or "篝火" in active_event or "火堆" in active_event:
+        return "营火"
+    if "军营" in active_event or "军帐" in active_event:
+        return "军营"
+    if "战场" in active_event or "前线" in active_event:
+        return "战场"
     if "地板" in active_event:
         return "宅邸向阳处"
     return "罗兹瓦尔宅邸"

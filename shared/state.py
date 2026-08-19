@@ -350,12 +350,38 @@ class WorldState:
                 return ev
         return pool[-1]
 
-    def refresh_active_event(self) -> None:
-        """根据当前世界状态刷新活跃事件并记录生成时间。"""
+    def refresh_active_event(self, scene: Optional[str] = None) -> None:
+        """根据当前世界状态刷新活跃事件并记录生成时间。
+
+        V14.8 优化 O-1：scene 参数——场景切换时用 `_derive_location` 校验事件地点
+        是否与新场景冲突，冲突则换 seed 重试（最多 5 次）；无 scene 或超次回落
+        当前种子结果（保持既有行为）。
+        """
         system_date = (self.current_time or "")[:10] or _dt.now().strftime("%Y-%m-%d")
+        base_seed = self.weather_seed
         picked = self._pick_active_event(
-            system_date, self.period, self.weather, self.weather_seed
+            system_date, self.period, self.weather, base_seed
         )
+        if scene:
+            try:
+                from shared import vignette as _v
+                # 场景键 → 中文名（与 prompts.SCENE_CN 一致；本地内联避免循环 import）
+                scene_cn = {
+                    "KITCHEN": "厨房", "ROOM": "房间", "DINING": "餐厅",
+                    "LIBRARY": "书库", "HALLWAY": "走廊", "LAUNDRY": "洗衣房",
+                    "GARDEN": "花园", "CAMP": "营地", "INN": "旅店",
+                    "WILDERNESS": "荒野", "CAMPFIRE": "营火", "BARRACKS": "军营",
+                    "BATTLEFIELD": "战场",
+                }.get(scene, scene)
+                for attempt in range(1, 6):
+                    desc = picked["desc"] if isinstance(picked, dict) else str(picked)
+                    loc = _v._derive_location(desc)
+                    if loc == "罗兹瓦尔宅邸" or scene_cn in loc:
+                        break  # 无地点约束或地点一致 → 接受
+                    picked = self._pick_active_event(
+                        system_date, self.period, self.weather, base_seed + attempt * 7)
+            except Exception:
+                pass  # 场景约束失败不影响基本刷新
         self.active_event = picked["desc"] if isinstance(picked, dict) else str(picked)
         self.active_event_id = picked.get("id", "") if isinstance(picked, dict) else ""
         self.event_generated_at = _dt.now().timestamp()

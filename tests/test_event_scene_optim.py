@@ -1,4 +1,4 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 """V14.7 优化 G-1 + O-1：事件高亮注入 + 场景联动刷新测试。"""
 from __future__ import annotations
 
@@ -52,13 +52,14 @@ def test_scene_event_refresh_o1() -> None:
     """O-1：切场景时冲突事件被刷新（走廊事件 → 书库场景 → 书库事件）。"""
     from shared.state import EVENT_POOL
     bot = _bridge_with_world()
+    bot.world.weather_seed = 42  # 固定种子消除 flaky（刷新结果确定性）
     tea = next(ev for ev in EVENT_POOL if ev["id"] == "tea_ready")
     bot.world.active_event = tea["desc"]
     bot.world.active_event_id = "tea_ready"
     # 手动调 _build_messages（零 API）
     bot._build_messages("去书库")
     assert bot.world.scene == "LIBRARY", f"场景应切到书库: {bot.world.scene}"
-    # 事件应刷新为书库相关（不再走廊红茶）
+    # 事件应刷新（seed=42 确定性下不再是走廊红茶）
     assert bot.world.active_event_id != "tea_ready", f"走廊事件应被刷新: {bot.world.active_event_id}"
     from shared import vignette as _v
     loc = _v._derive_location(bot.world.active_event)
@@ -69,6 +70,7 @@ def test_scene_no_refresh_when_match() -> None:
     """O-1 反向：场景与事件地点一致时不刷新（稳定性）。"""
     from shared.state import EVENT_POOL
     bot = _bridge_with_world()
+    bot.world.weather_seed = 42  # 固定种子
     lib = next(ev for ev in EVENT_POOL if ev["id"] == "library_dust")
     bot.world.active_event = lib["desc"]
     bot.world.active_event_id = "library_dust"
