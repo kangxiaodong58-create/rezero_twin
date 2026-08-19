@@ -76,7 +76,6 @@ from PySide6.QtWidgets import (
     QMenu,
 )
 
-from local import ReZeroTwinSystem
 from shared.state import StoryArc, OniStage, FAVOR_LEVEL_CN
 from shared.memory_store import MemoryStore
 from shared.conversation_store import ConversationStore
@@ -1684,52 +1683,45 @@ class TwinChatApp(QMainWindow):
     # ── Bot 创建 ────────────────────────────
 
     def _create_bot(self):
+        # V14.4（Phase C）：本地模式移除——LLM 是唯一运行模式（退场研判）
         _log(f"_create_bot mode={self.mode}")
-        if self.mode == "llm":
-            try:
-                from llm import ReZeroLLMBridge
-                api_key = os.getenv("DEEPSEEK_API_KEY")
-                bot = ReZeroLLMBridge(
-                    api_key=api_key,
-                    base_url="https://api.deepseek.com",
-                    model_name="deepseek-chat",
-                    arc=StoryArc(self.mem.get("arc", "mansion_era")),
-                    max_history=8,
-                    conversation_store=self.conv_store,
-                )
-                bot.engine.favor = self.mem.get("favor", 15)
-                bot.engine.ram_favor = self.mem.get("ram_favor", 8)
-                bot.engine.independence = self.mem.get("independence", 0.25)
-                bot.engine.recovery = self.mem.get("recovery", 1.0)
-                bot.engine.events = list(self.mem.get("events", []))
-                bot.engine.user_name = self.mem.get("user_name")
-                _log("LLM bot 创建成功")
-                return bot
-            except Exception as e:
-                _log(f"LLM bot 创建失败: {e}")
-                QMessageBox.warning(
-                    self, "LLM 模式不可用",
-                    f"{e}\n\n本次启动将使用本地模板模式。"
-                )
-                self.mode = "local"
-
-        bot = ReZeroTwinSystem()
-        bot.rem.engine.favor = self.mem.get("favor", 15)
-        bot.rem.engine.ram_favor = self.mem.get("ram_favor", 8)
-        bot.rem.engine.independence = self.mem.get("independence", 0.25)
-        bot.rem.engine.recovery = self.mem.get("recovery", 1.0)
-        bot.rem.engine.events = list(self.mem.get("events", []))
-        bot.rem.engine.user_name = self.mem.get("user_name")
+        if self.mode != "llm":
+            # 存档里残留的 local 模式强制回 LLM（本地模板模式已下线）
+            self.mode = "llm"
+            self.store.set("mode", "llm")
         try:
-            bot.set_arc(StoryArc(self.mem.get("arc", "mansion_era")))
-        except ValueError:
-            bot.set_arc(StoryArc.MANSION_ERA)
-        _log("本地 bot 创建成功")
-        return bot
+            from llm import ReZeroLLMBridge
+            api_key = os.getenv("DEEPSEEK_API_KEY")
+            if not api_key:
+                raise ValueError("未找到 DEEPSEEK_API_KEY，请确保 .env 文件在程序同目录下。")
+            bot = ReZeroLLMBridge(
+                api_key=api_key,
+                base_url="https://api.deepseek.com",
+                model_name="deepseek-chat",
+                arc=StoryArc(self.mem.get("arc", "mansion_era")),
+                max_history=8,
+                conversation_store=self.conv_store,
+            )
+            bot.engine.favor = self.mem.get("favor", 15)
+            bot.engine.ram_favor = self.mem.get("ram_favor", 8)
+            bot.engine.independence = self.mem.get("independence", 0.25)
+            bot.engine.recovery = self.mem.get("recovery", 1.0)
+            bot.engine.events = list(self.mem.get("events", []))
+            bot.engine.user_name = self.mem.get("user_name")
+            _log("LLM bot 创建成功")
+            return bot
+        except Exception as e:
+            _log(f"LLM bot 创建失败: {e}")
+            QMessageBox.warning(
+                self, "LLM 模式不可用",
+                f"{e}\n\nRe:Zero 双子系统需要 LLM API 才能运行。"
+                "请确认 .env 中的 DEEPSEEK_API_KEY 正确且余额充足。"
+            )
+            raise
 
     @property
     def engine(self):
-        return self.bot.engine if self.mode == "llm" else self.bot.rem.engine
+        return self.bot.engine
 
     # ── UI 构建 ────────────────────────────
 
@@ -2052,58 +2044,14 @@ class TwinChatApp(QMainWindow):
         self._update_panels()
 
     def _switch_mode(self) -> None:
-        self._teardown_llm_thread()  # V13.0：流式中切模式先收尾（防旧 worker 回调/错对象读）
-        self._streaming_active = False
-        self._set_breathing(True)
-        self.send_btn.setText("发送")
-        self.send_btn.setEnabled(True)
-        old = self.engine
-        target = "local" if self.mode == "llm" else "llm"
-        _log(f"_switch_mode: {self.mode} → {target}")
-        try:
-            if target == "llm":
-                _log("_switch_mode: importing llm...")
-                from llm import ReZeroLLMBridge
-                _log("_switch_mode: llm imported OK")
-                api_key = os.getenv("DEEPSEEK_API_KEY")
-                if not api_key:
-                    raise ValueError("未找到 DEEPSEEK_API_KEY，请确保 .env 文件在同目录下。")
-                _log("_switch_mode: creating bridge...")
-                new_bot = ReZeroLLMBridge(
-                    api_key=api_key,
-                    base_url="https://api.deepseek.com",
-                    model_name="deepseek-chat",
-                    arc=old.arc,
-                    max_history=8,
-                    conversation_store=self.conv_store,
-                )
-                new_engine = new_bot.engine
-                _log("_switch_mode: bridge created OK")
-            else:
-                new_bot = ReZeroTwinSystem()
-                new_bot.set_arc(old.arc)
-                new_engine = new_bot.rem.engine
-
-            new_engine.favor = old.favor
-            new_engine.ram_favor = old.ram_favor
-            new_engine.independence = old.independence
-            new_engine.recovery = old.recovery
-            new_engine.locked = old.locked
-            new_engine.user_name = old.user_name
-            new_engine.events = list(getattr(old, 'events', []))
-            self.bot = new_bot
-            self.mode = target
-            self.store.set("mode", target)
-            self._append_parsed_message(
-                "系统",
-                f"→ 已切换至{'LLM 桥接' if target == 'llm' else '本地模板（开发模式）'}模式（状态已迁移）",
-                "system",
-            )
-            self._update_status_bar()  # V10.14：统一走 RichText 刷新，不再手动 setText
-            self._update_panels()
-        except Exception as e:
-            _log(f"_switch_mode 失败: {e}\n{traceback.format_exc()}")
-            self._append_parsed_message("系统", f"切换失败：{e}", "system")
+        # V14.4（Phase C）：本地模板模式已移除——LLM 是唯一运行模式。
+        # 保留入口仅为提示（旧用户可能习惯 /toggle），不再有实际切换。
+        _log("_switch_mode: 本地模式已移除，LLM 为唯一模式")
+        self._append_parsed_message(
+            "系统",
+            "本地模板模式已下线，当前为 LLM 桥接模式（唯一运行模式）。",
+            "system",
+        )
 
     # ── 开场引言 ────────────────────────────
 
@@ -2832,10 +2780,9 @@ class TwinChatApp(QMainWindow):
                 event_short = ev[:16] + '…' if len(ev) > 16 else ev
                 ram_part += f"  ·  {event_short}"
             # V10.14：RichText 主次分层（金色模式 / 次亮主信息 / 弱化次信息）
-            # V14.4（LLM 优先路线 Phase B）：本地模式降级为「开发调试」标注——
-            # local 已从产品功能转为开发地基（本地模式退场研判）
-            mode_text = "LLM" if self.mode == "llm" else "本地·开发"
-            mode_color = COLORS["accent"] if self.mode == "llm" else COLORS["text_muted"]
+            # V14.4（Phase C）：本地模式已移除，状态栏恒定 LLM
+            mode_text = "LLM"
+            mode_color = COLORS["accent"]
             sep = f'<span style="color:{COLORS["text_muted"]};">  ·  </span>'
             self._mode_label.setText(
                 f'<span style="color:{mode_color};">{mode_text}</span>'

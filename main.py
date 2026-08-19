@@ -1,8 +1,7 @@
-"""统一入口脚本：选择本地模板模式或 LLM 桥接模式与双子系统交互。"""
+"""统一入口脚本：LLM 桥接模式与双子交互（V14.4 Phase C：本地模式已移除）。"""
 
 from __future__ import annotations
 
-import argparse
 import os
 import sys
 
@@ -19,51 +18,15 @@ load_env()
 from shared.state import StoryArc
 from shared.conversation_store import ConversationStore
 from shared.world_state import WorldState, load_world_state, save_world_state, mark_interaction
-from local import ReZeroTwinSystem as LocalTwinSystem
-
-
-def run_local(world: WorldState) -> None:
-    sys_obj = LocalTwinSystem()
-    print("Re:Zero 双子系统已启动（本地模板模式）")
-    print("指令：status | empire | mansion | late | recover 0.6 | recover 1.0 | quit\n")
-    while True:
-        try:
-            msg = input("小东：").strip()
-            if not msg:
-                continue
-            if msg == "quit":
-                break
-            if msg == "status":
-                print(sys_obj.status())
-                continue
-            if msg == "empire":
-                sys_obj.set_arc(StoryArc.EMPIRE_ERA)
-                print("→ 帝国篇失忆")
-                continue
-            if msg == "mansion":
-                sys_obj.set_arc(StoryArc.MANSION_ERA)
-                print("→ 宅邸篇")
-                continue
-            if msg == "late":
-                sys_obj.set_arc(StoryArc.LATE_ARC)
-                print("→ 后期篇章")
-                continue
-            if msg.startswith("recover"):
-                parts = msg.split()
-                p = float(parts[1]) if len(parts) > 1 else 1.0
-                print(sys_obj.recover(p))
-                continue
-            print(sys_obj.interact(msg))
-            print()
-            mark_interaction(world)
-        except (KeyboardInterrupt, EOFError):
-            break
 
 
 def run_llm(world: WorldState) -> None:
     from llm import ReZeroLLMBridge
 
-    api_key = os.getenv("DEEPSEEK_API_KEY", "your-api-key-here")
+    api_key = os.getenv("DEEPSEEK_API_KEY")
+    if not api_key:
+        print("错误：未找到 DEEPSEEK_API_KEY。请检查 .env 文件（应与 main.py 同目录）。")
+        sys.exit(1)
     conv_store = ConversationStore()
     bot = ReZeroLLMBridge(
         api_key=api_key,
@@ -109,20 +72,18 @@ def run_llm(world: WorldState) -> None:
 
 
 def main() -> None:
+    import argparse
     parser = argparse.ArgumentParser(description="Re:Zero 双子系统入口")
     parser.add_argument(
         "--mode",
-        choices=["local", "llm"],
-        default="local",
-        help="运行模式：local 使用本地模板回复，llm 使用大模型桥接（需要 DEEPSEEK_API_KEY）",
+        choices=["llm"],
+        default="llm",
+        help="运行模式：llm 使用大模型桥接（需要 DEEPSEEK_API_KEY）。V14.4 起仅 LLM 模式。",
     )
     args = parser.parse_args()
     world = load_world_state()
     try:
-        if args.mode == "llm":
-            run_llm(world)
-        else:
-            run_local(world)
+        run_llm(world)
     finally:
         save_world_state(world)
 

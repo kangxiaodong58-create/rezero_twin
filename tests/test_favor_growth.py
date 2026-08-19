@@ -21,7 +21,6 @@ if PROJECT_ROOT not in sys.path:
 
 from shared.state import HardStateEngine
 from shared.memory_store import MemoryStore
-from local import ReZeroTwinSystem
 
 # 已证零关键词命中的普通友善输入（诊断实验同款）
 PLAIN = [
@@ -78,13 +77,13 @@ def test_companion_cap() -> None:
 
 
 def test_local_mode_ram_not_unconditional() -> None:
-    """本地模板模式：10 轮普通对话拉姆不再无条件 +1（V13.1 修复点）。"""
-    sys0 = ReZeroTwinSystem()
+    """10 轮普通对话拉姆不再无条件 +1（V13.1 修复点，V14.4 改引擎直测）。"""
+    eng = HardStateEngine()
     for i in range(10):
-        sys0.interact(PLAIN[i % len(PLAIN)])
-    assert sys0.ram.favor() == 8, f"本地模式拉姆不应无条件涨，实际 {sys0.ram.favor()}"
+        eng.update(PLAIN[i % len(PLAIN)])
+    assert eng.ram_favor == 8, f"普通对话拉姆不应无条件涨，实际 {eng.ram_favor}"
     # 蕾姆走陪伴通道应有增长
-    assert sys0.rem.engine.favor > 15, "本地模式蕾姆应有陪伴增长"
+    assert eng.favor > 15, "普通对话蕾姆应有陪伴增长"
 
 
 def test_memory_roundtrip() -> None:

@@ -12,7 +12,7 @@ from .state import (
     TwinState,
     UserProfile,
 )
-from .prompts import PromptBuilder, RamAI, ResponseLibrary
+from .prompts import PromptBuilder
 from .memory_store import MemoryStore
 
 __all__ = [
@@ -23,9 +23,7 @@ __all__ = [
     "MemoryStore",
     "OniStage",
     "PromptBuilder",
-    "RamAI",
     "RamStage",
-    "ResponseLibrary",
     "SessionState",
     "StoryArc",
     "TwinState",
