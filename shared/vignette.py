@@ -526,10 +526,18 @@ def _derive_location(active_event: str) -> str:
         return "宅邸屋顶下"
     if "夜空" in active_event or "星星" in active_event:
         return "宅邸庭院"
+    if "厨房" in active_event:
+        return "宅邸厨房"
+    if "二楼" in active_event:
+        return "宅邸二楼走廊"
+    if "壁炉" in active_event:
+        return "宅邸大厅"
     if "大扫除" in active_event:
         return "宅邸大厅"
     if "窗" in active_event:
         return "宅邸窗边"
+    if "宅邸" in active_event:  # V14.7：泛宅邸事件（巡查/灯火/初雪/茶会）
+        return "罗兹瓦尔宅邸"
     if "地板" in active_event:
         return "宅邸向阳处"
     return "罗兹瓦尔宅邸"

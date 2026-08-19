@@ -14,6 +14,9 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - **空间场景系统**（shared/scene_manager.py + content/scene_dialogue.json）：7 场景（厨房/房间/餐厅/书库/走廊/洗衣房/花园）× 时段 slot 开场与互动文案（rem/ram 视角）
   - 场景切换：用户输入「去厨房」「回房间」「到花园」→ 移动动词前缀识别（闲聊提及不误触）→ 更新 `WorldState.scene`（持久化，跨会话保持）
   - 切换时注入「场景开场」一次性画面；每轮注入「当前场景互动倾向」引导 LLM 场景语感
+- **EVENT_POOL 扩充至 33 条**（文案包 V14.7_SCENE_EXPANSION_01，20 条）：厨房 4（面包烘焙/面粉痕迹/偷吃点心/深夜熬汤）+ 二楼 3（未关窗/旧物发现/深夜烛光）+ 四季 8（春 2/夏 2/秋 2/冬 2）+ 雨天 3（庭院/大雨宅邸/雨天茶会）+ 夜晚 3（巡查/灯火/星光——与既有 night_star_01 重复者跳过）
+  - 天气词归一化映射：晴天→晴朗 / 阴天→阴沉 / 雨天→小雨+大雨 / 寒冷·雪天→阴沉 / 大风·微风→多云（保持 V14.5 过滤机制零改动）
+  - `_derive_location` 补 4 个地点映射（厨房/二楼/壁炉/泛宅邸）+ smoke 映射表同步
 - **名场面状态联动**（content/milestone_lines.json + SceneManager.get_milestone）：鬼化解放（oni_stage）/ 失忆重逢（recovery≤0.35）/ 忠诚锁定（favor≥95）/ 拉姆托付（ram_stage ACKNOWLEDGED）/ 「从零开始」灵魂状态（wants_push）——按优先级触发，注入 prompt 引导 + 参考台词
 - **关键人物互动**（content/character_dialogue.json + SceneManager.get_character_lines）：贝蒂/罗兹瓦尔/爱蜜莉雅/帕克（含猫）——用户提及人物时注入双子语气参考
 - **prompts 注入**：`scene_space_section`/`character_section`/`milestone_section` 三节（情感场景 SCENE_GUIDES 之后）；bridge `_build_messages` 场景切换接线（故障降级不阻断对话）
