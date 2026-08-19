@@ -6,6 +6,29 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.4] - 2026-08-19 (来信 arc 感知——帝国篇 OOC 止血)
+
+> 研判报告（docs/design/场景化内容密度与篇章模版池研判_2026-08-19.md）四个问题之首：letters.json 无 arc 字段，帝国篇 favor≥70 会命中宅邸深情模板（「没有您的日子蕾姆连呼吸都困难」），与 Prompt 注入的失忆疏离指令同屏冲突。本版 Step 0 止血：模板加 `arcs` 维度 + 帝国克制来信。
+
+### Added
+- **arc 匹配维度**：`LetterManager.evaluate_and_dispatch(..., arc="mansion_era")`——模板 `arcs` 字段过滤；**缺省 = ["mansion_era"]**（安全默认：内容默认宅邸专用，新 arc 内容必须显式声明；`"all"` 显式全 arc）；GUI 传 `engine.arc.value`
+- **3 条帝国克制来信**（arcs:["empire_era"]，失忆疏离基调，与 Prompt 注入一致）：`empire_rem_cross_01`（CROSS_PERIOD）/ `empire_rem_days_01`（DAYS_1_3）/ `empire_ram_long_01`（LONG_ABSENCE）
+- 测试 +4：帝国篇 favor 85 × 300 采样**零深情命中** / 帝国来信来自帝国模板 / 默认 arc 零回归 / 帝国无模板桶静默
+
+### Changed
+- `content/letters.json`：40 条既有模板显式标注 `"arcs": ["mansion_era"]`（共 43 条）
+
+### 不变项
+- 冷却三红线、离线五桶、发件人权重、twins 拆分、白名单插值——零改动
+- 宅邸篇行为零变化（arcs 过滤对 mansion_era 全放行）
+
+### 验收
+1. pytest **87/87**（83 既有 + 4 新增；×3 连跑确认无 flaky）
+2. 止血断言：帝国 arc 300 次采样永不出现「呼吸都困难/喜欢您/好想/缺了一块」
+3. 后续：Step 1 注册表骨架（缓存 key 补 arc、引言粗桶对齐）待确认
+
+---
+
 ## [V14.3] - 2026-08-07 (双子主动来信 / 问候系统)
 
 > 离线归来时双子主动来信：按离线时长分桶（跨时段/半天/1-3天/3-7天/7天+），发件人按蕾姆好感动态加权（rem/ram/twins），纯模板插值（零 API 费用、本地/LLM 双模式一致），冷却 8h + 每日 1 次防打扰。来信优先于日更问候/轻氛围/引言（互斥）。

@@ -1670,6 +1670,7 @@ class TwinChatApp(QMainWindow):
             current_weather=self.world.weather,
             now_ts=time.time(),
             today_str=today_str,
+            arc=self.engine.arc.value,  # V14.4：篇章感知（帝国篇过滤宅邸深情模板）
         )
         if letter is not None:
             for m in letter["messages"]:

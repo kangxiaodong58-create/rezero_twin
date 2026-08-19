@@ -310,6 +310,54 @@ def test_letter_dispatch_v143() -> None:
         gui._VIGNETTE_DISABLED = orig_flag
 
 
+def test_letter_arc_v144() -> None:
+    """V14.4：GUI 层 arc 传递——帝国篇来信零深情（触发即疏离/克制静默）；宅邸正常。"""
+    import tempfile
+    import time as _time
+    from datetime import datetime as _dt
+    from shared.state import StoryArc
+
+    win = _make_window()
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(db_path)
+    win.conv_store = gui.ConversationStore(db_path=db_path)
+
+    win.world.last_interaction_ts = _time.time() - 36 * 3600  # DAYS_1_3
+    win.world.last_period = "上午"
+    win.engine.favor = 85.0
+    deep_words = ("呼吸都困难", "喜欢您", "好想", "缺了一块")
+
+    orig_flag = gui._VIGNETTE_DISABLED
+    gui._VIGNETTE_DISABLED = False
+    try:
+        today = _dt.now().strftime("%Y-%m-%d")
+        # ① 帝国 arc：50 次采样，触发必疏离、零深情（静默为克制设计）
+        win.engine.arc = StoryArc.EMPIRE_ERA
+        triggered = 0
+        for _ in range(50):
+            win.world.last_letter_ts = 0.0
+            win.world.last_letter_date = ""
+            letter = win._maybe_dispatch_letter(today)
+            if letter is None:
+                continue
+            triggered += 1
+            for m in letter["messages"]:
+                assert not any(w in m["content"] for w in deep_words), \
+                    f"帝国 arc 不应深情: {m['content']}"
+                assert ("不记得" in m["content"] or "什么事吗" in m["content"]
+                        or "不记得招待" in m["content"]), f"应疏离基调: {m['content']}"
+        assert triggered >= 1, "帝国 DAYS_1_3 有 rem 模板，50 次采样应至少触发一次"
+        # ② 宅邸 arc：正常触发
+        win.engine.arc = StoryArc.MANSION_ERA
+        win.world.last_letter_ts = 0.0
+        win.world.last_letter_date = ""
+        letter2 = win._maybe_dispatch_letter(today)
+        assert letter2 is not None and letter2["messages"], "宅邸 arc 应正常触发"
+    finally:
+        gui._VIGNETTE_DISABLED = orig_flag
+
+
 def main() -> int:
     tests = [
         ("回合间距五档 V12.1", test_turn_rhythm_five_levels_v121),
@@ -320,6 +368,7 @@ def main() -> int:
         ("搜索命中词黄高亮 V14.1", test_search_highlight_v141),
         ("引用回复 V14.2", test_quote_reply_v142),
         ("主动来信 GUI 接线 V14.3", test_letter_dispatch_v143),
+        ("来信 arc 感知 V14.4", test_letter_arc_v144),
     ]
     failed = 0
     for name, fn in tests:

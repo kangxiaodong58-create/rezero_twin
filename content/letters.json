@@ -6,11 +6,20 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["上午", "午后"],
-      "current_periods": ["傍晚", "夜晚"]
+      "last_periods": [
+        "上午",
+        "午后"
+      ],
+      "current_periods": [
+        "傍晚",
+        "夜晚"
+      ]
     },
     "text": "哦呀，从{last_period}到{current_period}都不见人影，客人大人真是比巴鲁斯还能偷懒呢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "cross_period_ram_mid_01",
@@ -19,11 +28,20 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["上午", "午后"],
-      "current_periods": ["傍晚", "夜晚"]
+      "last_periods": [
+        "上午",
+        "午后"
+      ],
+      "current_periods": [
+        "傍晚",
+        "夜晚"
+      ]
     },
     "text": "{last_period}还见您在发呆，{current_period}又突然出现……该不会是被巴鲁斯传染了拖延症吧？",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "cross_period_ram_high_01",
@@ -32,11 +50,20 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["上午", "午后"],
-      "current_periods": ["傍晚", "夜晚"]
+      "last_periods": [
+        "上午",
+        "午后"
+      ],
+      "current_periods": [
+        "傍晚",
+        "夜晚"
+      ]
     },
     "text": "从{last_period}消失到现在才回来，拉姆还以为是家里的女仆太无能把客人大人吓跑了呢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "cross_period_rem_low_01",
@@ -45,11 +72,20 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["清晨", "上午"],
-      "current_periods": ["傍晚", "夜晚"]
+      "last_periods": [
+        "清晨",
+        "上午"
+      ],
+      "current_periods": [
+        "傍晚",
+        "夜晚"
+      ]
     },
     "text": "客人，从{last_period}到{current_period}都不见您……蕾姆还以为您已经不需要女仆了。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "cross_period_rem_mid_01",
@@ -58,11 +94,20 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["上午", "午后"],
-      "current_periods": ["傍晚", "夜晚"]
+      "last_periods": [
+        "上午",
+        "午后"
+      ],
+      "current_periods": [
+        "傍晚",
+        "夜晚"
+      ]
     },
     "text": "{last_period}时还在想客人大人今天会做些什么，转眼就到了{current_period}……蕾姆泡的茶都凉了呢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "cross_period_rem_high_01",
@@ -71,11 +116,20 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["上午", "午后"],
-      "current_periods": ["傍晚", "夜晚"]
+      "last_periods": [
+        "上午",
+        "午后"
+      ],
+      "current_periods": [
+        "傍晚",
+        "夜晚"
+      ]
     },
     "text": "从{last_period}等到{current_period}……蕾姆还以为客人大人把蕾姆忘记了。还好，您终于回来了。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "cross_period_twins_01",
@@ -84,11 +138,20 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 100,
-      "last_periods": ["上午", "午后"],
-      "current_periods": ["傍晚", "夜晚"]
+      "last_periods": [
+        "上午",
+        "午后"
+      ],
+      "current_periods": [
+        "傍晚",
+        "夜晚"
+      ]
     },
     "text": "【拉姆】蕾姆，你那位客人大人从{last_period}起就不见了踪影，现在{current_period}才冒出来。\n【蕾姆】姐姐，客人大人一定是有重要的事……不过，蕾姆确实一直在等呢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "half_day_ram_low_01",
@@ -97,11 +160,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "隔了整整{hours_absent}小时才出现，拉姆还以为客人大人已经找到了更好的女仆呢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "half_day_ram_mid_01",
@@ -110,11 +180,18 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{hours_absent}小时不见，拉姆还以为是自己的毒舌把客人大人气走了呢——不过看起来您还挺精神的。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "half_day_ram_high_01",
@@ -123,11 +200,18 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "整整{hours_absent}小时……拉姆可没有在数时间，只是刚好记得而已。既然回来了就别傻站着。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "half_day_rem_low_01",
@@ -136,11 +220,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "客人，您离开了{hours_absent}小时……蕾姆已经把您的茶换了三次了。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "half_day_rem_mid_01",
@@ -149,11 +240,18 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{hours_absent}小时没见到客人大人，蕾姆把院子扫了三遍……您不在的时候，时间过得好慢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "half_day_rem_high_01",
@@ -162,11 +260,18 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{hours_absent}小时……对蕾姆来说就像一年那么长。客人大人终于回来了，蕾姆好开心。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "half_day_twins_01",
@@ -175,11 +280,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "【拉姆】蕾姆，你念叨了{hours_absent}小时的客人大人终于出现了。\n【蕾姆】姐姐！……不过，蕾姆确实一直在想客人大人什么时候回来呢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_1_3_ram_low_01",
@@ -188,11 +300,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "哦，这已经过了{days_absent}天了吧？拉姆还以为客人大人终于意识到自己不需要女仆了呢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_1_3_ram_mid_01",
@@ -201,11 +320,18 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{days_absent}天没来，拉姆差点以为您被巴鲁斯同化成了废柴。不过看来您还完好无损。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_1_3_ram_high_01",
@@ -214,11 +340,18 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "整整{days_absent}天啊，拉姆还以为自己终于可以清净了。……才怪呢，快过来，茶已经泡好了。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_1_3_rem_low_01",
@@ -227,11 +360,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "客人，您已经{days_absent}天没有露面了……蕾姆还以为是自己的女仆工作做得不够好。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_1_3_rem_mid_01",
@@ -240,11 +380,18 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{days_absent}天没见到客人大人……蕾姆每天都在想，您有没有好好吃饭，有没有好好休息。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_1_3_rem_high_01",
@@ -253,11 +400,18 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{days_absent}天……蕾姆数着日子等您回来。您不在的时候，蕾姆的心就像缺了一块。欢迎回家，客人大人。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_1_3_twins_01",
@@ -266,11 +420,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "【拉姆】蕾姆，别再擦那个杯子了，你已经擦了{days_absent}天了。\n【蕾姆】因为……蕾姆总觉得客人大人随时会回来，想让他用最干净的杯子。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_3_7_ram_low_01",
@@ -279,11 +440,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "快{days_absent}天了吧？拉姆差点就要在门口贴寻人启事了——虽然也没什么好找的。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_3_7_ram_mid_01",
@@ -292,11 +460,18 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "已经是第{days_absent}天了。拉姆虽然不想承认，但确实有一点点……罢了，您回来就好。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_3_7_ram_high_01",
@@ -305,11 +480,18 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{days_absent}天……拉姆的毒舌都快没对象施展了。既然回来了，就好歹说一声去向吧。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_3_7_rem_low_01",
@@ -318,11 +500,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "客人……您已经{days_absent}天没有来了。蕾姆不知道是不是自己做错了什么。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_3_7_rem_mid_01",
@@ -331,11 +520,18 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{days_absent}天……蕾姆每天都在门口张望。您是不是遇到了什么麻烦？有没有受伤？",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_3_7_rem_high_01",
@@ -344,11 +540,18 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{days_absent}天……蕾姆差点就要出去找您了。您知道吗，没有您的日子，蕾姆连呼吸都觉得困难。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "days_3_7_twins_01",
@@ -357,11 +560,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "【拉姆】蕾姆，别哭了，那家伙不是回来了吗。\n【蕾姆】姐姐……蕾姆只是……太担心客人大人了。已经{days_absent}天了……",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "long_absence_ram_low_01",
@@ -370,11 +580,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "哦，这是失踪了{days_absent}天的客人大人？拉姆还以为您已经永远离开这个世界了呢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "long_absence_ram_mid_01",
@@ -383,11 +600,18 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "整整{days_absent}天。拉姆虽然嘴上不饶人，但您不在的这段时间，宅邸确实安静得有些过头了。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "long_absence_ram_high_01",
@@ -396,11 +620,18 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{days_absent}天……拉姆已经把能骂的话都骂完了。既然回来了，就别再突然消失了，笨蛋。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "long_absence_rem_low_01",
@@ -409,11 +640,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 29,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "客人大人……蕾姆等了{days_absent}天，还以为您再也不需要蕾姆了。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "long_absence_rem_mid_01",
@@ -422,11 +660,18 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "{days_absent}天……蕾姆以为自己已经习惯了等待，可是看到您的这一刻，还是忍不住想哭。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "long_absence_rem_high_01",
@@ -435,11 +680,18 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "您终于回来了……蕾姆等了{days_absent}天，每一天都在后悔没有在您离开前多说一句“喜欢您”。欢迎回来，蕾姆的客人大人。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "long_absence_twins_01",
@@ -448,11 +700,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "【拉姆】蕾姆，你的客人大人终于出现了，快把眼泪擦一擦。\n【蕾姆】姐姐……{days_absent}天真的太长了……蕾姆以为再也见不到客人大人了。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "long_absence_twins_02",
@@ -461,11 +720,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "【拉姆】整整{days_absent}天，蕾姆每天都要擦一遍客人大人用过的东西。\n【蕾姆】因为……那些东西上有客人大人的气息……蕾姆不想让它们消失。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "weather_rem_mid_01",
@@ -474,11 +740,18 @@
     "conditions": {
       "min_favor": 30,
       "max_favor": 69,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "今天{weather}呢，蕾姆准备了热茶，客人大人要喝一杯吗？",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "weather_ram_high_01",
@@ -487,11 +760,18 @@
     "conditions": {
       "min_favor": 70,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "外面{weather}成这样，您还知道回来？拉姆还以为您要在外面淋成落汤鸡才甘心呢。",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "weather_twins_01",
@@ -500,11 +780,18 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "【拉姆】蕾姆，客人大人失踪了{days_absent}天，该不会是被这{weather}的天气困住了吧。\n【蕾姆】如果是这样的话……蕾姆应该早一点去找客人大人的……",
-    "suppress_vignette": true
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
   },
   {
     "id": "weather_twins_02",
@@ -513,10 +800,77 @@
     "conditions": {
       "min_favor": 0,
       "max_favor": 100,
-      "last_periods": ["all"],
-      "current_periods": ["all"]
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
     },
     "text": "【拉姆】{days_absent}天里下了好几场雨，蕾姆每次都说要去给您送伞。\n【蕾姆】因为……蕾姆总觉得客人大人会在某场雨里突然出现……",
+    "suppress_vignette": true,
+    "arcs": [
+      "mansion_era"
+    ]
+  },
+  {
+    "id": "empire_rem_cross_01",
+    "sender": "rem",
+    "bucket": "CROSS_PERIOD",
+    "arcs": [
+      "empire_era"
+    ],
+    "conditions": {
+      "min_favor": 0,
+      "max_favor": 100,
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
+    },
+    "text": "……啊，是那位客人。蕾姆刚好在整理走廊，您有什么事吗？",
+    "suppress_vignette": true
+  },
+  {
+    "id": "empire_rem_days_01",
+    "sender": "rem",
+    "bucket": "DAYS_1_3",
+    "arcs": [
+      "empire_era"
+    ],
+    "conditions": {
+      "min_favor": 0,
+      "max_favor": 100,
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
+    },
+    "text": "……您又来了。蕾姆不记得您是谁，但宅邸确实安静了一阵子。",
+    "suppress_vignette": true
+  },
+  {
+    "id": "empire_ram_long_01",
+    "sender": "ram",
+    "bucket": "LONG_ABSENCE",
+    "arcs": [
+      "empire_era"
+    ],
+    "conditions": {
+      "min_favor": 0,
+      "max_favor": 100,
+      "last_periods": [
+        "all"
+      ],
+      "current_periods": [
+        "all"
+      ]
+    },
+    "text": "哦？消失了这么久又出现的客人。拉姆不记得招待过您，不过……茶还是可以喝一杯的。",
     "suppress_vignette": true
   }
 ]

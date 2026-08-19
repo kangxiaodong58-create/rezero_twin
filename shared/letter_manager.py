@@ -127,11 +127,14 @@ class LetterManager:
         current_weather: str,
         now_ts: float,
         today_str: str,
+        arc: str = "mansion_era",  # V14.4：篇章过滤（默认宅邸，安全默认）
     ) -> Optional[Dict[str, Any]]:
         """来信触发核心入口；返回 None=不触发，否则 {messages, suppress_vignette}。
 
         state: WorldState（含 last_interaction_ts / last_period / period /
                last_letter_ts / last_letter_date；调用方负责 ensure_last_period）
+        arc: 当前篇章（StoryArc.value）；模板 arcs 缺省 = ["mansion_era"]
+             （内容默认宅邸专用，新 arc 内容必须显式声明；"all" 显式全 arc）
         """
         if not self.check_cooldown(state, now_ts, today_str):
             return None
@@ -143,10 +146,14 @@ class LetterManager:
 
         target_sender = self.select_sender(favor)
 
-        # 匹配模板：bucket + sender + 好感区间 + 时段条件
+        # 匹配模板：arc + bucket + sender + 好感区间 + 时段条件
         candidates = []
         for t in self.templates:
             if t.get("bucket") != bucket or t.get("sender") != target_sender:
+                continue
+            # V14.4：篇章过滤——缺省 arcs=["mansion_era"]；"all" 显式全 arc
+            arcs = t.get("arcs") or ["mansion_era"]
+            if "all" not in arcs and arc not in arcs:
                 continue
             cond = t.get("conditions") or {}
             lo = float(cond.get("min_favor", 0))

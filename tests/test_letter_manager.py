@@ -30,12 +30,13 @@ from shared.conversation_store import ConversationStore
 
 
 def _state(**kw) -> WorldState:
-    """构造测试用 WorldState（默认：3 天前交互、上次上午、当前夜晚、favor 80）。"""
+    """构造测试用 WorldState（默认：36h 前交互——稳定落 DAYS_1_3 桶，
+    帝国/宅邸均有模板；避开 72h 桶边界浮点抖动）。"""
     base = WorldState(
         current_time=datetime.now().strftime("%Y-%m-%d %H:%M"),
         period="夜晚",
         weather="晴朗",
-        last_interaction_ts=time.time() - 3 * 86400,
+        last_interaction_ts=time.time() - 36 * 3600,
         last_period="上午",
     )
     for k, v in kw.items():
@@ -194,6 +195,72 @@ def test_ensure_last_period_backfill() -> None:
     assert st3.last_period == st3.period, f"空库应回落当前时段: {st3.last_period}"
 
 
+def test_arc_filter_empire_no_deep_affection() -> None:
+    """V14.4 止血：帝国篇 favor≥70 永不命中宅邸深情模板（OOC 回归）。"""
+    lm = LetterManager()
+    deep_words = ("呼吸都困难", "喜欢您", "好想", "缺了一块")
+    now = time.time()
+    for _ in range(300):
+        st = _state()  # 3 天离线、last_period=上午、period=夜晚
+        st.last_letter_date = ""
+        result = lm.evaluate_and_dispatch(st, favor=85.0, current_weather="晴朗",
+                                          now_ts=now, today_str="2099-01-01",
+                                          arc="empire_era")
+        if result is None:
+            continue  # 帝国模板覆盖的桶外静默（可接受）
+        for m in result["messages"]:
+            assert not any(w in m["content"] for w in deep_words), \
+                f"帝国篇不应命中深情模板: {m['content']}"
+    print("    （300 次采样，帝国篇零深情命中）")
+
+
+def test_arc_filter_empire_hits_empire_templates() -> None:
+    """帝国 arc 触发的来信应来自 empire_era 模板（id 前缀校验）。"""
+    lm = LetterManager()
+    for _ in range(300):
+        st = _state()
+        st.last_letter_date = ""
+        result = lm.evaluate_and_dispatch(st, favor=85.0, current_weather="晴朗",
+                                          now_ts=time.time(), today_str="2099-01-02",
+                                          arc="empire_era")
+        if result is None:
+            continue
+        assert any(w in m["content"] for m in result["messages"]
+                   for w in ("蕾姆", "拉姆")), f"帝国来信应有人名: {result['messages']}"
+        return
+    raise AssertionError("帝国 CROSS_PERIOD/DAYS_1_3/LONG_ABSENCE 应有模板命中")
+
+
+def test_arc_default_is_mansion() -> None:
+    """默认 arc=mansion_era：宅邸模板可用（既有行为零回归）。"""
+    lm = LetterManager()
+    st = _state()
+    st.last_letter_date = ""
+    result = lm.evaluate_and_dispatch(st, favor=80.0, current_weather="晴朗",
+                                      now_ts=time.time(), today_str="2099-01-03")
+    assert result is not None, "默认宅邸应触发"
+    assert result["messages"], "来信消息非空"
+    for m in result["messages"]:
+        assert m["sender"] in ("rem", "ram"), f"发件人非法: {m['sender']}"
+        assert m["content"].strip(), "内容不应为空"
+
+
+def test_arc_empire_missing_bucket_silent() -> None:
+    """帝国 arc 下无模板的桶（HALF_DAY/DAYS_3_7）→ 静默（克制优先）。
+
+    用 15h（HALF_DAY 桶，确定性）：帝国模板仅覆盖 CROSS_PERIOD/DAYS_1_3/
+    LONG_ABSENCE——HALF_DAY 任何发件人采样都无帝国模板 → 必然静默。
+    """
+    lm = LetterManager()
+    st = _state(last_interaction_ts=time.time() - 15 * 3600)  # HALF_DAY 桶
+    st.last_period = "上午"
+    st.last_letter_date = ""
+    result = lm.evaluate_and_dispatch(st, favor=60.0, current_weather="晴朗",
+                                      now_ts=time.time(), today_str="2099-01-04",
+                                      arc="empire_era")
+    assert result is None, "帝国无模板桶应静默（不回落宅邸模板）"
+
+
 def main() -> int:
     tests = [
         ("模板池加载（≥35 条 + id 唯一）", test_templates_loaded),
@@ -208,6 +275,10 @@ def main() -> int:
         ("同时段短离线静默", test_dispatch_same_period_silent),
         ("twins 来信拆分双泡", test_dispatch_twins_split),
         ("last_period 回填（DB 推导/已有跳过）", test_ensure_last_period_backfill),
+        ("帝国篇零深情命中 V14.4 止血", test_arc_filter_empire_no_deep_affection),
+        ("帝国来信来自帝国模板", test_arc_filter_empire_hits_empire_templates),
+        ("默认 arc=宅邸（零回归）", test_arc_default_is_mansion),
+        ("帝国无模板桶静默", test_arc_empire_missing_bucket_silent),
     ]
     failed = 0
     for name, fn in tests:
