@@ -178,7 +178,7 @@ FONT_SIZE = {
     "caption":   8,   # 时间戳、最弱辅助
     "small":     9,   # 角色名、按钮文字、状态栏
     "body":     10,   # 历史正文、面板数值、搜索框、系统标签(长)
-    "body_lg":  11,   # 气泡正文、输入框、发送按钮
+    "body_lg":  12,   # V14.5：气泡正文、输入框、发送按钮（11→12 中文阅读优化）
     "title":    12,   # 浮层标题
     "title_lg": 14,   # 顶栏标题、面板角色名
     "emoji_sm": 20,   # 头像 emoji（AvatarLabel）
@@ -661,6 +661,11 @@ class BubbleWidget(QFrame):
         label = QLabel(text)
         label.setObjectName("bubble_text")
         label.setWordWrap(True)
+        # V14.5：显式 RichText——让 QSS line-height:150% 生效（QLabel 默认 AutoText
+        # 纯文本渲染不应用 line-height）；文本需 HTML 转义防注入（highlight_plain_text 已转义）
+        label.setTextFormat(Qt.RichText)
+        if "<" not in text:  # 纯文本（无高亮 span）→ 转义后渲染
+            label.setText(html.escape(text))
         label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg']))
         label.setContentsMargins(0, 0, 0, 0)  # V10.14：去除双重 padding，统一由 QSS 控制
@@ -671,6 +676,7 @@ class BubbleWidget(QFrame):
                 {border_css}
                 border-radius: {RADIUS['large']}px;
                 padding: 12px 16px;
+                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */
             }}
         """)
         layout.addWidget(label)

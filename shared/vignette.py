@@ -514,12 +514,18 @@ def _derive_location(active_event: str) -> str:
         return "宅邸走廊"
     if "花园" in active_event:
         return "宅邸花园"
-    if "书库" in active_event:
+    if "书库" in active_event or "书房" in active_event:
         return "宅邸书库"
     if "庭院" in active_event:
         return "宅邸庭院"
     if "后院" in active_event:
         return "宅邸后院"
+    if "门厅" in active_event:
+        return "宅邸门厅"
+    if "屋顶" in active_event:
+        return "宅邸屋顶下"
+    if "夜空" in active_event or "星星" in active_event:
+        return "宅邸庭院"
     if "大扫除" in active_event:
         return "宅邸大厅"
     if "窗" in active_event:

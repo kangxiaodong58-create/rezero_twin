@@ -43,6 +43,12 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - **事件记忆语义召回**（README 遗留）：`_build_events_section(events, user_input)`——钉住保底 + 用户输入 × 事件关键词重叠度动态召回（EVENT_TYPE_TOPICS 9 类主题词 + `_event_words` 中文 2-4 字滑动窗分词）；无相关回落最近；测试 +3
 - **后期篇 proactive 扩池 6→10**：战斗间隙/安静陪伴/托付确认/日常温情 4 条战友语感（registry 69→73）
 
+### 场景一致性（V14.5 开发侧落地，调研 C/B/D）
+- **天气×事件兼容**：EVENT_POOL 8→14 条（+6 雨天/夜晚专属事件：rain_window/rain_roof/rain_hall/night_candle/night_star 等）；事件加 `weathers`/`periods` 字段，`_pick_active_event` 候选集按天气×时段过滤（候选空防御回落全池）——**「大雨天野猫晒太阳」类冲突消除**；`_derive_location` 补门厅/屋顶/书房/夜空地点映射
+- **事件→角色反应结构化**：EVENT_POOL 全部事件加 `rem_view`/`ram_view` 角色视角；`to_prompt_text` 注入「蕾姆/拉姆对此事的倾向」——事件从背景板变互动（用户询问事件时 LLM 有双子反应锚定）；`active_event_id` 持久化（旧存档兼容）
+- **中文排版**：气泡正文 11→12px（body_lg）；气泡 label 显式 RichText + QSS `line-height: 150%`（行距 1.5，QLabel 默认 AutoText 不应用 line-height 已修复）+ HTML 转义防注入（纯文本渲染与高亮 span 路径统一）
+- 测试 +5（`tests/test_v14_5_scene.py`）：天气兼容（大雨/小雨零冲突）/ 时段兼容（夜昼互斥）/ 13 条事件全部可达（无死事件）/ 防御回落 / 角色视角注入
+
 ### 本地模式退场（Phase A/B/C）
 - **Phase A 冻结**：停止 local 文案扩池（ResponseLibrary/RamAI 不再加档位）
 - **Phase B 降级**：GUI 状态栏 local 标注「本地·开发」（弱化色）；README 补 FAQ 定位说明（开发调试模式）
@@ -50,10 +56,11 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - A-02（LLM↔local 体验差）从修复队列移除（接受差异，local 退场）
 
 ### 验收
-1. pytest **109/109** 全绿（106 既有 + 契约/场景/召回测试 + 引用测试恢复；V14.4 遗留 1 项环境依赖测试已修复）
+1. pytest **114/114** 全绿（109 既有 + 场景一致性 5 项；引用测试恢复；V14.4 遗留 1 项环境依赖测试已修复）
 2. 20 轮连续对话重复率 **0%**（S-01）；核心剧情 100% 触发（S-02）
 3. 真机 LLM 15-34 轮旅程：角色吸引力 9.5/10（满意度问卷）；跨天记忆细节准确（七十五度茶）；帝国篇 recovery 梯度语感全过
-4. GUI 离屏 LLM-only 启动正常；107→109 测试数含新场景/召回测试
+4. GUI 离屏 LLM-only 启动正常；offscreen UI 测试 9/9（气泡 RichText 渲染回归）
+5. 场景断言：大雨 200 seed 采样零晴天事件；夜晚/白天互斥；13 条事件全部可达；角色视角注入生效
 
 ### 已知遗留（调研发现，待后续）
 - 场景=被动事件驱动无主动选择；事件无结构化回应/不落长期记忆；天气×事件冲突（cat_visitor 雨天晒太阳）——调研报告 docs/design/场景体验与原著贴合调研_2026-08-19.md，13 项文案需求待对接文案组

@@ -109,14 +109,58 @@ from datetime import datetime as _dt
 
 # 轻量环境事件池：宅邸日常氛围，不触发剧情，不改变硬状态
 EVENT_POOL: List[Dict[str, Any]] = [
-    {"id": "tea_ready",        "desc": "红茶刚好煮好，茶香还停在走廊里", "weight": 15},
-    {"id": "garden_bloom",     "desc": "宅邸花园里的花比昨天多开了一些", "weight": 12},
-    {"id": "cleaning_morning", "desc": "清晨的大扫除刚结束，空气里有肥皂水的气味", "weight": 12},
-    {"id": "library_dust",     "desc": "书库里有几本旧书被遗忘在窗边，落了一层薄灰", "weight": 10},
-    {"id": "cat_visitor",      "desc": "一只野猫从庭院围墙跳了进来，正晒着太阳", "weight": 10},
-    {"id": "laundry_day",      "desc": "今天是被单晾晒日，后院的白布在风中轻轻摇晃", "weight": 12},
-    {"id": "sunny_noon",       "desc": "午后的阳光特别好，木地板被晒得温暖", "weight": 10},
-    {"id": "night_wind",       "desc": "入夜后风变大了，窗户被吹得轻轻作响", "weight": 10},
+    # V14.5：weathers/periods 可选字段（无字段 = 全兼容）；rem_view/ram_view 角色视角
+    {"id": "tea_ready", "desc": "红茶刚好煮好，茶香还停在走廊里", "weight": 15,
+     "rem_view": "蕾姆会为这壶茶感到安心，觉得这正是忙碌间隙该有的味道。",
+     "ram_view": "拉姆会挑剔水温，但心里认可这壶茶的时机。"},
+    {"id": "garden_bloom", "desc": "宅邸花园里的花比昨天多开了一些", "weight": 12,
+     "weathers": ["晴朗", "多云", "小雨"], "periods": ["清晨", "上午", "午后", "下午"],
+     "rem_view": "蕾姆会想邀您去花园看看新开的花。",
+     "ram_view": "拉姆会提醒花该修剪了，顺便抱怨巴鲁斯踩坏过一株。"},
+    {"id": "cleaning_morning", "desc": "清晨的大扫除刚结束，空气里有肥皂水的气味", "weight": 12,
+     "periods": ["清晨", "上午"],
+     "rem_view": "蕾姆会轻轻舒一口气，早晨的大扫除是她一天的开场。",
+     "ram_view": "拉姆会说大扫除是女仆的本分，不值得夸奖。"},
+    {"id": "library_dust", "desc": "书库里有几本旧书被遗忘在窗边，落了一层薄灰", "weight": 10,
+     "rem_view": "蕾姆会想把旧书擦干净摆回书架。",
+     "ram_view": "拉姆会记起这些书是谁留下的，然后沉默片刻。"},
+    {"id": "cat_visitor", "desc": "一只野猫从庭院围墙跳了进来，正晒着太阳", "weight": 10,
+     "weathers": ["晴朗", "多云"], "periods": ["上午", "午后", "下午"],
+     "rem_view": "蕾姆会想给野猫留一点食物，又怕惊到它。",
+     "ram_view": "拉姆会说野猫不懂规矩，却不会真的赶它走。"},
+    {"id": "laundry_day", "desc": "今天是被单晾晒日，后院的白布在风中轻轻摇晃", "weight": 12,
+     "weathers": ["晴朗", "多云"], "periods": ["清晨", "上午", "午后", "下午"],
+     "rem_view": "蕾姆会记得在风停之前收被单。",
+     "ram_view": "拉姆会嫌被单晾得不够整齐，然后自己动手重晾。"},
+    {"id": "sunny_noon", "desc": "午后的阳光特别好，木地板被晒得温暖", "weight": 10,
+     "weathers": ["晴朗", "多云"], "periods": ["上午", "午后", "下午"],
+     "rem_view": "蕾姆会觉得这样的午后适合晒晒枕头，也适合陪您坐一会儿。",
+     "ram_view": "拉姆会找个靠窗的位置，难得不发一语地晒太阳。"},
+    {"id": "night_wind", "desc": "入夜后风变大了，窗户被吹得轻轻作响", "weight": 10,
+     "periods": ["夜晚", "深夜"],
+     "rem_view": "蕾姆会去检查每一扇窗是否关好，再给您添一床毯子。",
+     "ram_view": "拉姆会说风大是天气的事，担心是多余的事——但会记得关窗。"},
+    # V14.5 新增：雨天/夜晚专属事件（消除「大雨天野猫晒太阳」类冲突）
+    {"id": "rain_window_01", "desc": "雨滴沿着窗玻璃滑落，庭院里漫起一层薄薄的水雾", "weight": 12,
+     "weathers": ["小雨", "大雨"],
+     "rem_view": "蕾姆会望着雨幕出神，想起某个也下着雨的下午。",
+     "ram_view": "拉姆会说雨天适合待在室内，茶要趁热喝。"},
+    {"id": "rain_roof_01", "desc": "雨点敲打着屋顶，宅邸里只剩下雨声与炉火的轻响", "weight": 10,
+     "weathers": ["小雨", "大雨"],
+     "rem_view": "蕾姆会放轻手上的动作，怕打扰了雨声。",
+     "ram_view": "拉姆会借着雨声，难得允许自己发一会儿呆。"},
+    {"id": "rain_hall_01", "desc": "雨天的门厅比平时安静，连脚步声都放轻了许多", "weight": 10,
+     "weathers": ["小雨", "大雨"],
+     "rem_view": "蕾姆会守在门厅，替进门的人掸去肩上的雨珠。",
+     "ram_view": "拉姆会说雨天客人少，正好把账本对完。"},
+    {"id": "night_candle_01", "desc": "深夜的书房里还亮着一盏灯，蜡烛已烧短了一截", "weight": 10,
+     "periods": ["夜晚", "深夜"],
+     "rem_view": "蕾姆会为深夜的灯添一盏烛火，怕您在书里忘了时间。",
+     "ram_view": "拉姆会说熬夜伤身，然后留下一句『早些歇息』。"},
+    {"id": "night_star_01", "desc": "云层散开的夜空里，星星比平时亮了一些", "weight": 10,
+     "periods": ["夜晚", "深夜"], "weathers": ["晴朗", "多云"],
+     "rem_view": "蕾姆会想指给您看最亮的那颗星。",
+     "ram_view": "拉姆会说星星好看，但明天的活不会因此变少。"},
 ]
 
 
@@ -133,6 +177,7 @@ class WorldState:
     days_since_last: int = 0
     weather: str = "晴朗"
     active_event: str = ""          # 当前活跃事件（如"花园的花开了"）
+    active_event_id: str = ""       # V14.5：活跃事件 id（角色视角反查用）
     event_generated_at: float = 0.0  # 事件生成时间戳，用于 TTL 过期判断
     last_real_ts: float = 0.0       # 上次保存的现实时间戳
     weather_seed: int = 42          # 天气确定性种子（随时间推演）
@@ -200,25 +245,36 @@ class WorldState:
         return cls._determine_weather(date_str, "全天", 42)
 
     @classmethod
-    def _pick_active_event(cls, system_date: str, period: str, weather: str, seed: int) -> str:
-        """按 (日期, 时段, 天气, 种子) 确定性选择活跃事件。"""
+    def _pick_active_event(cls, system_date: str, period: str, weather: str, seed: int) -> Dict[str, Any]:
+        """按 (日期, 时段, 天气, 种子) 确定性选择活跃事件（返回事件 dict）。
+
+        V14.5：候选集按 weathers/periods 过滤（无字段事件全兼容）——
+        消除「大雨天野猫晒太阳」类天气×事件冲突；候选空回落全池（防御）。
+        """
+        pool = [ev for ev in EVENT_POOL
+                if (not ev.get("weathers") or weather in ev["weathers"])
+                and (not ev.get("periods") or period in ev["periods"])]
+        if not pool:
+            pool = list(EVENT_POOL)  # 防御：极端情况下回落全池
         raw = f"{system_date}_{period}_{weather}_{seed}".encode("utf-8")
         point = int(hashlib.md5(raw).hexdigest()[:8], 16)
-        total_weight = sum(ev["weight"] for ev in EVENT_POOL)
+        total_weight = sum(ev["weight"] for ev in pool)
         idx = point % total_weight
         cumulative = 0
-        for ev in EVENT_POOL:
+        for ev in pool:
             cumulative += ev["weight"]
             if idx < cumulative:
-                return ev["desc"]
-        return EVENT_POOL[-1]["desc"]
+                return ev
+        return pool[-1]
 
     def refresh_active_event(self) -> None:
         """根据当前世界状态刷新活跃事件并记录生成时间。"""
         system_date = (self.current_time or "")[:10] or _dt.now().strftime("%Y-%m-%d")
-        self.active_event = self._pick_active_event(
+        picked = self._pick_active_event(
             system_date, self.period, self.weather, self.weather_seed
         )
+        self.active_event = picked["desc"] if isinstance(picked, dict) else str(picked)
+        self.active_event_id = picked.get("id", "") if isinstance(picked, dict) else ""
         self.event_generated_at = _dt.now().timestamp()
 
     @classmethod
@@ -250,6 +306,7 @@ class WorldState:
 
             # 活跃事件：空 / 过期 / 用户离线归来 时重新选择
             active_event = saved.get("active_event", "") or ""
+            active_event_id = saved.get("active_event_id", "") or ""
             event_generated_at = float(saved.get("event_generated_at", 0.0) or 0.0)
             hours_since_event = (
                 (now_ts - event_generated_at) / 3600.0
@@ -262,9 +319,11 @@ class WorldState:
                 or days_away > 0
             )
             if should_refresh_event:
-                active_event = cls._pick_active_event(
+                picked = cls._pick_active_event(
                     now.strftime("%Y-%m-%d"), period, weather, seed
                 )
+                active_event = picked["desc"] if isinstance(picked, dict) else str(picked)
+                active_event_id = picked.get("id", "") if isinstance(picked, dict) else ""
                 event_generated_at = now_ts
 
             return cls(
@@ -273,6 +332,7 @@ class WorldState:
                 days_since_last=days_away,
                 weather=weather,
                 active_event=active_event,
+                active_event_id=active_event_id,
                 event_generated_at=event_generated_at,
                 last_real_ts=now_ts,
                 weather_seed=seed,
@@ -331,6 +391,7 @@ class WorldState:
             "days_since_last": self.days_since_last,
             "weather": self.weather,
             "active_event": self.active_event,
+            "active_event_id": self.active_event_id,
             "event_generated_at": self.event_generated_at,
             "last_real_ts": self.last_real_ts or _dt.now().timestamp(),
             "weather_seed": self.weather_seed,
@@ -365,6 +426,15 @@ class WorldState:
             lines.append(f"- 距离您上次来访：约 {self.days_since_last} 天")
         event_desc = self.active_event or "无特殊事件"
         lines.append(f"- 当前事件：{event_desc}")
+        # V14.5：角色视角注入（事件专属反应倾向，LLM 显式锚定）
+        if self.active_event_id:
+            for ev in EVENT_POOL:
+                if ev.get("id") == self.active_event_id:
+                    if ev.get("rem_view"):
+                        lines.append(f"- 蕾姆对此事的倾向：{ev['rem_view']}")
+                    if ev.get("ram_view"):
+                        lines.append(f"- 拉姆对此事的倾向：{ev['ram_view']}")
+                    break
         return "\n".join(lines)
 
 

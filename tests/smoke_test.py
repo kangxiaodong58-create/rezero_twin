@@ -595,7 +595,11 @@ def test_active_event_boundary_v1071() -> None:
     ]
     for date_str, period, weather, seed in samples:
         ev = WorldState._pick_active_event(date_str, period, weather, seed)
-        assert ev in pool_descs, f"事件越界: {ev}"
+        # V14.5：返回 dict（含 desc）；断言 desc 在池内
+        desc = ev["desc"] if isinstance(ev, dict) else str(ev)
+        assert desc in pool_descs, f"事件越界: {desc}"
+        assert "weathers" not in ev or weather in ev["weathers"], \
+            f"天气过滤失效: {desc} weather={weather} ev.weathers={ev.get('weathers')}"
 
     # 2. 未离线且事件未过期时不强制刷新（稳定性）
     ws = WorldState.load_or_create(None)
@@ -912,16 +916,20 @@ def test_location_derive_v118() -> None:
     from shared.state import WorldState, EVENT_POOL
     from shared import vignette as V
 
-    # ── 1. EVENT_POOL 8 条 desc → 地点映射全覆盖 ──
+    # ── 1. EVENT_POOL 全部事件 desc → 地点映射全覆盖（V14.5 扩池后 14 条）──
     expected = {
         "走廊": "宅邸走廊",
         "花园": "宅邸花园",
         "书库": "宅邸书库",
+        "书房": "宅邸书库",
         "庭院": "宅邸庭院",
         "后院": "宅邸后院",
+        "门厅": "宅邸门厅",
+        "屋顶": "宅邸屋顶下",
         "大扫除": "宅邸大厅",
         "窗": "宅邸窗边",
         "地板": "宅邸向阳处",
+        "夜空": "宅邸庭院",
     }
     for ev in EVENT_POOL:
         desc = ev["desc"]
