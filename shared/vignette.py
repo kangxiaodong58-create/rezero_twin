@@ -581,11 +581,17 @@ def sanitize_and_validate_vignette(text: str) -> Tuple[bool, str]:
 #  L0：本地持久化缓存
 # ═══════════════════════════════════════════════
 
-def build_cache_key(ws: WorldState, rem_level: str, ram_stage: str) -> str:
-    """按状态桶生成缓存 key（离开天数分桶：0 / 1-2 / 3+）。"""
+def build_cache_key(ws: WorldState, rem_level: str, ram_stage: str,
+                    arc: str = "mansion_era", recovery: float = 1.0) -> str:
+    """按状态桶生成缓存 key（离开天数分桶：0 / 1-2 / 3+）。
+
+    V14.4：缓存 key 补 arc 与 recovery 桶（§3.3 跨篇章缓存污染修复——
+    宅邸篇缓存不再被帝国篇命中；recovery 桶 a/r/m 三档）。
+    """
     days = ws.days_since_last
     days_bucket = "0" if days == 0 else ("1-2" if days <= 2 else "3+")
-    raw = f"{ws.period}|{ws.weather}|{days_bucket}|{rem_level}|{ram_stage}"
+    recovery_bucket = "a" if recovery >= 0.85 else ("r" if recovery >= 0.35 else "m")
+    raw = f"{arc}|{recovery_bucket}|{ws.period}|{ws.weather}|{days_bucket}|{rem_level}|{ram_stage}"
     return hashlib.md5(raw.encode("utf-8")).hexdigest()[:12]
 
 
@@ -687,6 +693,7 @@ class VignetteGenerator:
         recovery: float = 1.0,
         oni_warning: bool = False,
         witch_scent: int = 0,
+        arc: str = "mansion_era",  # V14.4：篇章（缓存 key 分桶；默认宅邸零感知）
     ) -> str:
         """按 L0 → L1 → L2 → L3 顺序生成开场引言。
 
@@ -699,7 +706,8 @@ class VignetteGenerator:
             return self._session_cache
 
         # L0：持久化文件缓存
-        cache_key = build_cache_key(ws, rem_favor_level, ram_stage)
+        cache_key = build_cache_key(ws, rem_favor_level, ram_stage,
+                                    arc=arc, recovery=recovery)
         if not force_refresh and cache_key in self._persistent_cache:
             result = self._persistent_cache[cache_key]
             self._session_cache = result

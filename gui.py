@@ -2167,6 +2167,7 @@ class TwinChatApp(QMainWindow):
                     recovery=engine.recovery,
                     oni_warning=(engine.oni_stage != OniStage.NONE),
                     witch_scent=engine.witch_scent,
+                    arc=engine.arc.value,  # V14.4：缓存 key 按篇章分桶
                 )
                 _log(f"模板引言生成完成: {text[:30]}...")
                 _on_done(text)

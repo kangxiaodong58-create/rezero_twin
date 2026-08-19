@@ -6,26 +6,38 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
-## [V14.4] - 2026-08-19 (来信 arc 感知——帝国篇 OOC 止血)
+## [V14.4] - 2026-08-19 (来信 arc 感知止血 + 篇章模板注册表骨架)
 
-> 研判报告（docs/design/场景化内容密度与篇章模版池研判_2026-08-19.md）四个问题之首：letters.json 无 arc 字段，帝国篇 favor≥70 会命中宅邸深情模板（「没有您的日子蕾姆连呼吸都困难」），与 Prompt 注入的失忆疏离指令同屏冲突。本版 Step 0 止血：模板加 `arcs` 维度 + 帝国克制来信。
+> 研判报告（docs/design/场景化内容密度与篇章模版池研判_2026-08-19.md）执行：Step 0 堵帝国篇来信 OOC 漏洞（arc 维度 + 帝国克制来信）；Step 1 注册表骨架（template_registry + registry.json 30 条首批 + 缓存 key 补 arc/recovery 分桶）。
+
+### Step 0：来信 arc 感知（止血）
 
 ### Added
 - **arc 匹配维度**：`LetterManager.evaluate_and_dispatch(..., arc="mansion_era")`——模板 `arcs` 字段过滤；**缺省 = ["mansion_era"]**（安全默认：内容默认宅邸专用，新 arc 内容必须显式声明；`"all"` 显式全 arc）；GUI 传 `engine.arc.value`
 - **3 条帝国克制来信**（arcs:["empire_era"]，失忆疏离基调，与 Prompt 注入一致）：`empire_rem_cross_01`（CROSS_PERIOD）/ `empire_rem_days_01`（DAYS_1_3）/ `empire_ram_long_01`（LONG_ABSENCE）
-- 测试 +4：帝国篇 favor 85 × 300 采样**零深情命中** / 帝国来信来自帝国模板 / 默认 arc 零回归 / 帝国无模板桶静默
+- 测试 +5：帝国篇 favor 85 × 300 采样**零深情命中** / 帝国来信来自帝国模板 / 默认 arc 零回归 / 帝国无模板桶静默 / GUI 层 arc 传递集成（50 采样触发即疏离）
 
 ### Changed
 - `content/letters.json`：40 条既有模板显式标注 `"arcs": ["mansion_era"]`（共 43 条）
 
+### Step 1：篇章模板注册表骨架
+
+### Added
+- **`shared/template_registry.py`**（新，纯逻辑零依赖）：`load_registry`（校验 + 坏 JSON 降级）+ `pick` 选择器——arc 分桶（缺则兜底 mansion_era）→ 硬条件交集（offline_bucket/recovery_range/periods/weathers/favor_range）→ 逐级放松（weathers→periods→favor_range→offline_bucket；recovery_range 篇章语义不放松）→ **arc 级回落**（条件全过滤仍空且非宅邸 → 回落 mansion_era，帝国满恢复=宅邸人格，启动永远有引言）→ 确定性 hash（md5(f"{seed}|{id}") 同日同时段稳定）；无匹配 None 不抛
+- **`content/templates/registry.json`**（新，30 条首批）：宅邸 vignette 10（角色开口类，补「现状全是旁白」缺口 + 天气变体）+ return_flavor 13（复用来信五桶口径）+ 帝国低档 3（疏离）+ 帝国恢复期 2（记忆碎片）+ late 2（战友）
+- **缓存 key 补 arc/recovery**（§3.3 修复）：`build_cache_key` 加 `arc` + `recovery` 参数（recovery 桶 a/r/m 三档）；`generate(..., arc="mansion_era")` 默认零感知；GUI 传 `engine.arc.value`——宅邸篇缓存不再被帝国篇命中
+- 测试 +8（`tests/test_template_registry.py`）：加载校验 30 条 / 坏 JSON 降级 / 同 seed 确定性 / arc 兜底 / recovery 档位（低档疏离·恢复期·满恢复回落）/ 逐级放松链路 / offline_bucket 硬过滤 / 缓存 key 分桶回归
+
 ### 不变项
 - 冷却三红线、离线五桶、发件人权重、twins 拆分、白名单插值——零改动
-- 宅邸篇行为零变化（arcs 过滤对 mansion_era 全放行）
+- 宅邸篇行为零变化（arcs 过滤对 mansion_era 全放行；缓存 key 增量字段仅影响分区）
+- `content/templates/` 随 `('content','content')` 自动进 EXE
 
 ### 验收
-1. pytest **87/87**（83 既有 + 4 新增；×3 连跑确认无 flaky）
+1. pytest **96/96**（88 既有 + 8 新增；多轮连跑无 flaky）
 2. 止血断言：帝国 arc 300 次采样永不出现「呼吸都困难/喜欢您/好想/缺了一块」
-3. 后续：Step 1 注册表骨架（缓存 key 补 arc、引言粗桶对齐）待确认
+3. 注册表断言：同 seed 同日同时段选型稳定；逐级放松全覆盖；无匹配 None 不抛
+4. 后续：Step 2 宅邸池迁移（vignette 硬匹配 → registry slot 选型）+ Step 3 帝国两档扩池
 
 ---
 
