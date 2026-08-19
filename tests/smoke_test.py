@@ -516,6 +516,10 @@ def test_response_validator_v1051() -> None:
 
     # OOC 词拦截
     assert not validator.validate('【蕾姆】: "用户您有什么事？"').ok
+    assert not validator.validate('【蕾姆】: "请问有什么可以帮您？"').ok
+
+    # V14.4（Trial #3-C）：女仆正常台词「请问有什么需要帮忙的吗」不被误拦
+    assert validator.validate('【蕾姆】: "客人大人，请问有什么需要帮忙的吗？"').ok
 
     # 第一人称「我」拦截
     assert not validator.validate('【蕾姆】: "我觉得你很温柔。"').ok
