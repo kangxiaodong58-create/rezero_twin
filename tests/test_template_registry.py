@@ -36,11 +36,16 @@ def _registry():
 def test_load_and_validate() -> None:
     reg = _registry()
     assert reg["schema_version"] == "1.0"
-    assert len(reg["items"]) == 58, f"Step3 扩池后应 58 条，实际 {len(reg['items'])}"
+    assert len(reg["items"]) == 69, f"Step4 扩池后应 69 条，实际 {len(reg['items'])}"
     ids = [it["id"] for it in reg["items"]]
     assert len(ids) == len(set(ids)), "id 应唯一"
     for it in reg["items"]:
         assert it.get("arc") and it.get("slot") and it.get("text"), f"缺字段: {it.get('id')}"
+    # V14.4 疏漏回归：arc 值必须与 StoryArc.value 一致（late_era ≠ late_arc 的历史坑）
+    from shared.state import StoryArc
+    valid = {a.value for a in StoryArc}
+    for it in reg["items"]:
+        assert it["arc"] in valid, f"arc 值非法（与枚举不一致）: {it['id']} → {it['arc']}"
 
 
 def test_load_bad_json_degrades() -> None:
@@ -155,6 +160,19 @@ def test_cache_key_arc_partition() -> None:
     assert k_low != k_mid, "recovery 桶应分档（0.1=m / 0.5=r）"
 
 
+def test_late_arc_route() -> None:
+    """V14.4 Step4：late_arc 命中断言（/late 切换后不回落宅邸——历史疏漏回归）。"""
+    reg = _registry()
+    late_v = [it["text"] for it in reg["items"]
+              if it["arc"] == "late_arc" and it["slot"] == "vignette"]
+    assert len(late_v) == 7, f"late vignette 应 7 条: {len(late_v)}"
+    it = pick(reg, arc="late_arc", slot="vignette", seed="s")
+    assert it is not None and it["arc"] == "late_arc", "late_arc 应命中自身条目（不回落宅邸）"
+    assert it["text"] in late_v
+    assert "剑" in it["text"] or "蕾姆" in it["text"] or "战场" in it["text"] or "营火" in it["text"], \
+        f"后期篇应为战友托付语感: {it['text']}"
+
+
 def main() -> int:
     tests = [
         ("加载与校验（30 条 + id 唯一）", test_load_and_validate),
@@ -166,6 +184,7 @@ def main() -> int:
         ("逐级放松链路", test_relaxation_chain),
         ("offline_bucket 硬过滤", test_offline_bucket_match),
         ("缓存 key arc/recovery 分桶（§3.3 回归）", test_cache_key_arc_partition),
+        ("late_arc 路由（疏漏回归）", test_late_arc_route),
     ]
     failed = 0
     for name, fn in tests:

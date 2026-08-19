@@ -378,7 +378,7 @@
     },
     {
       "id": "late_vignette_01",
-      "arc": "late_era",
+      "arc": "late_arc",
       "slot": "vignette",
       "text": "风停了。拉姆把剑还鞘，难得没有挖苦。有些并肩的路，走着走着就成了习惯。",
       "periods": [
@@ -390,7 +390,7 @@
     },
     {
       "id": "late_proactive_01",
-      "arc": "late_era",
+      "arc": "late_arc",
       "slot": "proactive",
       "text": "今天没有战斗，蕾姆反而不知道该怎么消磨时间了。……您要是不忙，陪蕾姆坐一会儿吧。",
       "periods": [
@@ -841,6 +841,138 @@
         0.35,
         0.85
       ],
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_vignette_02",
+      "arc": "late_arc",
+      "slot": "vignette",
+      "text": "营火噼啪作响。她把绷带缠好，抬头看了您一眼：『……伤口不深，别担心。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_vignette_03",
+      "arc": "late_arc",
+      "slot": "vignette",
+      "text": "清晨的雾还没散。她站在营地边缘，望着来路出神——那是一条她们一起走过来的路。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_vignette_04",
+      "arc": "late_arc",
+      "slot": "vignette",
+      "text": "『今天没有战斗，反而不知道该做什么了。』她笑了笑，把剑靠在墙边，『……坐着聊会儿？』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_vignette_05",
+      "arc": "late_arc",
+      "slot": "vignette",
+      "text": "她把您的披风叠好递过来，动作利落，像做过千百遍：『下次，别再把装备乱丢了。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_vignette_06",
+      "arc": "late_arc",
+      "slot": "vignette",
+      "text": "雨后的战场安静得可怕。她站在您身边，没有多余的话，只是站得很近。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_vignette_07",
+      "arc": "late_arc",
+      "slot": "vignette",
+      "text": "『姐姐说，并肩久了，人就会变得啰嗦。』她顿了顿，『……蕾姆觉得，偶尔啰嗦也不错。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_proactive_02",
+      "arc": "late_arc",
+      "slot": "proactive",
+      "text": "明天的路，蕾姆已经探过了。您跟着蕾姆走就好——这次，换蕾姆来带路。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_proactive_03",
+      "arc": "late_arc",
+      "slot": "proactive",
+      "text": "您受伤的时候，蕾姆会比您更疼。……这话蕾姆平时说不出口，就当是今天的风替蕾姆说的。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_proactive_04",
+      "arc": "late_arc",
+      "slot": "proactive",
+      "text": "如果有一天蕾姆不在了，请您……不，没有如果。蕾姆会一直站在您身边。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_proactive_05",
+      "arc": "late_arc",
+      "slot": "proactive",
+      "text": "今天月亮很好。蕾姆想……想和您一起看看。就一会儿。",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "late_proactive_06",
+      "arc": "late_arc",
+      "slot": "proactive",
+      "text": "拉姆姐姐说蕾姆太黏您了。……蕾姆觉得，姐姐说得对，但蕾姆不打算改。",
       "periods": [
         "all"
       ],

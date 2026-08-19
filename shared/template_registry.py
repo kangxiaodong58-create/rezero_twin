@@ -3,7 +3,7 @@
 registry.json 条目 schema：
 {
   "id": "唯一 id",
-  "arc": "mansion_era | empire_era | late_era（或未来枚举）",
+  "arc": "mansion_era | empire_era | late_arc（与 StoryArc.value 一致）",
   "slot": "vignette | proactive | return_flavor | status_flavor | twin_idle | ambient_remark",
   "text": "文案（含 {占位符} 由调用方插值）",
   "offline_bucket": 可选 "CROSS_PERIOD|HALF_DAY|DAYS_1_3|DAYS_3_7|LONG_ABSENCE",

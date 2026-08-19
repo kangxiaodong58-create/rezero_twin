@@ -43,6 +43,16 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - **生成链路 arc 透传**：`_pick_short_opening(arc)` / `_pick_return_flavor(arc)` / `fill_dynamic_template(arc)` / `generate(arc)` 全链路——帝国低 recovery 引言/归来感命中疏离档（pick 内置 arc 级回落，满恢复回落宅邸）
 - 测试 +2：帝国两档语感守卫（低档零深情零宅邸腔「客人大人/巴鲁斯」；两档互斥反向断言）/ arc 透传路由（帝国 vignette 16 条、宅邸不串池）
 
+### Step 4：后期轻量（late_arc）+ 篇章体系疏漏修复
+
+### Added
+- **registry 扩至 69 条**（late_arc 13）：vignette 7 + proactive 6（战友托付语感：营火绷带、并肩之路、换蕾姆带路、没有如果、月亮很好、姐姐说得对但不改）
+- 测试 +1：late_arc 路由断言（/late 切换后命中自身条目不回落宅邸）
+
+### Fixed（侦查发现的历史疏漏）
+- **`registry.json` late 条目 arc 值 `"late_era"` ≠ `StoryArc.LATE_ARC.value`（"late_arc"）**——`/late` 切换后 pick 永远选不中后期篇条目（静默回落宅邸）；已修复 + **arc 值合法性回归断言**（所有条目 arc ∈ StoryArc.values，防再犯）
+- 侦查结论：篇章体系完整——StoryArc 三态（MANSION/EMPIRE/LATE_ARC）、gui `/mansion` `/empire` `/late` 三命令、ResponseLibrary 三桶全在；唯一疏漏即 registry 值不一致（已修）
+
 ### 不变项
 - 30% 短开场概率门、L0-L3 弹力网络结构、PERIOD_DESC/WEATHER_DESC 母板——零改动
 - 冷却三红线、离线五桶、发件人权重、twins 拆分、白名单插值——零改动
@@ -50,13 +60,14 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - `content/templates/` 随 `('content','content')` 自动进 EXE
 
 ### 验收
-1. pytest **104/104**（102 既有 + 2 新增；多轮连跑无 flaky）
+1. pytest **105/105**（104 既有 + 1 新增；多轮连跑无 flaky）
 2. 止血断言：帝国 arc 300 次采样永不出现「呼吸都困难/喜欢您/好想/缺了一块」
 3. 注册表断言：同 seed 同日同时段选型稳定；逐级放松全覆盖；无匹配 None 不抛
 4. 迁移断言：40 组合分布不劣化；registry 空时回落旧逻辑不崩
-5. 语感断言：低档 17 条零深情零宅邸腔；高档 16 条与低档互斥（无疏离标志）
-6. 手工冒烟待真机：帝国篇低 recovery 启动引言/来信疏离；恢复期记忆碎片
-7. 后续：Step 4 后期轻量（late_era 扩池 5-8 条）+ Step 5 偶发一句（ambient_remark 事件触发）
+5. 语感断言：低档 17 条零深情零宅邸腔；高档 16 条与低档互斥
+6. 篇章断言：69 条 arc 全部合法（∈ StoryArc.values）；late_arc 路由命中自身
+7. 手工冒烟待真机：`/late` 切换后引言为战友托付语感
+8. 后续：Step 5 偶发一句（ambient_remark 事件触发 + 冷却 2h/日 3 条上限）
 
 ---
 
