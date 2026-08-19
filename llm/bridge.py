@@ -164,6 +164,20 @@ class ReZeroLLMBridge:
                 scene_opening = SceneManager.get_scene_opening(
                     new_scene, world.period, world.weather)
                 logging.info("V14.7 场景切换 → %s", new_scene)
+                # V14.7 优化 O-1：场景切换联动事件——若当前事件地点与新场景冲突
+                # （如切到书库但事件是「走廊红茶」），刷新事件保持场景一致性
+                try:
+                    if world.active_event:
+                        from shared import vignette as _v
+                        loc = _v._derive_location(world.active_event)
+                        # 事件地点含场景关键词且与新场景中文名不同 → 冲突刷新
+                        scene_cn = PromptBuilder.SCENE_CN.get(new_scene, new_scene)
+                        if loc != "罗兹瓦尔宅邸" and scene_cn and scene_cn not in loc:
+                            world.refresh_active_event()
+                            logging.info("O-1 场景联动：事件刷新 %s → %s",
+                                         loc, world.active_event[:20])
+                except Exception:
+                    pass  # 联动失败不影响场景切换
         except Exception:
             scene_opening = None  # 场景系统故障不阻断对话
         # V11.10.0：情感场景检测（在 Prompt 构建前）

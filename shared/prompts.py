@@ -1,4 +1,4 @@
-"""System Prompt 构建器（LLM 模式专用）。
+﻿"""System Prompt 构建器（LLM 模式专用）。
 
 V14.4（Phase C）：本地模板词库（ResponseLibrary/RamAI）已随 local 模式移除，
 本文件仅保留 PromptBuilder 与事件语义召回辅助。
@@ -146,6 +146,7 @@ class PromptBuilder:
     ) -> str:
         name = state.user_name or "客人大人"
         world_section = PromptBuilder._build_world_section(world)
+        event_highlight_section = PromptBuilder._build_event_highlight_section(world)  # V14.7 G-1
         profile_section = PromptBuilder._build_profile_section(profile)
         # V14.6 原著锚定：角色卡 + 世界观词汇（建议结构：CORE → PERSONA → LORE → SCENE）
         persona_section = PromptBuilder._build_persona_section()
@@ -216,7 +217,7 @@ class PromptBuilder:
 - 拉姆好感：{state.ram_favor}/100
 - 上下文摘要：{state.context_summary}
 - 特殊状态：{special_str}
-{profile_section}{persona_section}{lore_section}{world_section}{events_section}{scene_section}{scene_space_section}{character_section}{milestone_section}{ram_witness_note}
+{profile_section}{persona_section}{lore_section}{world_section}{event_highlight_section}{events_section}{scene_section}{scene_space_section}{character_section}{milestone_section}{ram_witness_note}
 ### 角色扮演核心要求
 
 **蕾姆**：
@@ -261,6 +262,28 @@ class PromptBuilder:
             "\n### 当前世界状态\n\n" + world.to_prompt_text() +
             "\n\n角色应自然地感知这些环境信息，融入对话而非生硬播报。\n"
         )
+
+    @staticmethod
+    def _build_event_highlight_section(world: Optional[WorldState]) -> str:
+        """V14.7 优化 G-1：今日事件独立高亮小节——事件从世界状态行中提升，
+        让 LLM 在长会话中不被对话历史稀释（Trial #4-B2 观察：事件注入被忽略）。
+
+        含事件描述 + 双子倾向（rem_view/ram_view，若事件有）；无事件返回空串。
+        """
+        if not world or not world.active_event:
+            return ""
+        lines = [f"\n### 今日宅邸事件（用户可能询问，请优先自然回应）\n- 事件：{world.active_event}"]
+        if world.active_event_id:
+            from shared.state import EVENT_POOL
+            for ev in EVENT_POOL:
+                if ev.get("id") == world.active_event_id:
+                    if ev.get("rem_view"):
+                        lines.append(f"- 蕾姆对此的倾向：{ev['rem_view']}")
+                    if ev.get("ram_view"):
+                        lines.append(f"- 拉姆对此的倾向：{ev['ram_view']}")
+                    break
+        lines.append("- 双子应对当前事件有自然的反应，而非当作背景板忽略。\n")
+        return "\n".join(lines)
 
     @staticmethod
     def _build_profile_section(profile: Optional[StructuredProfile]) -> str:
