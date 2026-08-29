@@ -28,7 +28,8 @@ test_mode.py
 
 # Runtime SQLite (v10.2+)
 data/conversations.db*
-data/life.db*   # 人生账本（V15，用户数据不入库）
+# 人生账本（V15，用户数据不入库）
+data/life.db*
 
 # WorkBuddy workspace metadata
 .workbuddy/
