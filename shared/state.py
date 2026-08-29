@@ -357,7 +357,6 @@ class WorldState:
         return cls._determine_weather(date_str, "全天", 42)
 
     @classmethod
-    @classmethod
     def _weighted_pick(cls, pool: List[Dict[str, Any]], system_date: str,
                        period: str, weather: str, seed: int) -> Dict[str, Any]:
         """按 (日期, 时段, 天气, 种子) md5 加权确定性选型（池外无副作用）。"""

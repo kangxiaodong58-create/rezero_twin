@@ -1858,23 +1858,44 @@ class TwinChatApp(QMainWindow):
         central.setObjectName("app_shell")
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
-        main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.setSpacing(0)
+        main_layout.setContentsMargins(12, 12, 12, 8)
+        main_layout.setSpacing(8)
 
         # ── 顶部标题栏 ──
         header = QFrame()
-        header.setFixedHeight(DIM['header_h'])
-        header.setStyleSheet(f"background-color: {COLORS['bg_header']}; border-bottom: 1px solid {COLORS['border_subtle']};")
+        header.setFixedHeight(66)
+        header.setStyleSheet(f"background-color: rgba(8,12,35,0.82); border: 1px solid {COLORS['border_subtle']}; border-radius: 18px;")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 0, 18, 0)
 
         title_mark = QLabel()
         title_mark.setPixmap(QPixmap(_asset_path("app_icon.png")).scaled(28, 28, Qt.KeepAspectRatio, Qt.SmoothTransformation))
         header_layout.addWidget(title_mark)
-        title = QLabel("Re:Zero 双子系统  ·  Rem × Ram")
-        title.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['title_lg'], QFont.Bold))
-        title.setStyleSheet(f"color: {COLORS['text_primary']};")
+        title = QLabel("Re:zero Twin\n双子系统")
+        title.setFont(QFont("Georgia", 18, QFont.Bold))
+        title.setStyleSheet("color: #ffd1ea;")
         header_layout.addWidget(title)
+        for name, en, avatar_asset, bg, fg in [
+            ("蕾姆", "Rem", "rem_avatar.svg", "rgba(222,241,255,0.94)", "#5b9bea"),
+            ("拉姆", "Ram", "ram_avatar.svg", "rgba(255,222,238,0.94)", "#e879ac"),
+        ]:
+            tab = QFrame()
+            tab.setFixedHeight(48)
+            tab.setStyleSheet(f"background: {bg}; border: 1px solid rgba(255,255,255,0.60); border-radius: 14px;")
+            tab_layout = QHBoxLayout(tab)
+            tab_layout.setContentsMargins(8, 4, 12, 4)
+            avatar_label = QLabel()
+            avatar_label.setPixmap(_svg_pixmap(avatar_asset, 38))
+            tab_layout.addWidget(avatar_label)
+            tab_title = QLabel(f"{name}  {en}")
+            tab_title.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body'], QFont.Bold))
+            tab_title.setStyleSheet(f"color: {fg};")
+            tab_layout.addWidget(tab_title)
+            header_layout.addWidget(tab)
+        twin_mode = QLabel("双子模式")
+        twin_mode.setAlignment(Qt.AlignCenter)
+        twin_mode.setStyleSheet("background: rgba(21,28,67,0.84); color: #f8e7f4; border: 1px solid rgba(211,193,238,0.42); border-radius: 13px; padding: 8px 14px; font-weight: bold;")
+        header_layout.addWidget(twin_mode)
         header_layout.addStretch()
 
         # 历史搜索
@@ -1973,7 +1994,46 @@ class TwinChatApp(QMainWindow):
 
         # ── 主体三栏布局 ──
         body = QHBoxLayout()
-        body.setSpacing(0)
+        body.setSpacing(12)
+
+        # ── 参考图式左侧图标导航 ──
+        nav = QFrame()
+        nav.setObjectName("side_nav")
+        nav.setFixedWidth(182)
+        nav.setStyleSheet(f"QFrame#side_nav {{ background: rgba(8,12,34,0.76); border: 1px solid {COLORS['border_subtle']}; border-radius: 18px; }}")
+        nav_layout = QVBoxLayout(nav)
+        nav_layout.setContentsMargins(12, 15, 12, 15)
+        nav_layout.setSpacing(7)
+
+        def nav_button(label: str, icon: str, callback, active: bool = False) -> QPushButton:
+            btn = QPushButton(label)
+            btn.setIcon(_theme_icon(icon))
+            btn.setIconSize(QSize(21, 21))
+            btn.setFixedHeight(43)
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body'], QFont.Bold if active else QFont.Normal))
+            if active:
+                btn.setStyleSheet("QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(113,175,241,0.58),stop:1 rgba(241,142,192,0.58)); color: white; border: 1px solid rgba(255,224,247,0.75); border-radius: 12px; text-align: left; padding-left: 14px; } QPushButton:hover { background: rgba(203,158,221,0.80); }")
+            else:
+                btn.setStyleSheet("QPushButton { background: transparent; color: #eef1ff; border: none; border-radius: 12px; text-align: left; padding-left: 14px; } QPushButton:hover { background: rgba(255,255,255,0.12); color: white; }")
+            btn.clicked.connect(callback)
+            return btn
+
+        nav_layout.addWidget(nav_button("对话", "icon_chat.svg", lambda: self.input_box.setFocus(), True))
+        nav_layout.addWidget(nav_button("记忆", "icon_memory.svg", self._open_memory_book))
+        nav_layout.addWidget(nav_button("日程", "icon_calendar.svg", lambda: self._handle_command("/status")))
+        nav_layout.addWidget(nav_button("任务", "icon_task.svg", lambda: self._handle_command("/status")))
+        nav_layout.addWidget(nav_button("插件", "icon_plugin.svg", lambda: self._handle_command("/status")))
+        nav_layout.addWidget(nav_button("设置", "icon_settings.svg", lambda: self._handle_command("/toggle")))
+        nav_layout.addWidget(nav_button("关于", "icon_info.svg", self._open_history))
+        nav_layout.addStretch()
+        nav_twins = QLabel()
+        nav_twins.setAlignment(Qt.AlignCenter)
+        nav_twins.setPixmap(QPixmap(_asset_path("app_icon.png")).scaled(140, 140, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
+        nav_twins.setFixedHeight(108)
+        nav_twins.setStyleSheet("background: rgba(50,45,94,0.42); border-radius: 14px;")
+        nav_layout.addWidget(nav_twins)
+        body.addWidget(nav)
 
         # 左侧：蕾姆面板
         # V14.11：立绘解析优先级 用户自定义（data/sprites）> 内置 assets；拖入信号接线
@@ -1984,6 +2044,7 @@ class TwinChatApp(QMainWindow):
         self.rem_panel.sprite_dropped.connect(
             lambda p: self._on_sprite_dropped("rem", p))
         body.addWidget(self.rem_panel)
+        self.rem_panel.hide()  # 左栏由主题导航替代；仍保留状态同步与拖入换立绘能力。
 
         # 中间：聊天区域
         chat_section = QVBoxLayout()
@@ -1993,8 +2054,10 @@ class TwinChatApp(QMainWindow):
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll.setFrameShape(QFrame.NoFrame)
+        self.scroll.setStyleSheet("QScrollArea { background: rgba(255,250,255,0.86); border: 2px solid rgba(255,255,255,0.78); border-radius: 22px; }")
 
         self.chat_container = QWidget()
+        self.chat_container.setStyleSheet("background: transparent;")
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setAlignment(Qt.AlignTop)
         self.chat_layout.setSpacing(SPACING['xs'])  # V12.1：回合间距 — 基线降到 xs，关系由本条 top margin 表达
@@ -2011,7 +2074,7 @@ class TwinChatApp(QMainWindow):
         # 输入区域
         input_frame = QFrame()
         input_frame.setFixedHeight(DIM['input_frame_h'])
-        input_frame.setStyleSheet(f"background-color: {COLORS['bg_surface']}; border-top: 1px solid {COLORS['border_subtle']};")
+        input_frame.setStyleSheet("background: rgba(255,249,255,0.92); border: 1px solid rgba(240,163,207,0.42); border-radius: 18px;")
         input_layout = QVBoxLayout(input_frame)
         input_layout.setContentsMargins(14, 10, 14, 10)
         input_layout.setSpacing(6)
@@ -2086,10 +2149,16 @@ class TwinChatApp(QMainWindow):
         self.input_box.setPlaceholderText("和蕾姆、拉姆说点什么吧… (Enter 发送)")
         self.input_box.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg']))
         self.input_box.setFixedHeight(DIM['input_box_h'])
+        self.input_box.setStyleSheet("QTextEdit { background: rgba(255,255,255,0.74); color: #3c3850; border: none; border-radius: 12px; padding: 7px 10px; } QTextEdit:focus { border: 1px solid rgba(225,140,190,0.70); }")
         self.input_box.installEventFilter(self)
         input_row.addWidget(self.input_box, 1)
 
+        # V16-M_D：完整创建块恢复（此前布局改版误删——流式"取消"文本与
+        # _send_message 信号都挂在 self.send_btn 上，必须保持同一实例）
         self.send_btn = QPushButton("发 送")
+        self.send_btn.setStyleSheet(
+            "QPushButton { border-radius: 12px; }"
+            "QPushButton:pressed { padding-top: 1px; }")
         self.send_btn.setFixedSize(DIM['send_btn_w'], DIM['send_btn_h'])
         self.send_btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg'], QFont.Bold))
         self.send_btn.setCursor(Qt.PointingHandCursor)
@@ -2110,12 +2179,41 @@ class TwinChatApp(QMainWindow):
             lambda p: self._on_sprite_dropped("ram", p))
         body.addWidget(self.ram_panel)
 
+        # 右栏以双子画面取代单一立绘的留白，让状态面板更接近参考图。
+        self.ram_panel.avatar_image.setPixmap(
+            QPixmap(_asset_path("app_icon.png")).scaled(160, 230, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
         main_layout.addLayout(body, 1)
+
+        # ── 底部图标坞 ──
+        dock = QFrame()
+        dock.setFixedHeight(58)
+        dock.setStyleSheet("background: rgba(15,20,55,0.76); border: 1px solid rgba(255,255,255,0.16); border-radius: 17px;")
+        dock_layout = QHBoxLayout(dock)
+        dock_layout.setContentsMargins(20, 5, 20, 5)
+        dock_layout.setSpacing(16)
+        for label, icon, callback in [
+            ("主页", "icon_chat.svg", lambda: self.input_box.setFocus()),
+            ("对话", "icon_chat.svg", lambda: self.input_box.setFocus()),
+            ("记忆", "icon_memory.svg", self._open_memory_book),
+            ("日程", "icon_calendar.svg", lambda: self._handle_command("/status")),
+            ("任务", "icon_task.svg", lambda: self._handle_command("/status")),
+            ("插件", "icon_plugin.svg", lambda: self._handle_command("/status")),
+        ]:
+            btn = QPushButton(label)
+            btn.setIcon(_theme_icon(icon))
+            btn.setIconSize(QSize(24, 24))
+            btn.setCursor(Qt.PointingHandCursor)
+            btn.setStyleSheet("QPushButton { background: transparent; color: #f5eaf4; border: none; padding: 2px 9px; } QPushButton:hover { background: rgba(255,255,255,0.13); border-radius: 12px; }")
+            btn.clicked.connect(callback)
+            dock_layout.addWidget(btn)
+        dock_layout.addStretch()
+        main_layout.addWidget(dock)
 
         # ── 底部状态栏 ──
         footer = QFrame()
         footer.setFixedHeight(DIM['footer_h'])
-        footer.setStyleSheet(f"background-color: {COLORS['bg_header']}; border-top: 1px solid {COLORS['border_subtle']};")
+        footer.setStyleSheet("background: rgba(8,12,35,0.76); border-radius: 10px;")
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(14, 0, 14, 0)
 
@@ -3206,6 +3304,20 @@ class TwinChatApp(QMainWindow):
         self._history_overlay.raise_()
         self._history_overlay.setFocus()
         _log("历史浮层已打开")
+
+    def _handle_command(self, cmd: str) -> None:
+        """V16-M_D：导航栏/图标坞命令路由（/status /toggle）。"""
+        try:
+            if cmd == "/status":
+                self._append_parsed_message(
+                    "系统", self.bot.status(), "system", save=False)
+            elif cmd == "/toggle":
+                self._switch_mode()
+            else:
+                self._append_parsed_message(
+                    "系统", f"未知指令: {cmd}", "system", save=False)
+        except Exception as e:
+            _log(f"_handle_command 异常: {e}")
 
     def _open_memory_book(self) -> None:
         """V15.0-M3：懒创建并打开回忆之书浮层（独立模块 memory_book.py）。"""

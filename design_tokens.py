@@ -109,7 +109,7 @@ ROLE_COLORS = {
 ROLE_BUBBLE_STYLES = {
     "rem": {
         "bg": COLORS['rem_bubble'],
-        "fg": COLORS['text_primary'],
+        "fg": "#34374d",  # 浅色聊天舞台上的正文
         "border": f"border-left: 3px solid {COLORS['rem_left']};",
         "hl_border": "border-left: 5px solid rgba(86,204,242,0.70);",
         "hl_bg": "rgba(86,204,242,0.15)",
@@ -120,7 +120,7 @@ ROLE_BUBBLE_STYLES = {
     },
     "ram": {
         "bg": COLORS['ram_bubble'],
-        "fg": COLORS['text_primary'],
+        "fg": "#34374d",
         "border": f"border-left: 3px solid {COLORS['ram_left']};",
         "hl_border": "border-left: 5px solid rgba(255,126,179,0.70);",
         "hl_bg": "rgba(255,126,179,0.15)",
@@ -130,7 +130,7 @@ ROLE_BUBBLE_STYLES = {
     },
     "user": {
         "bg": COLORS['user_bubble'],
-        "fg": COLORS['text_primary'],
+        "fg": "#34374d",
         "border": f"border: 1px solid {COLORS['user_border']};",
     },
 }
