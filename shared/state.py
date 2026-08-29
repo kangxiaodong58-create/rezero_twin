@@ -27,6 +27,20 @@ def _trace_transition(component: str, from_state: str, to_state: str) -> None:
         pass
 
 
+def _life_ledger_mod():
+    """V15.0-M1：人生账本模块懒加载（shared 内部，无循环依赖）。"""
+    from shared import life_ledger
+    return life_ledger
+
+
+def _life_mirror(fn) -> None:
+    """人生账本镜像入口——任何失败静默，绝不影响状态机主流程。"""
+    try:
+        fn()
+    except Exception:
+        pass
+
+
 class StoryArc(str, Enum):
     MANSION_ERA = "mansion_era"
     EMPIRE_ERA = "empire_era"
@@ -343,6 +357,22 @@ class WorldState:
         return cls._determine_weather(date_str, "全天", 42)
 
     @classmethod
+    @classmethod
+    def _weighted_pick(cls, pool: List[Dict[str, Any]], system_date: str,
+                       period: str, weather: str, seed: int) -> Dict[str, Any]:
+        """按 (日期, 时段, 天气, 种子) md5 加权确定性选型（池外无副作用）。"""
+        raw = f"{system_date}_{period}_{weather}_{seed}".encode("utf-8")
+        point = int(hashlib.md5(raw).hexdigest()[:8], 16)
+        total_weight = sum(ev["weight"] for ev in pool)
+        idx = point % total_weight
+        cumulative = 0
+        for ev in pool:
+            cumulative += ev["weight"]
+            if idx < cumulative:
+                return ev
+        return pool[-1]
+
+    @classmethod
     def _pick_active_event(cls, system_date: str, period: str, weather: str, seed: int) -> Dict[str, Any]:
         """按 (日期, 时段, 天气, 种子) 确定性选择活跃事件（返回事件 dict）。
 
@@ -354,16 +384,7 @@ class WorldState:
                 and (not ev.get("periods") or period in ev["periods"])]
         if not pool:
             pool = list(EVENT_POOL)  # 防御：极端情况下回落全池
-        raw = f"{system_date}_{period}_{weather}_{seed}".encode("utf-8")
-        point = int(hashlib.md5(raw).hexdigest()[:8], 16)
-        total_weight = sum(ev["weight"] for ev in pool)
-        idx = point % total_weight
-        cumulative = 0
-        for ev in pool:
-            cumulative += ev["weight"]
-            if idx < cumulative:
-                return ev
-        return pool[-1]
+        return cls._weighted_pick(pool, system_date, period, weather, seed)
 
     def refresh_active_event(self, scene: Optional[str] = None) -> None:
         """根据当前世界状态刷新活跃事件并记录生成时间。
@@ -388,6 +409,14 @@ class WorldState:
                     "WILDERNESS": "荒野", "CAMPFIRE": "营火", "BARRACKS": "军营",
                     "BATTLEFIELD": "战场",
                 }.get(scene, scene)
+
+                def _compatible(ev: Dict[str, Any]) -> bool:
+                    try:
+                        loc = _v._derive_location(ev["desc"])
+                    except Exception:
+                        return True
+                    return loc == "罗兹瓦尔宅邸" or scene_cn in loc
+
                 for attempt in range(1, 6):
                     desc = picked["desc"] if isinstance(picked, dict) else str(picked)
                     loc = _v._derive_location(desc)
@@ -395,6 +424,19 @@ class WorldState:
                         break  # 无地点约束或地点一致 → 接受
                     picked = self._pick_active_event(
                         system_date, self.period, self.weather, base_seed + attempt * 7)
+                else:
+                    # V15.0-M1：5 次种子重试全部冲突 → 兼容池确定性兜底。
+                    # 此前回落"最后一次重试结果"（可能仍是冲突事件）——重试种子
+                    # 固定但时段/天气随真实时钟变化，特定时间窗必然刷新失败
+                    # （V14.8 的"flaky 已消除"结论即源于此）。
+                    compatible = [ev for ev in EVENT_POOL
+                                  if (not ev.get("weathers") or self.weather in ev["weathers"])
+                                  and (not ev.get("periods") or self.period in ev["periods"])
+                                  and _compatible(ev)]
+                    if compatible:
+                        picked = self._weighted_pick(
+                            compatible, system_date, self.period, self.weather,
+                            base_seed + 35)
             except Exception:
                 pass  # 场景约束失败不影响基本刷新
         self.active_event = picked["desc"] if isinstance(picked, dict) else str(picked)
@@ -844,11 +886,17 @@ class HardStateEngine:
                 self.events.pop(0)
 
     def _detect_events(self, text: str, intent: Intent, prev: Dict[str, Any]) -> None:
-        """重要时刻检测（规则判定，零 API 成本）。在 update() 末尾调用。"""
+        """重要时刻检测（规则判定，零 API 成本）。在 update() 末尾调用。
+
+        V15.0-M1：重要时刻同步镜像人生账本（life.db，幂等去重）——
+        _add_event 仍是唯一判定真源，账本只接收镜像，任何失败静默。
+        """
         n = self.turn_count
         # 首次告知名字
         if prev["user_name"] is None and self.user_name:
             self._add_event("name_first", f"第{n}次对话：用户第一次告知名字「{self.user_name}」", text)
+            _life_mirror(lambda: _life_ledger_mod().mirror_first_name(
+                self.user_name, engine=self))
         # 好感等级跃迁
         level_now = self._get_favor_level()
         if level_now > prev["level"]:
@@ -856,6 +904,7 @@ class HardStateEngine:
         # 忠诚锁定达成
         if self.locked and not prev["locked"]:
             self._add_event("locked", f"第{n}次对话：好感抵达 95，忠诚锁定达成", text)
+            _life_mirror(lambda: _life_ledger_mod().mirror_loyalty_lock(engine=self))
         # 拉姆阶段跃迁
         order = [RamStage.SUSPICIOUS, RamStage.OBSERVING, RamStage.DECENT,
                  RamStage.RELUCTANT, RamStage.ACKNOWLEDGED]
@@ -865,6 +914,7 @@ class HardStateEngine:
         # 记忆恢复重逢
         if self.is_reunion and not prev["reunion"]:
             self._add_event("reunion", f"第{n}次对话：记忆恢复，重逢", text)
+            _life_mirror(lambda: _life_ledger_mod().mirror_reunion(engine=self))
         # 鬼化进入完全解放 / 失控边缘
         if self.oni_stage in (OniStage.FULL, OniStage.BRINK) and self.oni_stage != prev["oni"]:
             label = "完全解放" if self.oni_stage == OniStage.FULL else "失控边缘"
@@ -872,6 +922,7 @@ class HardStateEngine:
         # 破局者彩蛋
         if self.breaker_triggered and not prev["breaker"]:
             self._add_event("breaker", f"第{n}次对话：破局者时刻", text)
+            _life_mirror(lambda: _life_ledger_mod().mirror_breaker(engine=self))
         # 身份肯定（「你不是替代品」式）
         if "替代品" in text and self._is_negated(text, "替代品"):
             self._add_event("affirm", f"第{n}次对话：用户肯定蕾姆是独立的个体", text)
@@ -1151,6 +1202,8 @@ class HardStateEngine:
             self.independence = max(self.independence, 0.25)
         if prev_arc != arc:
             _trace_transition("engine.arc", prev_arc.value, arc.value)
+            _life_mirror(lambda: _life_ledger_mod().mirror_arc_shift(
+                prev_arc.value, arc.value, turn_count=self.turn_count, engine=self))
 
     def recover(self, progress: float = 1.0) -> None:
         old = self.recovery

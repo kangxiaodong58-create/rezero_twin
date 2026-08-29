@@ -91,6 +91,20 @@ class ConversationStore:
             conn.commit()
             return cur.lastrowid
 
+    def oldest_message_time(self) -> str:
+        """最早一条消息的 created_at（任何 status——历史即证据）。无消息返回 ""。"""
+        with self._connect() as conn:
+            row = conn.execute("SELECT MIN(created_at) FROM messages").fetchone()
+            return (row[0] or "") if row else ""
+
+    def user_message_times(self) -> List[str]:
+        """全部 user 消息时刻（按 id 升序）——回填引擎事件 seq → 时刻映射用。"""
+        with self._connect() as conn:
+            rows = conn.execute(
+                "SELECT created_at FROM messages WHERE role = 'user' ORDER BY id ASC"
+            ).fetchall()
+            return [r[0] for r in rows]
+
     def update_status(self, message_id: int, status: str) -> bool:
         """V14.0：软状态更新（normal/recalled/deleted/failed），返回是否命中。
 

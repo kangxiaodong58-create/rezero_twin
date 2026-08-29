@@ -169,6 +169,12 @@ class ReZeroLLMBridge:
                     new_scene, world.period, world.weather,
                     arc=getattr(state, "arc", None).value if getattr(state, "arc", None) else None)
                 logging.info("V14.7 场景切换 → %s", new_scene)
+                # V15.0-M1：场景首访记账（人生账本，幂等去重）
+                try:
+                    from shared.life_ledger import mirror_scene_first
+                    mirror_scene_first(new_scene, arc_value)
+                except Exception:
+                    pass
                 # V14.7 优化 O-1：场景切换联动事件——若当前事件地点与新场景冲突
                 # （如切到书库但事件是「走廊红茶」），刷新事件保持场景一致性
                 try:
@@ -411,7 +417,11 @@ class ReZeroLLMBridge:
             self._write_scene_cooldown(self.world)
             self.world.mark_interaction()
             from shared.scene_manager import SceneManager
-            SceneManager.consume_milestone(self.world, state)
+            marked = SceneManager.consume_milestone(self.world, state)
+            if marked:
+                # V15.0-M1：名场面时刻记账（人生账本）
+                from shared.life_ledger import mirror_milestone
+                mirror_milestone(marked, engine=state)
         else:
             self._write_scene_cooldown(None)
         record("REPLY_COMPLETED", component="bridge", generation=self._generation,
@@ -508,7 +518,11 @@ class ReZeroLLMBridge:
                             self._write_scene_cooldown(self.world)
                             self.world.mark_interaction()
                             from shared.scene_manager import SceneManager
-                            SceneManager.consume_milestone(self.world, state)
+                            marked = SceneManager.consume_milestone(self.world, state)
+                            if marked:
+                                # V15.0-M1：名场面时刻记账（人生账本）
+                                from shared.life_ledger import mirror_milestone
+                                mirror_milestone(marked, engine=state)
                         record("STREAM_END", component="bridge", generation=gen,
                                payload_summary=f"reply_len={len(final)}")
                     else:

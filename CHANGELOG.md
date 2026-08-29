@@ -6,6 +6,21 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V15.0.0-m1] - 2026-08-29 (年轮 M1——人生账本 life.db：回填 + 记账镜像，零 UI)
+
+> V15.0「年轮」= Relationship Assets（关系资产）第一个落地里程碑（构思：`docs/design/V15_0_年轮_关系资产版本构思_2026-08-29.md`）。产品定位升级为「一个会陪你一起变老的数字关系」后，本里程碑把散落的隐式沉淀变成显式、幂等、可回填的人生账本——append-only，与 engine.events（30 条工作记忆）严格分离。
+
+### Added
+- **`shared/life_ledger.py`（人生账本）**：`life.db`（SQLite，append-only + `dedup_key` 唯一约束幂等）；语义化镜像 API（first_name / loyalty_lock / reunion / breaker / arc_shift / scene_first / milestone 每日本 / letter 每日本）；`backfill_from()` 历史回填（genesis=最早消息证据、引擎事件 seq→第 N 条 user 消息时刻映射、首封来信=world.last_letter_ts），返回 `{added, checked, total}` 幂等报告；`REZERO_LIFE_DB` env 路径隔离 + 单例 reset
+- **记账镜像接线（_add_event 仍是唯一判定真源，账本只收镜像，全部静默失败）**：state.py `_detect_events`（引擎四时刻）+ `set_arc`（篇章切换）；bridge 场景切换（场景首访，每场景一生一次）+ 成功路径名场面（每名场面每日一条，经 `consume_milestone` 返回值精确对齐"实际注入"）；gui 来信接收（每发件人每日一条）
+- **`ConversationStore` 查询 +2**：`oldest_message_time()` / `user_message_times()`（回填证据链）
+- **测试 +15**：`tests/test_life_ledger.py`（幂等/快照/排序/镜像去重/坏库静默/引擎钩子/回填双跑不变）+ O-1 确定性扫描 105 组合；全量 **210/210**
+
+### Fixed
+- **O-1 场景联动刷新真 flaky（V14.8 结论被推翻）**：A/B stash 对照证明 HEAD 基线按进程 ~50% 失败——5 次种子重试固定了 seed 但固定不了时段/天气（随真实时钟），特定时间窗 5 次全冲突 → 回落"最后一次重试结果"（仍是冲突事件）；V14.8"3 连跑全绿"系幸运时段。**修复**：重试耗尽后从「天气×时段兼容 ∩ 地点兼容」池确定性兜底（`_weighted_pick`，O-1"场景一致性"语义完整闭环）；105 组合扫描测试钉死
+
+---
+
 ## [V14.11] - 2026-08-29 (体验补全——名场面冷却/偶发一句/立绘自定义/长会话内存有界)
 
 > 研判第四批。四项体验侧收尾：O-5 名场面防疲劳冷却（台账最后一项 open 闭环）、内容密度研判 Step 5「偶发一句」落地、立绘支持用户拖入替换、长会话 history 内存有界化。另据复核：体验审查两项「未做」判定失实——气泡 600px 上限自 V11.10 已生效、立绘 sprite 自 V10.0 已加载。

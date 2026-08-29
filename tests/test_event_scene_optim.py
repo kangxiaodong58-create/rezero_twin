@@ -100,3 +100,30 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
+
+
+def test_refresh_scene_constraint_always_compatible() -> None:
+    """O-1 确定性加固（V15.0-M1）：任意 (时段,天气,seed) 刷新后事件必兼容场景。
+
+    根因背景：V14.8 的 5 次种子重试固定了 seed 但固定不了时段/天气（随真实
+    时钟变化），特定时间窗 5 次全冲突 → 回落冲突事件 → 按进程随机失败（真
+    flaky，V14.8"3 连跑全绿"系幸运时段）。兼容池兜底后：只要存在兼容事件，
+    刷新必不回落冲突。
+    """
+    from shared.state import WorldState
+    from shared import vignette as _v
+    combos = 0
+    for period in ("清晨", "上午", "午后", "下午", "傍晚", "夜晚", "深夜"):
+        for weather in ("晴朗", "多云", "小雨", "大雨", "阴沉"):
+            for seed in (42, 7, 12345):
+                ws = WorldState(current_time="2026-08-29 10:00",
+                                period=period, weather=weather)
+                ws.weather_seed = seed
+                ws.active_event = "红茶刚好煮好，茶香还停在走廊"
+                ws.active_event_id = "tea_ready"
+                ws.refresh_active_event(scene="LIBRARY")
+                loc = _v._derive_location(ws.active_event)
+                assert loc == "罗兹瓦尔宅邸" or "书库" in loc, \
+                    f"{period}/{weather}/seed={seed} 刷新仍冲突: {ws.active_event}"
+                combos += 1
+    assert combos == 105

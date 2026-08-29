@@ -1819,6 +1819,13 @@ class TwinChatApp(QMainWindow):
                 role = m["sender"]  # "rem" / "ram"
                 sender = "蕾 姆" if role == "rem" else "拉 姆"
                 self._append_parsed_message(sender, m["content"], role, save=True)
+            # V15.0-M1：来信记账（人生账本，每发件人每日一条）
+            try:
+                from shared.life_ledger import mirror_letter
+                for sender_key in sorted({m["sender"] for m in letter["messages"]}):
+                    mirror_letter(sender_key)
+            except Exception:
+                pass
             _log(f"主动来信触发: {len(letter['messages'])} 条"
                  f" (suppress_vignette={letter['suppress_vignette']})")
         return letter

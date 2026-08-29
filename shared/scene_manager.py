@@ -260,26 +260,29 @@ class SceneManager:
         return ms
 
     @classmethod
-    def consume_milestone(cls, world: Any, state: Any) -> None:
+    def consume_milestone(cls, world: Any, state: Any) -> Optional[str]:
         """成功生成后由 bridge 调用：若本轮名场面可注入（未在冷却），记录冷却起点。
 
         冷却中被抑制的名场面不刷新冷却（标记前先复核，保持语义忠实）。
+        V15.0-M1：返回被记冷却的名场面名（调用方据此镜像人生账本），
+        未标记返回 None。
         """
         if world is None:
-            return
+            return None
         ms = cls.get_milestone(state)
         if not ms:
-            return
+            return None
         name = ms.get("name", "")
         if cls._milestone_on_cooldown(world, name):
-            return
+            return None
         try:
             from datetime import datetime
             if not hasattr(world, "milestone_cooldowns") or world.milestone_cooldowns is None:
                 world.milestone_cooldowns = {}
             world.milestone_cooldowns[name] = datetime.now().isoformat(timespec="seconds")
         except Exception:
-            pass
+            return None
+        return name
 
     # ── E3 关键人物互动 ──
     @classmethod
