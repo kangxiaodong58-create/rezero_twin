@@ -98,7 +98,16 @@ class LifeLedger:
                 (ts or _now_str(), kind, title, detail_str, dedup_key),
             )
             conn.commit()
-            return cur.rowcount > 0
+            added = cur.rowcount > 0
+        if added:
+            # V15.0-M4：人生事实落账进取证黑匣子（未初始化 no-op，静默）
+            try:
+                from runtime.forensic import record
+                record("LEDGER_APPEND", component="life_ledger",
+                       payload_summary=f"{kind}|{dedup_key}")
+            except Exception:
+                pass
+        return added
 
     def has(self, dedup_key: str) -> bool:
         with self._connect() as conn:

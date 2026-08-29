@@ -6,6 +6,25 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V15.0.0-m4] - 2026-08-29 (年轮 M4——关系资产导出/导入："时间不能丢"的工程契约)
+
+> 年轮第四个里程碑（构思 §3.5）。从今天起，这段关系的全部证据可以装进一个 zip 随身携带：导出 = curated 打包（清单+逐文件校验和），导入 = 全量校验 → 自动备份 → 恢复，任何一步不干净即整体拒绝——**绝不半导**。这也是未来任何换栈决策的前置条件：先证明时间能整体带走。
+
+### Added
+- **`shared/life_archive.py`**：
+  - 导出 `export_life()` → `ReZeroTwin-Life-*.zip`（curated 清单：memory.json（含世界状态单管线）/ conversations.db* / life.db* / album/** / sprites/**；排除日志、vignette 缓存、incidents 取证现场）；manifest.json 居首（schema `rezero_life_v1` + 消息/账本计数 + 逐文件 sha256）
+  - 导入 `import_life(dry_run=...)`：manifest/路径安全（拒绝绝对路径、`..`、盘符、反斜杠）/ 逐文件 sha256 对账 → 覆盖前自动备份现状（`ReZeroTwin-Backup-*.zip`，备份失败即中止）→ 恢复
+- **CLI**：`tools/export_life.py` / `tools/import_life.py`（--dry-run 预览零写入；无 GUI 可用）
+- **forensic 埋点**：`LEDGER_APPEND`（人生事实落账）/ `LIFE_EXPORT` / `LIFE_IMPORT` 进黑匣子
+- **测试 +10**：`tests/test_life_archive.py`（导出 curated/清空→导入往返等价/四连拒：缺 manifest·schema 不符·路径穿越·内容篡改/备份可还原旧数据/dry-run 零写入/拒绝时目标零改动/CLI 双向冒烟）；全量 **244/244**
+
+### 验收
+1. pytest **244/244**（V15.0-m3 后 +10）
+2. **往返等价**：导出→清空→导入后，对话轮数/人生事实/memory 内容/相册/立绘全部一致
+3. **恶意包四连拒**全通；导入全程不产生半写状态
+
+---
+
 ## [V15.0.0-m3] - 2026-08-29 (年轮 M3——回忆之书 UI v0 + God File 拆分第一刀)
 
 > 年轮第三个里程碑（构思 §3.4）：关系资产第一次有了"可回看"的界面——时间线/纪念日/相册三页签 + 统计条，对应概念稿侧栏「回忆之书」位。同时启动 gui.py 拆分：设计 token 出库为独立模块。
