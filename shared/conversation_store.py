@@ -105,6 +105,12 @@ class ConversationStore:
             ).fetchall()
             return [r[0] for r in rows]
 
+    def count_user_messages(self) -> int:
+        """用户消息总数（含软删除——历史即证据，回忆之书统计口径）。"""
+        with self._connect() as conn:
+            return int(conn.execute(
+                "SELECT COUNT(*) FROM messages WHERE role = 'user'").fetchone()[0])
+
     def update_status(self, message_id: int, status: str) -> bool:
         """V14.0：软状态更新（normal/recalled/deleted/failed），返回是否命中。
 
