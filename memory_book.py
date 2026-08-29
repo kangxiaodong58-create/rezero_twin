@@ -242,6 +242,15 @@ class MemoryBookOverlay(QWidget):
         self._reload()
         self._switch_tab(0)
 
+    def showEvent(self, event) -> None:  # noqa: N802 (Qt 命名)
+        # V16-M_B：浮层卡入场——fade + 上浮 12px（slow 档；禁用态立即呈现）
+        try:
+            import motion
+            motion.fade_slide(self._card)
+        except Exception:
+            pass
+        super().showEvent(event)
+
     # ── 数据装载 ──
 
     def _reload(self) -> None:
@@ -291,6 +300,14 @@ class MemoryBookOverlay(QWidget):
             QListWidgetItem("（相册还是空的——纪念日会自动生成卡片）",
                             self._album_list)
 
+        # V16-M_B：列表级联显形（禁用态 = motion 内部直接跳过，全量立即可见）
+        try:
+            import motion
+            motion.stagger_reveal(self._timeline_list)
+            motion.stagger_reveal(self._anniv_list)
+        except Exception:
+            pass
+
     def _on_album_selected(self, *_a) -> None:
         item = self._album_list.currentItem()
         filename = item.data(Qt.UserRole) if item else None
@@ -314,6 +331,7 @@ class MemoryBookOverlay(QWidget):
                     border: 1px solid {COLORS['border_subtle']};
                     border-radius: {RADIUS['small']}px; padding: 0 12px;
                 }}
+                QPushButton:pressed {{ padding-top: 1px; }}
             """)
 
     # ── 关闭行为（Esc / 遮罩点击）──

@@ -6,6 +6,22 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.0.0-mb] - 2026-08-29 (表现层 M_B——动效层：MOTION token 全面落地)
+
+> V16 第二个里程碑：界面从"能动"升级为按宪法动——统一动效门（offscreen 恒禁用）、消息入场 token 化 220ms/OutCubic、历史回放从"全静态"升级为"前 8 条 30ms 级联"、浮层 fade+上浮入场、列表级联显形、页签 press 下沉微交互。性能红线全部内建。
+
+### Added
+- **`motion.py`（动效运行时层）**：`enabled()` 统一门（offscreen 恒禁用 + `REZERO_DISABLE_UI_MOTION` 旧开关兼容 + token 总开关——gui 的 `ENABLE_UI_MOTION` 收敛至此）；`fade_in`（token 220ms/OutCubic + 可选上浮，effect 用后即卸防离屏残留）；`fade_slide`（浮层卡 slow 档 + 12px 上浮，几何固定表面专用）；`stagger_delays`（纯函数，cap=8 齐平——列表不是瀑布也不是铁板）；`stagger_reveal`（QListWidget 行级联显形）
+- **历史回放级联（V12.0"全跳过"升级）**：打开应用时历史消息前 8 条 30ms 错落入場，其后同时出现——启动瞬间的历史现在是"展开"而非"糊上来"
+- **浮层入场**：回忆之书 `showEvent` 卡片 fade+上浮；列表打开即级联
+- **微交互**：回忆之书页签 `:pressed` 下沉 1px（轻量体积反馈，无布局抖动）
+- **测试 +9**：门禁确定性（offscreen 恒禁用）/级联纯函数序列/禁用态零残留（不挂 effect 不藏行不移动 widget）/启用态挂载与清理/历史延迟透传；**截图基线 diff 0.00%**（动效层零静态污染）；全量 **258/258**
+
+### 十项检查单自评（宪法 §五，代码可验证 6 项）
+1✅ 无线性（全部 OutCubic）｜2✅ 时长 150–320ms 黄金带｜3✅ 级联≤8 项错落｜5✅ 玻璃/内发光走 token｜6✅ 暗部 #121319 无纯黑｜7✅ 正文行高 155%｜9✅ 流式零动画（仅完成态入场）｜10✅ offscreen 全禁用（测试钉死）——4✅内发光可见性/8✅引导性陈述待 UX 委员会人评（V16 场景舞台后一并复测视觉 6.5→8+）
+
+---
+
 ## [V16.0.0-ma] - 2026-08-29 (表现层 M_A——DESIGN_SYSTEM_V2 设计宪法 + 四组 token + 截图基线)
 
 > V16 表现层第一个里程碑：把「高级动效与 UI 质感」方法论编译为**设计宪法**（DESIGN_SYSTEM_V2.md：动效四律/字排/层级光影/色彩纪律/十项检查单），token 先行、肉随后。本里程碑零动画——动效属 M_B。

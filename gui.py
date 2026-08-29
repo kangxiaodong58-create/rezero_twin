@@ -78,7 +78,14 @@ _HISTORY_DISABLED = os.environ.get("REZERO_DISABLE_HISTORY", "") == "1"
 _VIGNETTE_DISABLED = os.environ.get("REZERO_DISABLE_VIGNETTE", "") == "1"
 
 # UI 动效开关（V12.0）：环境变量 REZERO_DISABLE_UI_MOTION=1 可整体关闭动效（验收对比/回滚）
-ENABLE_UI_MOTION = os.environ.get("REZERO_DISABLE_UI_MOTION", "") != "1"
+def _ui_motion_enabled() -> bool:
+    """V16-M_B：动效统一门——收敛到 motion.enabled()（offscreen 恒禁用 /
+    REZERO_DISABLE_UI_MOTION 旧开关兼容 / token 总开关）。"""
+    try:
+        import motion
+        return motion.enabled()
+    except Exception:
+        return False
 
 from PySide6.QtCore import (
     Qt, QTimer, Signal, QObject, QThread, QSize,
@@ -1558,7 +1565,7 @@ class TwinChatApp(QMainWindow):
         self._streaming_active: bool = False
         self._current_speaker: Optional[str] = None  # V12.0：当前说话人（"rem"/"ram"/None）
         self._breath_group: Optional[QSequentialAnimationGroup] = None  # V12.0：状态栏呼吸组
-        _log(f"UI 动效: {'启用' if ENABLE_UI_MOTION else '禁用（REZERO_DISABLE_UI_MOTION=1）'}")
+        _log(f"UI 动效: {'启用' if _ui_motion_enabled() else '禁用'}")
         self._llm_thread: Optional[QThread] = None
         self._llm_worker: Optional[LLMWorker] = None
         self._history_overlay: Optional[HistoryOverlay] = None  # V10.10
@@ -2375,7 +2382,8 @@ class TwinChatApp(QMainWindow):
         except Exception:
             pass
 
-    def _append_parsed_message(self, sender: str, text: str, role: str, save: bool = True, transient: bool = False, message_id: Optional[int] = None, force_center: bool = False, highlight: bool = False, variant: str = "system", animate: bool = True) -> Optional[QWidget]:
+    def _append_parsed_message(self, sender: str, text: str, role: str, save: bool = True, transient: bool = False, message_id: Optional[int] = None, force_center: bool = False, highlight: bool = False, variant: str = "system", animate: bool = True,
+                    motion_delay_ms: int = 0) -> Optional[QWidget]:
         """添加消息 widget。超出上限时移除最早的。
 
         V10.9.0：system 角色走 SystemLabelWidget 轻标签，其余走 ChatMessageWidget。
@@ -2410,7 +2418,7 @@ class TwinChatApp(QMainWindow):
 
         # V12.0：正式角色泡轻入场（system 标签无入场；历史回放由调用方传 animate=False）
         if animate and role != "system":
-            self._play_entrance_animation(msg)
+            self._play_entrance_animation(msg, delay_ms=motion_delay_ms)
 
         # 限制可见 widget 数量，防止内存泄漏
         visible = self.chat_layout.count() - 1  # 减去末尾 stretch
@@ -2741,7 +2749,11 @@ class TwinChatApp(QMainWindow):
             msg_id = item.get("id")  # V10.12：透传 DB id 供定位
             if not text:
                 continue
-            w = self._append_parsed_message(sender, text, role, save=False, message_id=msg_id, animate=False)  # V12.0：历史批量回放跳过入场动画
+            # V16-M_B：历史回放级联——前 8 条 30ms 错落入場，其后同时出现（宪法 §一.3）
+            import motion as _motion_mod
+            delays = _motion_mod.stagger_delays(len(recent))
+            w = self._append_parsed_message(sender, text, role, save=False, message_id=msg_id,
+                                            animate=True, motion_delay_ms=delays[min(shown, len(delays) - 1)])
             # V14.0：软状态渲染——recalled 占位 / failed 未送达标记（deleted 已被 get_recent 过滤）
             status = item.get("status", "normal")
             if status == "recalled" and w is not None:
@@ -2861,9 +2873,9 @@ class TwinChatApp(QMainWindow):
     def _setup_breathing(self) -> None:
         """V12.0：状态栏呼吸 — _mode_label opacity 0.85↔1.0，单程 2s，无限往复。
 
-        ENABLE_UI_MOTION=False 时不创建任何动画对象（完全静态）。
+        _ui_motion_enabled()=False 时不创建任何动画对象（完全静态）。
         """
-        if not ENABLE_UI_MOTION:
+        if not _ui_motion_enabled():
             return
         try:
             self._breath_effect = QGraphicsOpacityEffect(self._mode_label)
@@ -2891,7 +2903,7 @@ class TwinChatApp(QMainWindow):
 
     def _set_breathing(self, active: bool) -> None:
         """V12.0：呼吸暂停/恢复。思考中 pause（opacity 停在当前值），完成后 resume。"""
-        if not ENABLE_UI_MOTION:
+        if not _ui_motion_enabled():
             return
         group = getattr(self, "_breath_group", None)
         if group is None:
@@ -2912,10 +2924,10 @@ class TwinChatApp(QMainWindow):
     def _set_speaking_panels(self, speaker: Optional[str]) -> None:
         """V12.0：点亮/复位侧栏说话描边。speaker=None 全部复位。
 
-        状态跟踪（_current_speaker）不受开关影响；仅 QSS 刷新受 ENABLE_UI_MOTION 控制。
+        状态跟踪（_current_speaker）不受开关影响；仅 QSS 刷新受动效门控制。
         """
         self._current_speaker = speaker
-        if not ENABLE_UI_MOTION:
+        if not _ui_motion_enabled():
             return
         try:
             self.rem_panel.set_speaking(speaker == "rem")
@@ -2923,40 +2935,16 @@ class TwinChatApp(QMainWindow):
         except Exception as e:
             _log(f"_set_speaking_panels 异常: {e}")
 
-    def _play_entrance_animation(self, widget: QWidget) -> None:
-        """V12.0：正式消息泡轻入场 — opacity 0→1，200ms，OutCubic。
-
-        动画结束即卸载 effect（防离屏渲染残留）；widget 可能已被删除，
-        清理回调与创建路径均 try/except，异常只记日志不拖垮事件循环。
+    def _play_entrance_animation(self, widget: QWidget, delay_ms: int = 0) -> None:
+        """正式消息泡轻入场（V16-M_B：收敛到 motion.fade_in——MOTION token
+        220ms/OutCubic；delay_ms 供历史回放级联）。禁用态 = 立即呈现最终状态，
+        零定时器零 effect 残留；effect 卸载由 motion 负责（防离屏渲染残留）。
         """
-        if not ENABLE_UI_MOTION:
-            return
         try:
-            effect = QGraphicsOpacityEffect(widget)
-            widget.setGraphicsEffect(effect)
-            effect.setOpacity(0.0)
-            anim = QPropertyAnimation(effect, b"opacity", widget)
-            anim.setDuration(200)
-            anim.setStartValue(0.0)
-            anim.setEndValue(1.0)
-            anim.setEasingCurve(QEasingCurve.OutCubic)
-            anim.finished.connect(
-                lambda w=widget, e=effect: self._cleanup_entrance_effect(w, e)
-            )
-            anim.start(QAbstractAnimation.DeleteWhenStopped)
+            import motion
+            motion.fade_in(widget, delay_ms=delay_ms)
         except Exception as e:
             _log(f"入场动画异常: {e}")
-
-    def _cleanup_entrance_effect(self, widget, effect) -> None:
-        """卸载入场动画的 opacity effect（widget 可能已被删除，全部 try/except）。"""
-        try:
-            widget.setGraphicsEffect(None)
-        except Exception:
-            pass
-        try:
-            effect.deleteLater()
-        except Exception:
-            pass
 
     # ── V14.2：引用回复 ────────────────────────
 
