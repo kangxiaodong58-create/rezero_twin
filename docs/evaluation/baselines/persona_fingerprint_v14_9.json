@@ -1,0 +1,40 @@
+{
+ "schema": "persona_fingerprint_v1",
+ "source": [
+  "docs/evaluation/sessions/trial4_2026-08-19/t4_ad_raw.txt",
+  "docs/evaluation/sessions/trial4_2026-08-19/v148_accept_raw.txt",
+  "docs/evaluation/sessions/trial5_2026-08-19/t5_raw.txt"
+ ],
+ "counts": {
+  "user_turns": 51,
+  "rem_segments": 52,
+  "ram_segments": 6,
+  "twin_chars": 2174
+ },
+ "metrics": {
+  "rem_self_reference_rate": 1.0,
+  "rem_action_density": 0.2885,
+  "ai_flavor_per_kilochar": 0.92,
+  "sentiment_positive_share": 0.1379,
+  "sentiment_negative_share": 0.0,
+  "sentiment_neutral_share": 0.8621,
+  "ram_proactive_ratio": 0.1667,
+  "ram_snark_rate": 0.3333,
+  "rem_inferiority_rate": 0.0,
+  "user_name": null,
+  "rem_name_usage_rate": null,
+  "name_address_histogram": {},
+  "name_drift": false
+ },
+ "meta": {
+  "baseline_version": "v14_9",
+  "built_from": "三套黄金剧本的真机 LLM transcript（V14.7/V14.8 验收期，零 mock）——基线与黄金剧本同语料，diff 才可比",
+  "built_date": "2026-08-29",
+  "golden_scripts": [
+   "script_arc_roam_v148",
+   "script_v148_scene_accept",
+   "script_scene_walkthrough"
+  ],
+  "note": "改动词表/解析口径 = 指纹口径变更，必须重建基线；样本量低于保护线(rem/ram≥5段, sentiment≥10段, AI味≥500字)的指标自动跳过"
+ }
+}
