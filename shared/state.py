@@ -288,6 +288,8 @@ class WorldState:
         "ram": "靠在一旁休息",
     })
     scene_cooldowns: Dict[str, str] = field(default_factory=dict)  # V11.10.0: 情感场景冷却 {scene_id: ISO ts}
+    milestone_cooldowns: Dict[str, str] = field(default_factory=dict)  # V14.11 O-5: 名场面语感冷却 {milestone: ISO ts}
+    ambient_state: Dict[str, Any] = field(default_factory=dict)  # V14.11 Step5: 偶发一句状态 {last_event_id,last_ts,day,count}
 
     # 天气连续多少小时不变后开始推演
     WEATHER_CHANGE_HOURS: float = 8.0
@@ -468,6 +470,8 @@ class WorldState:
                 last_letter_date=saved.get("last_letter_date", "") or "",
                 character_actions=actions,
                 scene_cooldowns=saved.get("scene_cooldowns", {}) or {},
+                milestone_cooldowns=saved.get("milestone_cooldowns", {}) or {},
+                ambient_state=saved.get("ambient_state", {}) or {},
             )
         # 无存档新建：先生成默认世界状态，再刷新活跃事件
         ws = cls.now()
@@ -480,6 +484,41 @@ class WorldState:
         self.last_interaction_ts = now_ts
         self.days_since_last = 0
         self.last_period = self.period  # V14.3：记录本次交互结束时的时段
+
+    # ── V14.11 Step5：偶发一句（事件触发的 ambient remark）─────────────
+    # 规格（场景化内容密度研判 §Step5）：事件触发 + 冷却 2h + 每日 3 条上限；
+    # 同一事件 TTL 内最多 1 句；View-Only，不进好感/事件记忆通道。
+    AMBIENT_COOLDOWN_HOURS = 2.0
+    AMBIENT_DAILY_CAP = 3
+
+    def ambient_remark_allowed(self, now_ts: Optional[float] = None) -> bool:
+        """偶发一句放行判定（纯状态判定，选取/展示由调用方完成）。"""
+        if not self.active_event_id:
+            return False
+        st = self.ambient_state or {}
+        if st.get("last_event_id") == self.active_event_id:
+            return False  # 本事件已说过一句（事件 TTL 内最多 1 句）
+        now = now_ts if now_ts is not None else _dt.now().timestamp()
+        last_ts = float(st.get("last_ts", 0.0) or 0.0)
+        if last_ts and (now - last_ts) < self.AMBIENT_COOLDOWN_HOURS * 3600:
+            return False
+        today = _dt.fromtimestamp(now).strftime("%Y-%m-%d")
+        if st.get("day") == today and int(st.get("count", 0) or 0) >= self.AMBIENT_DAILY_CAP:
+            return False
+        return True
+
+    def record_ambient_remark(self, now_ts: Optional[float] = None) -> None:
+        """展示偶发一句后记录（冷却起点 + 日计数 + 事件去重）。"""
+        now = now_ts if now_ts is not None else _dt.now().timestamp()
+        today = _dt.fromtimestamp(now).strftime("%Y-%m-%d")
+        st = dict(self.ambient_state or {})
+        if st.get("day") != today:
+            st["day"] = today
+            st["count"] = 0
+        st["count"] = int(st.get("count", 0) or 0) + 1
+        st["last_ts"] = now
+        st["last_event_id"] = self.active_event_id
+        self.ambient_state = st
 
     def ensure_last_period(self, store) -> None:
         """V14.3：last_period 回填（方案 C 混合模式）。
@@ -528,6 +567,8 @@ class WorldState:
             "last_letter_date": self.last_letter_date,
             "character_actions": dict(self.character_actions),
             "scene_cooldowns": dict(self.scene_cooldowns),
+            "milestone_cooldowns": dict(self.milestone_cooldowns),
+            "ambient_state": dict(self.ambient_state),
         }
 
     def to_prompt_text(self) -> str:

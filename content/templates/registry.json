@@ -1027,6 +1027,117 @@
       "weathers": [
         "all"
       ]
+    },
+    {
+      "id": "ambient_mansion_quiet_01",
+      "arc": "mansion_era",
+      "slot": "ambient_remark",
+      "text": "蕾姆放轻了脚步声：『这样的时刻……蕾姆想把它悄悄记住。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "ambient_mansion_ram_window_01",
+      "arc": "mansion_era",
+      "slot": "ambient_remark",
+      "text": "拉姆瞥了一眼窗外：『哼，今天的空气倒是比您靠谱一些。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "ambient_mansion_rem_rain_01",
+      "arc": "mansion_era",
+      "slot": "ambient_remark",
+      "text": "蕾姆望着檐下的雨帘轻声说：『雨停之后，庭院里会有泥土的香气哦。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "小雨",
+        "大雨"
+      ]
+    },
+    {
+      "id": "ambient_empire_smoke_01",
+      "arc": "empire_era",
+      "slot": "ambient_remark",
+      "text": "蕾姆按住斗篷下缘，低声说：『风里有炊烟的味道……像是有人在等我们回去。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "ambient_empire_ram_blade_01",
+      "arc": "empire_era",
+      "slot": "ambient_remark",
+      "text": "拉姆擦着剑鞘，头也不抬：『保持警觉。舒适的空气，最容易让人丢掉性命。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "ambient_empire_rem_star_01",
+      "arc": "empire_era",
+      "slot": "ambient_remark",
+      "text": "蕾姆抬头望了很久，轻声说：『星星真亮啊……在宅邸的时候，蕾姆从没注意过这些。』",
+      "periods": [
+        "夜晚",
+        "深夜"
+      ],
+      "weathers": [
+        "晴朗",
+        "阴沉"
+      ]
+    },
+    {
+      "id": "ambient_late_rem_shawl_01",
+      "arc": "late_arc",
+      "slot": "ambient_remark",
+      "text": "蕾姆把披肩递过来：『夜里凉。别说什么不用——这是女仆的直觉，也是家人的固执。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "ambient_late_ram_soup_01",
+      "arc": "late_arc",
+      "slot": "ambient_remark",
+      "text": "拉姆递来一杯热汤：『喝完。仗可以输，饭不能剩——这是拉姆的规矩。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "ambient_late_rem_fire_01",
+      "arc": "late_arc",
+      "slot": "ambient_remark",
+      "text": "蕾姆望着火堆轻声说：『明天的事明天再想。至少现在，大家都在。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     }
   ]
 }

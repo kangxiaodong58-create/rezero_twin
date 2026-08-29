@@ -36,7 +36,7 @@ def _registry():
 def test_load_and_validate() -> None:
     reg = _registry()
     assert reg["schema_version"] == "1.0"
-    assert len(reg["items"]) == 73, f"V14.4 late proactive 扩池后应 73 条，实际 {len(reg['items'])}"
+    assert len(reg["items"]) == 82, f"V14.11 ambient_remark 扩池后应 82 条，实际 {len(reg['items'])}"
     ids = [it["id"] for it in reg["items"]]
     assert len(ids) == len(set(ids)), "id 应唯一"
     for it in reg["items"]:
@@ -82,8 +82,9 @@ def test_arc_bucket_and_mansion_fallback() -> None:
     # 未知 arc → 兜底 mansion_era
     it2 = pick(reg, arc="unknown_era", slot="vignette", seed="s")
     assert it2 is not None and it2["arc"] == "mansion_era", "未知 arc 应兜底宅邸"
-    # 未知 arc + 无 mansion 条目 slot → None
-    assert pick(reg, arc="unknown_era", slot="ambient_remark", seed="s") is None
+    # 未知 arc + 无 mansion 条目 slot → None（V14.11 后 ambient_remark 宅邸已有条目，
+    #  改用 proactive——宅邸始终无 proactive 条目，回落链仍应为 None）
+    assert pick(reg, arc="unknown_era", slot="proactive", seed="s") is None
 
 
 def test_recovery_ranges() -> None:

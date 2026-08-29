@@ -49,6 +49,22 @@ from datetime import datetime
 from typing import Optional
 
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+
+# V14.11 Step5：偶发一句注册表（懒加载单例；加载失败 = 空 dict，选型返回 None）
+_AMBIENT_REGISTRY: Optional[dict] = None
+
+
+def _get_ambient_registry() -> dict:
+    global _AMBIENT_REGISTRY
+    if _AMBIENT_REGISTRY is None:
+        try:
+            from shared.template_registry import load_registry
+            from shared.vignette import ContentLoader
+            _AMBIENT_REGISTRY = load_registry(os.path.join(
+                ContentLoader()._get_content_dir(), "templates", "registry.json"))
+        except Exception:
+            _AMBIENT_REGISTRY = {"schema_version": "0", "items": [], "skipped": 0}
+    return _AMBIENT_REGISTRY
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
@@ -578,6 +594,50 @@ def _asset_path(filename: str) -> str:
     return os.path.join(base, "assets", filename)
 
 
+# ── V14.11：立绘自定义（用户拖入 > 内置 assets > 占位）──────────────
+
+_SPRITE_EXTS = ("png", "jpg", "jpeg", "webp")
+
+
+def _user_sprite_path(data_dir: str, key: str) -> str:
+    """用户自定义立绘路径：data/sprites/{key}.{ext}，存在即返回（文件即持久化）。"""
+    sprite_dir = os.path.join(data_dir, "sprites")
+    for ext in _SPRITE_EXTS:
+        p = os.path.join(sprite_dir, f"{key}.{ext}")
+        if os.path.isfile(p):
+            return p
+    return ""
+
+
+def _copy_user_sprite(src: str, data_dir: str, key: str) -> str:
+    """把拖入图片复制为 data/sprites/{key}.{ext}（清理旧扩展名），返回新路径。
+
+    非图片扩展名返回空串；复制失败抛异常由调用方兜底。
+    """
+    import shutil
+    ext = os.path.splitext(src)[1].lower().lstrip(".")
+    if ext not in _SPRITE_EXTS:
+        return ""
+    sprite_dir = os.path.join(data_dir, "sprites")
+    os.makedirs(sprite_dir, exist_ok=True)
+    dst = os.path.join(sprite_dir, f"{key}.{ext}")
+    for old_ext in _SPRITE_EXTS:
+        old = os.path.join(sprite_dir, f"{key}.{old_ext}")
+        if old != dst and os.path.isfile(old):
+            try:
+                os.remove(old)
+            except Exception:
+                pass
+    shutil.copyfile(src, dst)
+    return dst
+
+
+def _resolve_sprite(data_dir: str, key: str, asset_path: str) -> str:
+    """立绘解析优先级：用户自定义（data/sprites，持久化）> 内置 assets > 空（占位）。"""
+    user = _user_sprite_path(data_dir, key)
+    return user or asset_path
+
+
 # ═══════════════════════════════════════════════
 #  聊天气泡组件
 # ═══════════════════════════════════════════════
@@ -936,12 +996,20 @@ class CharacterPanel(QFrame):
 
     布局：立绘 → 名字 → 放大表情 → 好感数字+简条 → 阶段引号弱化 → 条件标记。
     鬼化/残香不进面板术语，仅通过表情传达。
+    V14.11：立绘区支持拖入 PNG/JPG/WEBP 替换（sprite_dropped 信号交由
+    主窗口复制到 data/sprites/ 持久化），无图时保持 emoji 占位。
     """
 
-    def __init__(self, name: str, emoji: str, color: str, sprite_path: str = "", parent=None):
+    sprite_dropped = Signal(str)
+
+    def __init__(self, name: str, emoji: str, color: str, sprite_path: str = "",
+                 character_key: str = "", parent=None):
         super().__init__(parent)
         self._color = color
         self._speaking = False  # V12.0：说话态描边状态（幂等）
+        self.character_key = character_key
+        self._emoji = emoji
+        self.setAcceptDrops(True)  # V14.11：立绘拖入
         self.setObjectName("character_panel")
         self.setFixedWidth(DIM['panel_w'])
         self.setStyleSheet(f"""
@@ -971,24 +1039,18 @@ class CharacterPanel(QFrame):
         self.avatar_image = QLabel()
         self.avatar_image.setAlignment(Qt.AlignCenter)
         self.avatar_image.setScaledContents(False)
+        self._placeholder_label: Optional[QLabel] = None
 
-        if sprite_path and os.path.exists(sprite_path):
-            pixmap = QPixmap(sprite_path)
-            if not pixmap.isNull():
-                scaled = pixmap.scaled(160, 230, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-                self.avatar_image.setPixmap(scaled)
-            else:
-                self.avatar_image.setText(emoji)
-                self.avatar_image.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['display']))
-                self.avatar_image.setAlignment(Qt.AlignCenter)
-        else:
-            self.avatar_image.setText(emoji)
-            self.avatar_image.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['display']))
-            self.avatar_image.setAlignment(Qt.AlignCenter)
-            placeholder = QLabel("立绘区域\n拖入 PNG 图片")
-            placeholder.setAlignment(Qt.AlignCenter)
-            placeholder.setStyleSheet(f"color: {COLORS['text_muted']}; font-size: 10px;")
-            avatar_inner.addWidget(placeholder)
+        if sprite_path and os.path.exists(sprite_path) and \
+                not self._apply_pixmap(sprite_path):
+            self._set_emoji_fallback()
+        elif not sprite_path or not os.path.exists(sprite_path):
+            self._set_emoji_fallback()
+            self._placeholder_label = QLabel("立绘区域\n拖入 PNG 图片")
+            self._placeholder_label.setAlignment(Qt.AlignCenter)
+            self._placeholder_label.setStyleSheet(
+                f"color: {COLORS['text_muted']}; font-size: 10px;")
+            avatar_inner.addWidget(self._placeholder_label)
 
         avatar_inner.addWidget(self.avatar_image)
         layout.addWidget(self.avatar_frame)
@@ -1045,6 +1107,46 @@ class CharacterPanel(QFrame):
         layout.addWidget(self.mark_label)
 
         layout.addStretch()
+
+    # ── V14.11：立绘替换与拖入 ──
+
+    def _set_emoji_fallback(self) -> None:
+        self.avatar_image.setText(self._emoji)
+        self.avatar_image.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['display']))
+        self.avatar_image.setAlignment(Qt.AlignCenter)
+
+    def _apply_pixmap(self, path: str) -> bool:
+        pixmap = QPixmap(path)
+        if pixmap.isNull():
+            return False
+        scaled = pixmap.scaled(160, 230, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.avatar_image.setPixmap(scaled)
+        if self._placeholder_label is not None:
+            self._placeholder_label.hide()
+        return True
+
+    def set_sprite(self, path: str) -> bool:
+        """替换立绘（拖入复制成功后调用）。路径无效或图片解码失败返回 False。"""
+        if not path or not os.path.isfile(path):
+            return False
+        return self._apply_pixmap(path)
+
+    def dragEnterEvent(self, event) -> None:  # noqa: N802 (Qt 命名)
+        if event.mimeData().hasUrls():
+            for url in event.mimeData().urls():
+                if url.toLocalFile().lower().endswith(_SPRITE_EXTS):
+                    event.acceptProposedAction()
+                    return
+        event.ignore()
+
+    def dropEvent(self, event) -> None:  # noqa: N802 (Qt 命名)
+        for url in event.mimeData().urls():
+            path = url.toLocalFile()
+            if path.lower().endswith(_SPRITE_EXTS):
+                self.sprite_dropped.emit(path)
+                event.acceptProposedAction()
+                return
+        event.ignore()
 
     def update_state(self, favor: int, stage: str, emotion: str,
                      locked: bool = False, independence: float = 0.0,
@@ -1860,7 +1962,13 @@ class TwinChatApp(QMainWindow):
         body.setSpacing(0)
 
         # 左侧：蕾姆面板
-        self.rem_panel = CharacterPanel("蕾 姆", "🩵", COLORS["rem_accent"], sprite_path=_asset_path("rem_sprite.jpg"))
+        # V14.11：立绘解析优先级 用户自定义（data/sprites）> 内置 assets；拖入信号接线
+        self.rem_panel = CharacterPanel(
+            "蕾 姆", "🩵", COLORS["rem_accent"],
+            sprite_path=_resolve_sprite(get_data_dir(), "rem", _asset_path("rem_sprite.jpg")),
+            character_key="rem")
+        self.rem_panel.sprite_dropped.connect(
+            lambda p: self._on_sprite_dropped("rem", p))
         body.addWidget(self.rem_panel)
 
         # 中间：聊天区域
@@ -1980,7 +2088,12 @@ class TwinChatApp(QMainWindow):
         body.addLayout(chat_section, 1)
 
         # 右侧：拉姆面板
-        self.ram_panel = CharacterPanel("拉 姆", "💗", COLORS["ram_accent"], sprite_path=_asset_path("ram_sprite.jpg"))
+        self.ram_panel = CharacterPanel(
+            "拉 姆", "💗", COLORS["ram_accent"],
+            sprite_path=_resolve_sprite(get_data_dir(), "ram", _asset_path("ram_sprite.jpg")),
+            character_key="ram")
+        self.ram_panel.sprite_dropped.connect(
+            lambda p: self._on_sprite_dropped("ram", p))
         body.addWidget(self.ram_panel)
 
         main_layout.addLayout(body, 1)
@@ -3290,6 +3403,9 @@ class TwinChatApp(QMainWindow):
         V11.9.2：active_event 与 period/weather 语义冲突时省略 event 段并打日志。
         仅在同日有历史重开时展示（空库完整引言时不重复打）。
         save=False，不进 ConversationStore。
+        V14.11 Step5：放行时在状态行下附「偶发一句」（registry slot=
+        ambient_remark，事件触发 + 冷却 2h + 日 3 条上限，同一事件最多 1 句；
+        纯展示不进好感/事件记忆通道）。
         """
         try:
             parts = [self.world.period, self.world.weather]
@@ -3301,10 +3417,58 @@ class TwinChatApp(QMainWindow):
                     _log(f"轻氛围: event与period/weather冲突, skip event. "
                          f"period={self.world.period} weather={self.world.weather} event={event}")
             text = " · ".join(parts)
-            self._append_parsed_message("系统", f"🌧️ {text}", "system", save=False)
-            _log(f"轻氛围已展示: {text}")
+            remark = self._pick_ambient_remark()
+            extra = f"\n💬 {remark}" if remark else ""
+            self._append_parsed_message("系统", f"🌧️ {text}{extra}", "system", save=False)
+            _log(f"轻氛围已展示: {text} | 偶发一句: {'有' if remark else '无'}")
         except Exception as e:
             _log(f"轻氛围展示失败: {e}")
+
+    def _pick_ambient_remark(self) -> str:
+        """V14.11 Step5：选取「偶发一句」。放行判定（WorldState）→ 注册表
+        确定性选型（seed=日|事件id）→ 记录冷却。任何失败静默返回空串。"""
+        try:
+            if not self.world.ambient_remark_allowed():
+                return ""
+            from shared.template_registry import load_registry, pick as registry_pick
+            registry = _get_ambient_registry()
+            if not registry:
+                return ""
+            arc_value = getattr(getattr(self.bot, "engine", None), "arc", None)
+            arc = getattr(arc_value, "value", "mansion_era")
+            today = datetime.now().strftime("%Y-%m-%d")
+            item = registry_pick(
+                registry, arc=arc, slot="ambient_remark",
+                period=self.world.period, weather=self.world.weather,
+                seed=f"{today}|{self.world.active_event_id}")
+            if not item:
+                return ""
+            self.world.record_ambient_remark()
+            return item.get("text", "")
+        except Exception as e:
+            _log(f"偶发一句选取失败: {e}")
+            return ""
+
+    def _on_sprite_dropped(self, key: str, src: str) -> None:
+        """V14.11：立绘拖入——复制到 data/sprites/{key}.{ext}（文件即持久化，
+        重启经 _resolve_sprite 自动生效），刷新面板并给系统提示。"""
+        try:
+            dst = _copy_user_sprite(src, get_data_dir(), key)
+            if not dst:
+                self._append_parsed_message(
+                    "系统", "立绘替换失败：仅支持 PNG/JPG/WEBP 图片。", "system", save=False)
+                return
+            panel = self.rem_panel if key == "rem" else self.ram_panel
+            if not panel.set_sprite(dst):
+                self._append_parsed_message(
+                    "系统", "立绘替换失败：图片无法解码。", "system", save=False)
+                return
+            name = "蕾姆" if key == "rem" else "拉姆"
+            self._append_parsed_message(
+                "系统", f"已更新{name}的立绘（重启后依然生效）。", "system", save=False)
+            _log(f"立绘替换: {key} -> {dst}")
+        except Exception as e:
+            _log(f"立绘替换异常: {e}")
 
     def _show_resume_card(self) -> None:
         """启动时展示上次 session 摘要（续聊卡）。

@@ -192,9 +192,12 @@ class PromptBuilder:
                 f"- 蕾姆提及该人物时可参考的语气：{char['rem_lines'][0]}\n"
                 f"- 拉姆提及该人物时可参考的语气：{char['ram_lines'][0]}\n"
             )
-        # V14.7：名场面状态联动语感（E4）
+        # V14.7：名场面状态联动语感（E4）；V14.11 O-5：24h 冷却防疲劳
         milestone_section = ""
-        ms = SceneManager.get_milestone(state)
+        if world is not None:
+            ms = SceneManager.get_milestone_for_prompt(state, world)
+        else:
+            ms = SceneManager.get_milestone(state)
         if ms:
             lines = "；".join(ms.get("rem_lines", [])[:2])
             milestone_section = (

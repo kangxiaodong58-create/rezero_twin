@@ -209,11 +209,16 @@ class SceneManager:
         return {"rem_view": chosen.get("rem_view", ""), "ram_view": chosen.get("ram_view", "")}
 
     # ── E4 名场面状态联动 ──
+    # O-5（V14.11）：名场面语感注入的防疲劳冷却——同一名场面注入后 24h 内
+    # 不再重复注入（状态持续命中时避免每轮同一语感；与场景冷却 24h 对齐）。
+    MILESTONE_COOLDOWN_HOURS = 24.0
+
     @classmethod
     def get_milestone(cls, state: Any) -> Optional[Dict[str, Any]]:
         """按 TwinState 状态检测命中的名场面（返回 milestone dict 或 None）。
 
         触发优先级：鬼化 > 失忆重逢 > 忠诚锁定 > 拉姆托付 > 从零开始。
+        无冷却判断（原始检测，冷却门控见 get_milestone_for_prompt）。
         """
         db = cls._milestones()
         if not db:
@@ -232,6 +237,49 @@ class SceneManager:
         if getattr(state, "wants_push", False):
             return db.get("zero_start")
         return None
+
+    @classmethod
+    def _milestone_on_cooldown(cls, world: Any, name: str) -> bool:
+        cds = getattr(world, "milestone_cooldowns", None) or {}
+        last = cds.get(name, "")
+        if not last:
+            return False
+        try:
+            from datetime import datetime
+            elapsed = (datetime.now() - datetime.fromisoformat(last)).total_seconds()
+            return elapsed < cls.MILESTONE_COOLDOWN_HOURS * 3600
+        except Exception:
+            return False
+
+    @classmethod
+    def get_milestone_for_prompt(cls, state: Any, world: Any) -> Optional[Dict[str, Any]]:
+        """PromptBuilder 注入口：命中名场面且不在 24h 冷却内才返回（O-5）。"""
+        ms = cls.get_milestone(state)
+        if ms and world is not None and cls._milestone_on_cooldown(world, ms.get("name", "")):
+            return None
+        return ms
+
+    @classmethod
+    def consume_milestone(cls, world: Any, state: Any) -> None:
+        """成功生成后由 bridge 调用：若本轮名场面可注入（未在冷却），记录冷却起点。
+
+        冷却中被抑制的名场面不刷新冷却（标记前先复核，保持语义忠实）。
+        """
+        if world is None:
+            return
+        ms = cls.get_milestone(state)
+        if not ms:
+            return
+        name = ms.get("name", "")
+        if cls._milestone_on_cooldown(world, name):
+            return
+        try:
+            from datetime import datetime
+            if not hasattr(world, "milestone_cooldowns") or world.milestone_cooldowns is None:
+                world.milestone_cooldowns = {}
+            world.milestone_cooldowns[name] = datetime.now().isoformat(timespec="seconds")
+        except Exception:
+            pass
 
     # ── E3 关键人物互动 ──
     @classmethod

@@ -378,7 +378,7 @@ class ReZeroLLMBridge:
     ) -> str:
         record("MESSAGE_RECEIVED", component="bridge", generation=self._generation,
                payload_summary=f"len={len(user_input)}")
-        messages, _state = self._build_messages(user_input, reply_to=reply_to)
+        messages, state = self._build_messages(user_input, reply_to=reply_to)
         try:
             record("API_REQUEST", component="bridge", generation=self._generation,
                    payload_summary="chat")
@@ -404,11 +404,14 @@ class ReZeroLLMBridge:
         self._last_chat_fallback = False
         self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": reply})
+        self._trim_history()
         self._first_round_atmosphere = None  # v10.8.1：首轮氛围一次性消费
-        # V11.10.0：成功生成后写入场景冷却
+        # V11.10.0：成功生成后写入场景冷却；V14.11 O-5：名场面冷却起点
         if self.world is not None:
             self._write_scene_cooldown(self.world)
             self.world.mark_interaction()
+            from shared.scene_manager import SceneManager
+            SceneManager.consume_milestone(self.world, state)
         else:
             self._write_scene_cooldown(None)
         record("REPLY_COMPLETED", component="bridge", generation=self._generation,
@@ -498,11 +501,14 @@ class ReZeroLLMBridge:
                         final = result.cleaned or full
                         self.history.append({"role": "user", "content": user_input})
                         self.history.append({"role": "assistant", "content": final})
+                        self._trim_history()
                         self._first_round_atmosphere = None  # v10.8.1：首轮氛围一次性消费
-                        # V11.10.0：成功生成后写入场景冷却
+                        # V11.10.0：成功生成后写入场景冷却；V14.11 O-5：名场面冷却起点
                         if self.world is not None:
                             self._write_scene_cooldown(self.world)
                             self.world.mark_interaction()
+                            from shared.scene_manager import SceneManager
+                            SceneManager.consume_milestone(self.world, state)
                         record("STREAM_END", component="bridge", generation=gen,
                                payload_summary=f"reply_len={len(final)}")
                     else:
@@ -562,6 +568,17 @@ class ReZeroLLMBridge:
                 self._active_stream.close()
             except Exception:
                 pass
+
+    def _trim_history(self) -> None:
+        """V14.11：运行中 history 裁剪——内存占用有界，且与重启恢复口径一致。
+
+        此前 history 只在启动恢复时截到 max_history，会话内每轮成功都
+        append 两条且从不裁剪（长会话真机实测 30 轮涨到 30 条）。
+        LLM 上下文窗口本就只取最后 max_history 条，裁剪不改变 prompt 语义；
+        更早内容永久保存在 ConversationStore。
+        """
+        if len(self.history) > self.max_history:
+            self.history = self.history[-self.max_history:]
 
     def reset_session(self) -> None:
         """Forensic M3/M4：新会话——generation 递增（stale 检测锚点），清空对话历史。

@@ -46,12 +46,21 @@ def _make_bridge() -> tuple:
 
 
 def test_history_bounded() -> None:
-    """30 轮后 messages 长度恒定（system + max_history + user）。"""
+    """30 轮后 messages 长度恒定（system + max_history + user）。
+
+    V14.11 口径修正：断言原为空转（_build_messages 不 append，history 恒 0；
+    真机长会话 history 实际涨到 30 条）。现模拟每轮成功生成 append 两条，
+    同时验证 messages 窗口有界与运行内存 history 裁剪（_trim_history）有界。
+    """
     bridge, _ = _make_bridge()
     for i, text in enumerate(SCRIPT):
         msgs, _ = bridge._build_messages(text)
         assert len(msgs) <= 10, f"第 {i} 轮 messages 长度 {len(msgs)} 超界"
         assert msgs[0]["role"] == "system" and msgs[-1]["role"] == "user"
+        # 模拟成功生成（chat/chat_stream 成功路径的 append + trim）
+        bridge.history.append({"role": "user", "content": text})
+        bridge.history.append({"role": "assistant", "content": f"回复{i}"})
+        bridge._trim_history()
         assert len(bridge.history) <= 8, f"第 {i} 轮 history {len(bridge.history)} 超界"
 
 
