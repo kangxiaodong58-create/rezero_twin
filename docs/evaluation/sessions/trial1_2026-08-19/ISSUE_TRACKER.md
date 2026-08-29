@@ -4,6 +4,7 @@
 > 测试基线：rezero_twin @ 77fafe5（V14.4 Step 1）+ Hermes 进行中的 Step 2（未提交，仅 vignette.py/CHANGELOG，未触及 local/prompts/state）
 > 证据目录：docs/evaluation/sessions/trial1_2026-08-19/
 > 状态：**S-01/S-02/A-01 已修复并回归（106/106 pytest 全绿 + Trial 指标达标），Phase 2 部分完成**
+> 【2026-08-29 回填】至 Trial #5 为止全台账闭环：S×2 / A×4（A-02 因 local 退场移除）/ B×3 / E-03 关闭（=E-01 同根因）/ F-01 修复；观察项仅 O-5（P2）仍 open，O-1~O-4/G-1/H-1 闭环记录见文末回填节。当前全量 pytest **167 passed**。
 
 ---
 
@@ -95,7 +96,7 @@
 - **任务3 状态面板**：点击无异常 ✅
 - **任务4 空库搜索**：显示「未找到包含…的对话」✅
 
-### B-01【B 级】离屏/无 API 环境下引言生成崩溃（0xC0000409 原生崩溃）
+### B-01【B 级，已修复 ✅ V14.5 基建 commit `1506e34`】离屏/无 API 环境下引言生成崩溃（0xC0000409 原生崩溃）
 
 - **【问题】** 无 `REZERO_DISABLE_VIGNETTE=1` 时，离屏启动 GUI 在事件循环内原生崩溃（Qt 0xC0000409），无 Python traceback；加环境变量后稳定。GUI 真机（有显示器 + 有 key）不受影响。
 - **【用户感受】** 正常用户真机不遇到；但 CI/测试/无头环境跑 GUI 会崩。
@@ -104,7 +105,7 @@
 - **【修改建议】** VignetteWorker（引言 LLM 调用）增加离屏/无 key 检测：`QT_QPA_PLATFORM==offscreen` 或 API key 缺失时走 L2/L3 模板路径（与 frozen 一致），不建 QThread。
 - **【预计提升】** 离屏测试稳定，GUI 冒烟可自动化。
 
-### B-02【B 级】输入框与搜索框无视觉区分（小白首启可能混淆）
+### B-02【B 级，已修复 ✅ V14.5 基建 commit `1506e34`（聚焦高亮边框）】输入框与搜索框无视觉区分（小白首启可能混淆）
 
 - **【问题】** 输入框（QTextEdit，占位「和蕾姆、拉姆说点什么吧…」）与顶栏搜索框（QLineEdit，占位「搜索过往对话…」/「搜索对话…」）布局相邻；首启无任何高亮/引导指向输入框。
 - **【用户感受】** "我应该点哪里打字？搜索框和输入框长得差不多。"
@@ -186,7 +187,24 @@
 
 ## 待办（后续 Phase）
 
-- [ ] Phase 4 满意度问卷模拟 + 对标（Character.AI / 星野）
-- [ ] 修复 test_quote_reply_v142 测试隔离性（mock LLM bot）
-- [ ] B-01 离屏引言崩溃（VignetteWorker 离屏/无 key 检测）
-- [ ] B-02 输入框/搜索框视觉区分
+- [x] Phase 4 满意度问卷模拟 + 对标（Character.AI / 星野）——✅ 已完成，见上方 Phase 4 节与 `SATISFACTION_SURVEY.md`
+- [x] 修复 test_quote_reply_v142 测试隔离性（mock LLM bot）——✅ 随 V14.5 基建三连修复，commit `1506e34`
+- [x] B-01 离屏引言崩溃（VignetteWorker 离屏/无 key 检测）——✅ 随 V14.5 基建三连修复，commit `1506e34`【2026-08-29 回填勾选】
+- [x] B-02 输入框/搜索框视觉区分——✅ 随 V14.5 基建三连修复（聚焦高亮），commit `1506e34`【2026-08-29 回填勾选】
+- [ ] O-5 名场面「从零开始」触发冷却确认（P2，见 accept_v1457 报告）——**当前台账唯一 open 项**
+
+---
+
+## 观察项闭环回填（2026-08-29 整理，原始记录散落于 trial4/trial5/accept_v1457 各报告）
+
+| 编号 | 问题 | 闭环结果 | 证据 |
+|---|---|---|---|
+| O-1 | 场景切换后 active_event 未联动（地点错位） | ✅ 已修复：场景联动事件落地；V14.8 又修掉 flaky 暴露的 `refresh_active_event` 同 seed 重选 bug（固定 seed + 场景约束刷新） | commit `fbbbc38`；trial4/OPTIMIZATION_REPORT.md、trial4/V148_REPORT.md（135/135 ×3 连跑） |
+| O-2 | 「对这件事怎么看」依赖 active_event 存在 | ✅ 关闭（非 bug）：load_or_create 会生成事件，构造 WorldState 未触发事件属测试脚本问题 | accept_v1457/REPORT.md |
+| O-3 | 「在X」句式误触场景切换 | ✅ 已修复 | commit `99e7581`（V14.7 真机验收 17/17） |
+| O-4 | 场景互动文案长会话轮转重复 | ✅ 已完成去重（LRU 思路） | commit `1aea880`；trial4/REPORT.md（pytest 127/127 含 O-4 断言） |
+| O-5 | 名场面「从零开始」触发权重/冷却需确认 | 🔵 **仍 open（P2）**——情感场景层 24h 冷却已有，名场面层待确认 | accept_v1457/REPORT.md |
+| G-1 | 事件注入被长会话对话历史稀释 | ✅ 已修复：事件注入强化（加粗/前置），Trial #5 确认「忽略事件」不再发生 | commit `fbbbc38`；trial5/REPORT.md（C2 观察） |
+| H-1 | 后期来信回应语感漂移回宅邸意象 | ✅ 已修复：`_build_arc_flavor_section` 篇章语感注入 | commit `768036c`；trial5/REPORT.md 发现 |
+
+> 其余散落闭环：E-01（`e7073b4`）/ E-02（`5f5cece`）/ F-01（Trial #3 报告）/ E-03 关闭（=E-01 同根因，Trial #3 复现证明）已在 Trial #2 补充节标注；S-01/S-02/A-01 见顶部修复汇总。台账历史头注只写到 Trial #2 的问题自此回填完毕。
