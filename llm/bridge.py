@@ -206,6 +206,13 @@ class ReZeroLLMBridge:
                 + self._first_round_atmosphere
                 + "\n"
             )
+        # V15.0-M2：今日纪念——关系事实注入（按日缓存；账本落账同日一次）
+        try:
+            facts = self._today_facts()
+            if facts:
+                system_prompt += PromptBuilder._build_anniversary_section(facts)
+        except Exception:
+            pass  # 纪念事实失败不影响对话
         # V14.2：引用注入（仅本轮 Prompt，不进 history / 不落库 / 不写 events）
         if reply_to:
             preview = (reply_to.get("preview") or "").strip()
@@ -222,6 +229,29 @@ class ReZeroLLMBridge:
         messages.extend(self.history[-self.max_history:])
         messages.append({"role": "user", "content": user_input})
         return messages, state
+
+    # ── V15.0-M2：今日纪念（关系事实）─────────────────────────────
+    # 按日缓存：一天内至多计算/落账一次；跨进程重启后重算（幂等）。
+    _anniv_cache: Dict[str, List[Any]] = {}
+
+    def _today_facts(self) -> List[Any]:
+        from datetime import date as _date
+        today = _date.today().isoformat()
+        cache = ReZeroLLMBridge._anniv_cache
+        if today in cache:
+            return cache[today]
+        facts: List[Any] = []
+        try:
+            from shared import life_ledger
+            from shared.anniversary import compute_facts
+            genesis = life_ledger.ensure_genesis(self.conversation_store)
+            if genesis is not None:
+                facts = compute_facts(genesis=genesis, today=_date.today())
+                life_ledger.record_day_facts(facts, _date.today())
+        except Exception:
+            facts = []
+        cache[today] = facts
+        return facts
 
     # ── V11.10.0：情感场景检测 ──
 

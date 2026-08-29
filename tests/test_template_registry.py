@@ -36,7 +36,7 @@ def _registry():
 def test_load_and_validate() -> None:
     reg = _registry()
     assert reg["schema_version"] == "1.0"
-    assert len(reg["items"]) == 82, f"V14.11 ambient_remark 扩池后应 82 条，实际 {len(reg['items'])}"
+    assert len(reg["items"]) == 91, f"V15.0-m2 memorial 扩池后应 91 条，实际 {len(reg['items'])}"
     ids = [it["id"] for it in reg["items"]]
     assert len(ids) == len(set(ids)), "id 应唯一"
     for it in reg["items"]:

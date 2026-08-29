@@ -272,6 +272,20 @@ class PromptBuilder:
         )
 
     @staticmethod
+    def _build_anniversary_section(facts) -> str:
+        """V15.0-M2：今日纪念——关系事实注入（事实由纪念日引擎/账本提供）。
+
+        双子"知道今天是什么日子"是行为而非文案：事实句直陈，语气交给双子。
+        """
+        if not facts:
+            return ""
+        lines = "；".join(getattr(f, "title", str(f)) for f in facts)
+        return ("\n### 今日纪念（真实关系事实，由系统确认）\n"
+                f"- {lines}。\n"
+                "双子自然知晓这些事实，可在回应中温柔地、自然地提及；"
+                "不要机械罗列，不要每句都提。\n")
+
+    @staticmethod
     def _build_event_highlight_section(world: Optional[WorldState]) -> str:
         """V14.7 优化 G-1：今日事件独立高亮小节——事件从世界状态行中提升，
         让 LLM 在长会话中不被对话历史稀释（Trial #4-B2 观察：事件注入被忽略）。

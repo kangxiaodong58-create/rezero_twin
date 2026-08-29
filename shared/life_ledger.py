@@ -269,3 +269,68 @@ def backfill_from(*, conversation_store: Any, memory_events: Optional[List[dict]
             added += 1
 
     return {"added": added, "checked": checked, "total": ledger.count()}
+
+
+# ── 相识日与当日事实入账（V15.0-M2，纪念日引擎配套）────────────────
+
+def genesis_date(ledger: Optional[LifeLedger] = None):
+    """账本中的相识日（kind=genesis）；无则 None。返回 datetime.date。"""
+    try:
+        led = ledger or get_default_ledger()
+        for ev in led.all_events():
+            if ev["kind"] == "genesis":
+                from datetime import date
+                return date.fromisoformat(ev["ts"][:10])
+    except Exception:
+        return None
+    return None
+
+
+def ensure_genesis(conversation_store: Any = None,
+                   ledger: Optional[LifeLedger] = None):
+    """确保 genesis 已落账（幂等），返回相识日；无任何证据时取今天。
+
+    证据链：conversations 最早消息 > 今天（与 backfill_from 同口径）。
+    """
+    led = ledger or get_default_ledger()
+    existing = genesis_date(led)
+    if existing is not None:
+        return existing
+    oldest = ""
+    try:
+        if conversation_store is not None:
+            oldest = conversation_store.oldest_message_time()
+    except Exception:
+        pass
+    try:
+        led.append(ts=oldest or _now_str(), kind="genesis", title="相识之日",
+                   dedup_key="genesis")
+    except Exception:
+        return None
+    return genesis_date(led)
+
+
+def record_day_facts(facts: Any, today: Any,
+                     ledger: Optional[LifeLedger] = None) -> None:
+    """把纪念日引擎的当日事实落账（days_milestone/festival；幂等、静默）。
+
+    facts = anniversary.compute_facts() 的返回（鸭子类型：kind/title/key）。
+    节日每年一条 → 时间线自然积累"一起度过的节日"序列。
+    """
+    led = ledger or get_default_ledger()
+    today_str = today.isoformat() if hasattr(today, "isoformat") else str(today)
+    for f in facts or []:
+        try:
+            kind = getattr(f, "kind", "")
+            if kind == "days_milestone":
+                led.append(kind="days_milestone", title=f.title,
+                           dedup_key=f"days_milestone|{f.key}", ts=today_str)
+            elif kind == "festival":
+                led.append(kind="festival", title=f.title,
+                           dedup_key=f"festival|{f.key}|{today_str}", ts=today_str)
+            elif kind == "genesis_annual":
+                led.append(kind="days_milestone", title=f.title,
+                           dedup_key=f"genesis_annual|{f.key}|{today_str}",
+                           ts=today_str)
+        except Exception:
+            continue

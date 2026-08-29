@@ -6,6 +6,25 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V15.0.0-m2] - 2026-08-29 (年轮 M2——纪念日引擎 + 今日纪念注入 + 纪念卡/相册)
+
+> 年轮第二个里程碑（构思 §3.2/§3.3）。双子从今天起"知道今天是什么日子"：相识天数/里程碑/周年/传统节日成为注入对话的事实（规则层计算，零 API），里程碑与节日自动生成纪念卡落盘相册——视觉资产第一次以"记忆"的身份进入系统。
+
+### Added
+- **`shared/anniversary.py`（纪念日引擎）**：节日静态对照表 2026–2030（春节/端午/七夕/中秋经香港天文台对照表等多源联网校准；**元宵=春节+14 天代码推导不存储**——搜索摘要曾给出错误元宵日期，验证了单源决策）；`compute_facts` 五类事实（相识第 N 天 / 里程碑 100·365·1000… / 周年 / 当日节日"一起度过的第 N 个"（由相识日推算，不依赖历史记录）/ 3 天内即将到来）
+- **`shared/memorial.py`（纪念卡+相册）**：生成链 L1 可选 LLM（失败静默回落）→ L2 注册表 `slot="memorial"` 确定性选型（离线也有卡）；`data/album/YYYY-MM-DD_{kind}.md` 落盘（文件即幂等，每类每日一张）+ 含日期/好感/篇章/事实快照 + 账本 `memorial` 记录
+- **registry 82→91**：memorial 3 arc × 3 kind 文案（宅邸女仆腔/帝国疏离/后期并肩，插值 {days}/{festival}/{years}）
+- **今日纪念注入**：`PromptBuilder._build_anniversary_section`（事实句直陈，语气交给双子）+ bridge `_today_facts()` 按日缓存（ensure_genesis 幂等建档 + record_day_facts 节日/里程碑入时间线）
+- **GUI**：启动序列 `_maybe_show_memorial_card`（安全路径规则与 vignette 一致：frozen/offscreen/无 key 走 L2）
+- **测试 +18**：`tests/test_anniversary_memorial.py`（表锚点/推导/事实计算/跨年计数/落账幂等/prompt 注入/卡片确定性/L1 回落/相册去重/registry 契约）；全量 **228/228**
+
+### 验收
+1. pytest **228/228**（V15.0-m1 后 +18）
+2. 节日表五年 20 个农历节日日期全部联网多源校准；元宵推导断言（2027-02-20 等）
+3. 离线链路：无 key 时纪念卡 L2 出卡、prompt 注入、相册落盘、账本记录全通
+
+---
+
 ## [V15.0.0-m1] - 2026-08-29 (年轮 M1——人生账本 life.db：回填 + 记账镜像，零 UI)
 
 > V15.0「年轮」= Relationship Assets（关系资产）第一个落地里程碑（构思：`docs/design/V15_0_年轮_关系资产版本构思_2026-08-29.md`）。产品定位升级为「一个会陪你一起变老的数字关系」后，本里程碑把散落的隐式沉淀变成显式、幂等、可回填的人生账本——append-only，与 engine.events（30 条工作记忆）严格分离。

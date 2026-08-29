@@ -45,7 +45,7 @@ if getattr(sys, "frozen", False):
         sys.stderr = sys.stdout
 
 import traceback
-from datetime import datetime
+from datetime import date, datetime
 from typing import Optional
 
 _PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
@@ -1794,7 +1794,58 @@ class TwinChatApp(QMainWindow):
             # 换日时问候正文已带天气，不额外打轻氛围避免刷屏
             _log("换日：日更问候已含天气，跳过轻氛围避免刷屏")
 
+        # V15.0-M2：纪念卡（纪念日/节日/周年；每类每日至多一张，失败静默）
+        try:
+            self._maybe_show_memorial_card()
+        except Exception as e:
+            _log(f"纪念卡流程异常: {e}")
+
         _log("TwinChatApp.__init__ 完成")
+
+    # ── V15.0-M2：纪念卡 ─────────────────────
+
+    def _maybe_show_memorial_card(self) -> None:
+        """纪念日/节日/相识周年 → 生成并展示一张纪念卡（相册落盘，每类每日一张）。
+
+        生成链 L1（LLM，非 frozen/offscreen/有 key 时）→ L2 注册表确定性。
+        事实计算与落账复用 _today_facts 同口径（ensure_genesis 幂等）。
+        """
+        from shared import memorial as memorial_mod
+        from shared.anniversary import compute_facts
+        from shared.life_ledger import ensure_genesis, record_day_facts
+        genesis = ensure_genesis(self.conv_store)
+        if genesis is None:
+            return
+        today = date.today()
+        facts = compute_facts(genesis=genesis, today=today)
+        if not facts:
+            return
+        record_day_facts(facts, today)
+        kind = next((f.kind for f in facts if f.kind in memorial_mod.CARD_KINDS), None)
+        if kind is None or memorial_mod.has_card(kind, today):
+            return
+        arc_value = getattr(getattr(self.bot, "engine", None), "arc", None)
+        arc = getattr(arc_value, "value", "mansion_era")
+        safe_path = (getattr(sys, "frozen", False)
+                     or os.environ.get("QT_QPA_PLATFORM", "") == "offscreen"
+                     or not os.getenv("DEEPSEEK_API_KEY"))
+        llm_callable = None
+        if not safe_path and self.mode == "llm" and hasattr(self.bot, "raw_completion"):
+            llm_callable = lambda p: self.bot.raw_completion(  # noqa: E731
+                "你是《Re:Zero》双子（蕾姆第三人称自称、拉姆毒舌而温柔）。"
+                "写一张纪念卡的正文，30-60 字，只输出正文。",
+                p)
+        text = memorial_mod.generate(kind, facts=facts, arc=arc, today=today,
+                                     llm_callable=llm_callable)
+        if not text:
+            return
+        snapshot = {"arc": arc, "favor": getattr(self.engine, "favor", None),
+                    "facts": [f.title for f in facts]}
+        path = memorial_mod.save_card(kind, today, text, detail=snapshot)
+        self._append_parsed_message(
+            "系统", f"━━  ✦ 纪念日  ━━\n{text}\n━━  ✦  ━━",
+            "system", save=False, force_center=True, variant="vignette")
+        _log(f"纪念卡已生成: kind={kind} path={path}")
 
     # ── V14.3：主动来信 ────────────────────────
 

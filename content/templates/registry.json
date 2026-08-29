@@ -1138,6 +1138,114 @@
       "weathers": [
         "all"
       ]
+    },
+    {
+      "id": "memorial_mansion_days_01",
+      "arc": "mansion_era",
+      "slot": "memorial",
+      "text": "蕾姆把今天悄悄记在了心里：『陪伴您的第 {days} 天——对蕾姆来说，每一天都是刚刚开始。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "memorial_mansion_festival_01",
+      "arc": "mansion_era",
+      "slot": "memorial",
+      "text": "蕾姆端来应景的茶点，欠身致意：『{festival}快乐，客人大人。有您在的节日，宅邸比往年都要热闹呢。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "memorial_mansion_annual_01",
+      "arc": "mansion_era",
+      "slot": "memorial",
+      "text": "蕾姆轻声说：『{years}年前的今天，您推开了宅邸的大门。那一天的事，蕾姆一直、一直记得。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "memorial_empire_days_01",
+      "arc": "empire_era",
+      "slot": "memorial",
+      "text": "蕾姆把水囊递过来，指尖停了一瞬：『第 {days} 天了……在这片荒野上，还能数着日子的人，不多了。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "memorial_empire_festival_01",
+      "arc": "empire_era",
+      "slot": "memorial",
+      "text": "蕾姆望向远处的篝火，声音放得很低：『今天是{festival}。就算行军在外……也请让我，记住这一天。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "memorial_empire_annual_01",
+      "arc": "empire_era",
+      "slot": "memorial",
+      "text": "蕾姆沉默了片刻：『{years}年了吗。有些记忆已经失去了……但身体还记得——要走在您身边。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "memorial_late_days_01",
+      "arc": "late_arc",
+      "slot": "memorial",
+      "text": "蕾姆把披肩往您肩上又拢了拢：『第 {days} 天。以后的第一千天、第两千天——蕾姆都打算这样数下去。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "memorial_late_festival_01",
+      "arc": "late_arc",
+      "slot": "memorial",
+      "text": "蕾姆举起杯中的热汤，火光映在眼底：『{festival}快乐。庆祝的风景变了……可身边还是同一个人。真好。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
+    },
+    {
+      "id": "memorial_late_annual_01",
+      "arc": "late_arc",
+      "slot": "memorial",
+      "text": "蕾姆微笑着，眼角有些发亮：『相识 {years} 年。从女仆到家人——这条路，我们已经一起走完了呢。』",
+      "periods": [
+        "all"
+      ],
+      "weathers": [
+        "all"
+      ]
     }
   ]
 }
