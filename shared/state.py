@@ -14,6 +14,19 @@ from enum import Enum, IntEnum
 from typing import Any, Dict, List, Optional
 
 
+def _trace_transition(component: str, from_state: str, to_state: str) -> None:
+    """Forensic M4：状态机跃迁写入取证黑匣子（未初始化时 no-op）。
+
+    只记低频跃迁（篇章 / 好感等级 / 拉姆阶段 / 鬼化 / 锁定）——高频数值
+    变化不进 200 容量环形缓冲，防止挤掉关键事件。任何失败静默。
+    """
+    try:
+        from runtime.forensic.recorder import transition
+        transition(component, from_state, to_state)
+    except Exception:
+        pass
+
+
 class StoryArc(str, Enum):
     MANSION_ERA = "mansion_era"
     EMPIRE_ERA = "empire_era"
@@ -825,6 +838,19 @@ class HardStateEngine:
         if any(k in text for k in self.HIGH_RISK_KEYWORDS):
             self._add_event("conflict", f"第{n}次对话：发生高风险冲突（魔女残香上升）", text)
 
+        # Forensic M4：状态轨迹进黑匣子（跃迁才记录，设计 §4.3）。
+        # 崩溃现场可回放数值迁移序列（如「锁定后突然跌档」类问题）。
+        if level_now != prev["level"]:
+            _trace_transition("engine.favor", prev["level"].name, level_now.name)
+        if self.locked != prev["locked"]:
+            _trace_transition("engine.locked",
+                              "LOCKED" if prev["locked"] else "UNLOCKED",
+                              "LOCKED" if self.locked else "UNLOCKED")
+        if ram_now != prev["ram_stage"]:
+            _trace_transition("engine.ram", prev["ram_stage"].value, ram_now.value)
+        if self.oni_stage != prev["oni"]:
+            _trace_transition("engine.oni", prev["oni"].name, self.oni_stage.name)
+
     def _classify_intent(self, text: str) -> Intent:
         lowered = text.lower()
         # V14.4 S-02：FROM_ZERO 触发条件放宽——「从零开始」语境即可触发，
@@ -1073,6 +1099,7 @@ class HardStateEngine:
         )
 
     def set_arc(self, arc: StoryArc) -> None:
+        prev_arc = self.arc
         self.arc = arc
         if arc == StoryArc.EMPIRE_ERA:
             self.recovery = 0.0
@@ -1081,6 +1108,8 @@ class HardStateEngine:
         else:
             self.recovery = 1.0
             self.independence = max(self.independence, 0.25)
+        if prev_arc != arc:
+            _trace_transition("engine.arc", prev_arc.value, arc.value)
 
     def recover(self, progress: float = 1.0) -> None:
         old = self.recovery

@@ -188,6 +188,25 @@ def test_cancel_stream_stops_generator() -> None:
     assert bot._stream_cancelled is True
 
 
+def test_stale_stream_intercepted_not_written() -> None:
+    """Forensic M4：流式中途 reset_session → 旧流在 chunk 检查点被拦截中止。
+
+    设计 §4.1「记录后拒绝执行」：stale 回复不得产出 token、不得写 history
+    （V14.9 前为只观测不拦截，旧流仍会把整段回复交给 GUI 并落 history）。
+    """
+    bot = _new_bot()
+    bot.client = _fake_client("ok")
+    gen, _state = bot.chat_stream("你好")
+    first = next(gen)          # gen=1 的第一个 token
+    bot.reset_session()        # generation → 2（模拟流式中途新会话）
+    rest = list(gen)           # 旧流 chunk 检查点命中 stale → 中止
+    assert first, "stale 化之前的 token 正常产出"
+    assert len(rest) == 0, f"stale 流应被拦截中止，不再产出: {rest}"
+    assert len(bot.history) == 0, f"stale 回复不得写 history: {len(bot.history)}"
+    assert bot._generation == 2
+    assert bot._last_stream_ok is None, "被拦截的流不应进入校验回传状态"
+
+
 def test_fallback_wording_no_amnesia() -> None:
     """V13.0：兜底文案去失忆感（T1-05）。"""
     bot = _new_bot()

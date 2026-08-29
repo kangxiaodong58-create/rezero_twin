@@ -448,30 +448,40 @@ class ReZeroLLMBridge:
             def _generator():
                 # Forensic M1：异步链起点捕获 generation（stale 检测锚点）
                 gen = self._generation
-                stale_reported = False
                 full = ""
                 try:
                     if gen != self._generation:
+                        # Forensic M4 决策（设计 §4.1）：起点已 stale → 记录后拒绝执行，
+                        # 旧会话的回复不得进入新会话（GUI 展示 / history 均不得）
                         record("STALE_CALLBACK_DETECTED", component="bridge",
                                generation=gen, payload_summary="stream generator started stale")
+                        return
                     record("STREAM_START", component="bridge", generation=gen)
                     for chunk in stream:
                         if self._stream_cancelled:
                             # V13.0：用户取消——静默结束，不校验、不写 history
                             return
-                        # Forensic M3：chunk 级 stale 观测（generation 中途变化，
-                        # 如旧流在会话重置后继续产出；只记录不拦截）
-                        if gen != self._generation and not stale_reported:
-                            stale_reported = True
+                        # Forensic M4：chunk 级 stale 拦截（generation 中途变化，
+                        # 如旧流在会话重置后继续产出）——记录后中止流：
+                        # 不再产出 chunk，也不进入末尾校验 / history 写入
+                        if gen != self._generation:
                             record("STALE_CALLBACK_OBSERVED", component="bridge",
                                    generation=gen,
                                    payload_summary=f"current_gen={self._generation}")
+                            return
                         delta = chunk.choices[0].delta.content
                         if delta:
                             full += delta
                             yield delta
 
                     if self._stream_cancelled:
+                        return
+
+                    # Forensic M4 末尾防线：流结束时已发生会话重置（chunk 检查点
+                    # 通常已拦截，此处兜住零 chunk / 重置竞态）——旧回复不写 history
+                    if gen != self._generation:
+                        record("STALE_CALLBACK_DETECTED", component="bridge",
+                               generation=gen, payload_summary="stream finalized stale")
                         return
 
                     # 流式完整输出结束后校验；失败仅记录日志，不污染 history
@@ -554,10 +564,11 @@ class ReZeroLLMBridge:
                 pass
 
     def reset_session(self) -> None:
-        """Forensic M3：新会话——generation 递增（stale 检测锚点），清空对话历史。
+        """Forensic M3/M4：新会话——generation 递增（stale 检测锚点），清空对话历史。
 
-        旧流式回调若仍在运行，其捕获的旧 generation 将与当前值不符，
-        在 chunk 检查点被记录为 STALE_CALLBACK_OBSERVED（只观测不拦截）。
+        旧流式回调若仍在运行，其捕获的旧 generation 与当前值不符，
+        在 chunk 检查点被记录为 STALE_CALLBACK_OBSERVED 并**拦截中止**
+        （V14.9 起按设计 §4.1「记录后拒绝执行」落地，不再只是观测）。
         """
         self._generation += 1
         self.history = []

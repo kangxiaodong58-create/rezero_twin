@@ -41,3 +41,7 @@ data/*.log
 venv/
 Temp/
 .pytest_cache/
+
+# Forensic 取证现场与案件工作目录（M4，证据不入库、结案摘录归档 docs/evaluation/sessions）
+incidents/
+.debug/

@@ -26,6 +26,16 @@ a = Analysis(
         'shared.scene_manager',     # V14.7：空间场景系统
         'shared.letter_manager',    # V14.3：主动来信
         'shared.template_registry', # V14.4：篇章模板注册表
+        # Forensic M4：显式列出（此前全靠 bridge.py 顶层 import 被动跟随，
+        # 一旦改懒加载即从 EXE 消失——研判 R1/D2）
+        'runtime',
+        'runtime.forensic',
+        'runtime.forensic.event_buffer',
+        'runtime.forensic.recorder',
+        'runtime.forensic.crash_dump',
+        'runtime.forensic.manifest',
+        'runtime.forensic.headless_runner',
+        'runtime.forensic.case',
         'llm.bridge',
         'shared',
         'llm',

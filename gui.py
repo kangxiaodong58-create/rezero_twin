@@ -80,6 +80,9 @@ from shared.state import StoryArc, OniStage, FAVOR_LEVEL_CN
 from shared.memory_store import MemoryStore
 from shared.conversation_store import ConversationStore
 from shared.letter_manager import LetterManager  # V14.3：主动来信
+# Forensic M4（R1 修复）：GUI/EXE 入口接入取证黑匣子——record 未初始化时为
+# 安全 no-op，init_forensic 只在 main() 调用（测试构造 TwinChatApp 不触发）
+from runtime.forensic import record, shutdown_forensic, init_forensic
 
 # 日志与持久化统一走 get_data_dir()：
 # frozen 时指向 EXE 同级 data/，源码时指向项目根 data/。
@@ -2567,6 +2570,7 @@ class TwinChatApp(QMainWindow):
     def _cancel_streaming(self) -> None:
         """V13.0：用户取消当前流式回复。V14.0：本轮用户句标记未送达（failed）。"""
         _log("用户取消流式回复")
+        record("UI_EVENT", component="gui", payload_summary="stream_cancelled")  # Forensic M4
         self._teardown_llm_thread()
         self._streaming_active = False
         pending = getattr(self, "_pending_user_widget", None)
@@ -3339,6 +3343,12 @@ class TwinChatApp(QMainWindow):
         self._teardown_llm_thread()  # V13.0：先收尾线程，再存状态（防 worker 写一半）
         self._save_state()
         self._save_session_summary()  # V11.6.5: 写入 session 摘要
+        # Forensic M4：正常退出——关闭事件入黑匣子后清理取证（静默失败）
+        try:
+            record("WINDOW_CLOSE", component="gui")
+            shutdown_forensic()
+        except Exception:
+            pass
         event.accept()
 
 
@@ -3361,6 +3371,15 @@ def _install_crash_handler() -> None:
 
 def main() -> None:
     _install_crash_handler()
+    # Forensic M4（R1 修复）：GUI/EXE 入口启动取证黑匣子。
+    # 必须在 _install_crash_handler 之后安装——crash hook 会包装现有
+    # excepthook 并在其后透传，gui 的 crash.log 写入不受影响。
+    # 案件目录随数据目录走（EXE 下数据目录有 %APPDATA% 回退，根目录可能不可写）。
+    try:
+        init_forensic(os.path.join(get_data_dir(), "incidents"))
+        record("SESSION_START", component="gui")
+    except Exception:
+        pass  # 取证初始化失败静默，绝不影响 GUI 启动
     try:
         # Windows 任务栏图标修复：在 QApplication 之前设置 AppUserModelID，
         # 否则任务栏将窗口归到默认进程标识，显示系统默认图标而非自定义图标。
