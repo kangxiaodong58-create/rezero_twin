@@ -25,7 +25,9 @@ from PySide6.QtWidgets import (
     QStackedWidget, QTextBrowser, QVBoxLayout, QWidget,
 )
 
-from design_tokens import COLORS, DIM, FONT_FAMILY, FONT_SIZE, RADIUS, SURFACE_TINT
+from design_tokens import (
+    COLORS, DIM, ELEVATION, FONT_FAMILY, FONT_SIZE, RADIUS, SURFACE_TINT,
+)
 
 from shared.anniversary import (
     DAYS_MILESTONES, build_festival_table, genesis_days,
@@ -158,7 +160,8 @@ class MemoryBookOverlay(QWidget):
         self._card.setStyleSheet(f"""
             QFrame#memory_book_card {{
                 background-color: {COLORS['bg_surface_2']};
-                border: 1px solid {COLORS['border_focus']};
+                border: 1px solid {ELEVATION['card_border']};
+                border-top: 1px solid {ELEVATION['glow_top']};
                 border-radius: {RADIUS['large']}px;
             }}
         """)

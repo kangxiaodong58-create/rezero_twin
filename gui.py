@@ -124,8 +124,9 @@ _log(f"=== PySide6 GUI 启动 (python={sys.executable}) ===")
 #  Design Tokens（V15.0-M3 出库：design_tokens.py 唯一真源，此处仅转口）
 # ═══════════════════════════════════════════════
 from design_tokens import (  # noqa: E402
-    COLORS, DIM, FONT_FAMILY, FONT_SIZE, RADIUS, ROLE_BUBBLE_FALLBACK,
-    ROLE_BUBBLE_STYLES, ROLE_COLORS, SPACING, SURFACE_TINT,
+    COLORS, DIM, ELEVATION, FONT_FAMILY, FONT_SIZE, MOTION, RADIUS,
+    ROLE_BUBBLE_FALLBACK, ROLE_BUBBLE_STYLES, ROLE_COLORS, SPACING,
+    SURFACE, SURFACE_TINT, TYPE,
 )
 
 
@@ -564,7 +565,7 @@ class BubbleWidget(QFrame):
                 paras = [p for p in escaped.split("\n") if p.strip()]
                 if len(paras) > 1:
                     body = "".join(f'<p style="margin:0 0 6px 0;">{p}</p>' for p in paras)
-                    label.setText(f'<div style="line-height:150%;">{body}</div>')
+                    label.setText(f'<div style="line-height:{TYPE["lh_body_pct"]}%;">{body}</div>')
                 else:
                     label.setText(escaped)
             else:
@@ -1324,7 +1325,8 @@ class HistoryOverlay(QWidget):
         self._card.setStyleSheet(f"""
             QFrame#history_card {{
                 background-color: {COLORS['bg_surface_2']};
-                border: 1px solid {COLORS['border_focus']};
+                border: 1px solid {ELEVATION['card_border']};
+                border-top: 1px solid {ELEVATION['glow_top']};
                 border-radius: {RADIUS['large']}px;
             }}
         """)

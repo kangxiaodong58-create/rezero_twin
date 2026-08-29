@@ -187,3 +187,42 @@ DIM = {
     # ── 历史浮层子区域 ──
     "history_header_h":  48,  # 历史浮层标题栏/搜索区高度
 }
+
+
+# ═══════════════════════════════════════════════
+#  V2 扩充组（V16 表现层：DESIGN_SYSTEM_V2.md 的 token 落点）
+# ═══════════════════════════════════════════════
+
+# 动效四律（宪法 §一）。enabled 由运行时判定覆写（offscreen 自动禁用）。
+MOTION = {
+    "enabled":       True,
+    "fast":          150,   # ms：微反馈（hover/press）
+    "base":          220,   # ms：消息入场（100–400ms 黄金带内）
+    "slow":          320,   # ms：浮层
+    "enter_curve":   "OutCubic",
+    "spring_curve":  "OutBack",
+    "stagger_ms":    30,    # 级联步长
+    "stagger_max":   8,     # 至多前 8 项错落，其后同时出现
+}
+
+# 字排（宪法 §二）。存量字号不动（FONT_SIZE 即存量字阶）。
+TYPE = {
+    "lh_body_pct":   155,  # 正文行高百分比（气泡富文本 div 用；V10.9.2 为 150）
+    "lh_title_pct":  120,
+    "caps_spacing":  0.12,  # 英文全大写标签字距（em，QFont.setLetterSpacing 换算）
+}
+
+# 层级与光影（宪法 §三，widgets 代偿策略：内发光顶边 + 边框分档）
+ELEVATION = {
+    "glow_top":      "rgba(255,255,255,0.07)",   # 1px 受光高光（一切浮起表面）
+    "card_border":   "rgba(255,255,255,0.10)",
+}
+
+# 玻璃五档（宪法 §四：Different layers, different opacity——禁止手写散落 rgba）
+SURFACE = {
+    "glass_15": "rgba(18,19,25,0.15)",   # 背景遮罩层
+    "glass_35": "rgba(18,19,25,0.35)",   # 快捷件
+    "glass_45": "rgba(18,19,25,0.45)",   # 侧栏
+    "glass_55": "rgba(18,19,25,0.55)",   # 主卡
+    "glass_60": "rgba(18,19,25,0.60)",   # 输入框
+}

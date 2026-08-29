@@ -6,6 +6,23 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.0.0-ma] - 2026-08-29 (表现层 M_A——DESIGN_SYSTEM_V2 设计宪法 + 四组 token + 截图基线)
+
+> V16 表现层第一个里程碑：把「高级动效与 UI 质感」方法论编译为**设计宪法**（DESIGN_SYSTEM_V2.md：动效四律/字排/层级光影/色彩纪律/十项检查单），token 先行、肉随后。本里程碑零动画——动效属 M_B。
+
+### Added
+- **`docs/design/DESIGN_SYSTEM_V2.md`（设计宪法）**：时代分界表（widgets/QML 能力边界，防扩权）+ 动效四律 + 字排规则 + 内发光代偿策略 + 玻璃五档 + UX 委员会十项检查单 + 性能红线（流式零动画/并发上限/offscreen 禁用）
+- **`design_tokens.py` V2 四组**（纯数据）：`MOTION`（150/220/320ms 黄金带 + OutCubic/OutBack + 级联 30ms×8）/ `TYPE`（行高 155/120% + caps 字距）/ `ELEVATION`（1px 内发光顶边 + 边框分档）/ `SURFACE`（玻璃五档 15/35/45/55/60，同源同色相）
+- **消费（按曝光面，克制落地）**：多行气泡行高 150→**155%**（V10.9.2 富文本机制 token 化）；历史浮层/回忆之书卡片上**内发光顶边**（border-top 1px 受光高光）
+- **`tools/screenshot_baseline.py`**：组件级确定性截图（气泡×3/系统卡/回忆之书，时钟无关）→ `baselines/screenshots/`；`--compare` 逐像素差异比率（容差抗 AA）——**质感从此有像素证据**；截图 ×5 入库
+- **测试 +4**：token 黄金带断言 / 浮层消费内发光 / 气泡行高走 token / 截图采集-自对比零差异-篡改检出；全量 **249/249**
+
+### 纪律
+- 新 UI 一律消费 SURFACE/ELEVATION token，禁止手写散落 rgba（宪法 §四）
+- 动效（MOTION 落地）属 V16-M_B；共享元素/真模糊/Squircle 明确留 QML 时代
+
+---
+
 ## [V15.0] - 2026-08-29 (年轮正式发布——Relationship Assets：会陪你一起变老的数字关系)
 
 > 产品定位升级后的第一个大版本：「模型决定她今天会说什么，时间决定她是谁」。关系资产（时间/记忆/视觉/情感）从隐式沉淀变为显式、可回看、**可带走**的资产。五个里程碑全部落地，完整审判循环（Phase 3）首次全链路走通。
