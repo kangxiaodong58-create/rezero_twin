@@ -1,8 +1,8 @@
-# Re:Zero Twin Forensic 子系统设计 v1.0
+# Re:Zero Twin Forensic 子系统设计 v1.1
 
-**Status:** 设计定稿（待开工）
-**Date:** 2026-08-19
-**关联协议:** `agent_os/FORENSIC_DEBUGGING_PROTOCOL.md` v1.2
+**Status:** M1~M4 全部落地（2026-08-29 验收）
+**Date:** 2026-08-19 定稿 / 2026-08-29 实现修订
+**关联协议:** `docs/forensic/FORENSIC_DEBUGGING_PROTOCOL.md` v1.2（仓库落地版，M4 起取代外部引用）
 **目标:** 让概率性 Bug（如长对话崩溃、软 OOC）第一次"留下脚印"——崩溃前最后 N 个事件自动落盘，Agent 凭真实数据破案，而不是事后猜。
 
 ---
@@ -194,3 +194,17 @@ delay_profile: api_delay / timeout / callback_delay / input_interval  # 时序�
 | 多线程事件乱序 | seq 唯一排序；时间戳仅参考 |
 | 观测改变时序 | 写入路径零业务逻辑，临界区极短 |
 | GUI 耦合阻塞 headless | `runtime/` 禁止 import PySide6；解耦作为架构需求 |
+
+---
+
+## 11. 实现修订记录（v1.1，2026-08-29——M4 验收时回写）
+
+| 设计原文 | 实现现状 | 说明 |
+|---|---|---|
+| §2 模块名 `forensic_manifest.py` / `state_trace.py` / `session_trace.py` | `manifest.py`；state_trace 以 `shared/state.py::_trace_transition` + `recorder.transition()` 实现；无独立 session_trace | 会话级信息由 `startup_id`/`session_id` 字段承载，无独立模块必要 |
+| §2 三文件 dump.json / manifest.json / environment.json | 合并为单 `dump.json` | 减少崩溃时写盘次数（Crash Handler 硬性约束优先） |
+| §4.1 stale「记录后拒绝执行」 | **V14.9 起已按设计落地拦截**（M1~M3 期间为只观测）：起点 stale → `STALE_CALLBACK_DETECTED` 拒执行；chunk 检查点 → `STALE_CALLBACK_OBSERVED` 中止流；写 history 前兜底校验 | 原观测实现存在旧会话流污染新会话 history 的数据完整性风险 |
+| §4.3 / §5 State Trace 注入点 | 接入低频跃迁：篇章 / 好感等级 / 拉姆阶段 / 鬼化 / 锁定（state.py `_detect_events` 跃迁点 + `set_arc`）；**SESSION_SAVE 等高频事件刻意不接** | 200 容量环形缓冲会被高频事件挤占，违背黑匣子保留关键窗口的初衷 |
+| §8 M4 验收 | ✅ 2026-08-29 首案 `INC-20260829-125701-018` 走通 CASE_OPEN→CASE_CLOSED | 证据：`docs/evaluation/sessions/forensic_m4_2026-08-29/` |
+| §9 案件目录（M4） | `runtime/forensic/case.py`（open_case/close_case）+ `.debug/CASE-<id>/case.md` 模板 | 协议文档已仓库化：`docs/forensic/FORENSIC_DEBUGGING_PROTOCOL.md` |
+| （新增）GUI/EXE 接入 | `gui.main()` init_forensic（data/incidents）+ closeEvent/shutdown + spec 显式 hiddenimports | M1~M3 曾只覆盖 CLI，分发 EXE（打包入口=gui.py）无取证——已修复 |

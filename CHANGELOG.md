@@ -6,6 +6,29 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.9] - 2026-08-29 (Forensic 收口——GUI/EXE 取证接入 + stale 拦截 + M4 协议对接)
+
+> Forensic Kernel M1~M3 此前只覆盖 CLI 入口，打包 EXE（入口=gui.py）反而无黑匣子（研判 R1）。本版收口：EXE 侧取证接入、stale callback 由观测升级为拦截（消除旧会话流污染新会话的数据完整性风险）、状态轨迹进黑匣子、M4 案件编排与协议文档仓库化，首个真实案件走通 CASE_OPEN→CASE_CLOSED。
+
+### Added
+- **GUI/EXE 取证接入（R1）**：`gui.main()` 在 crash handler 之后 `init_forensic(<data_dir>/incidents)`（hook 包装并透传，crash.log 不受影响）；`closeEvent` 记 `WINDOW_CLOSE` + `shutdown_forensic()`；`_cancel_streaming` 记 `UI_EVENT`
+- **状态轨迹（state_trace）**：`shared/state.py::_trace_transition`——篇章切换 / 好感等级 / 拉姆阶段 / 鬼化 / 忠诚锁定跃迁写黑匣子（`STATE_TRANSITION`）；高频数值变化刻意不入 200 容量缓冲
+- **M4 案件编排**：`runtime/forensic/case.py`——`open_case`（认领+`.debug/CASE-<id>/case.md` 模板+INVESTIGATING）/ `close_case`（RESOLVED+结案节+CASE_CLOSED）；防双 Agent 由 manifest.claim 保证
+- **协议文档仓库化**：`docs/forensic/FORENSIC_DEBUGGING_PROTOCOL.md` v1.2（原设计引用的外部文档入库）；设计文档回写 v1.1 实现修订记录
+- **测试 +7**：`tests/test_forensic_case.py`（6 项案件编排）+ `test_llm_failures.py` stale 拦截回归
+
+### Fixed
+- **stale callback 拦截（设计 §4.1 落地）**：起点 stale → `STALE_CALLBACK_DETECTED` 拒绝执行；chunk 检查点 stale → `STALE_CALLBACK_OBSERVED` 中止流；写 history 前兜底校验——此前旧会话流会把整段回复涌向 GUI 并落入新会话 history
+- **spec 隐性脆弱（D2）**：`ReZeroTwin.spec` 显式列出 runtime.forensic 全子模块（此前靠 bridge 顶层 import 被动跟随，改懒加载即从 EXE 消失）
+- git 卫生（研判 R4）：`data/gui.log` 退库；`.gitignore` 补 `data/*.log`、根级 `/*.db`、`venv/`、`Temp/`、`.pytest_cache/`、`incidents/`、`.debug/`；删除根目录游散空库 `x.db`
+
+### 验收
+1. pytest **174/174**（新增 7 项全绿，167 项既有零回归）
+2. **M4 首案验收 ✅**：`INC-20260829-125701-018` 走通 CASE_OPEN→CASE_CLOSED（18/24 注入崩溃率 75%、93 事件时间线含完整崩溃链、state_trace 端到端进证据链）——证据 `docs/evaluation/sessions/forensic_m4_2026-08-29/`
+3. 台账回填：ISSUE_TRACKER 勾选已完成待办 + O-1~O-5/G-1/H-1 闭环表（唯一 open=O-5 P2）
+
+---
+
 ## [V14.8] - 2026-08-19 (场景互动池 arc 维度扩池——篇章均衡)
 
 > 文案组交付 V14.8 Part1（帝国 3 场景）+ Part2（后期 3 场景）72 句全量落地。scene_dialogue 加 arc 维度（1.0→2.0），帝国/后期篇用户切场景不再注入宅邸文案——篇章均衡性修复。同「用户陪伴」在不同篇章完全不同（宅邸女仆职责 / 帝国疏离试探 / 后期并肩托付）。
