@@ -6,6 +6,26 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.10] - 2026-08-29 (审判循环 Phase 2——人设指纹 + 版本门禁 + 黄金剧本基线入库)
+
+> 「V13→V14 角色变没变」从玄学变测试：8 项人设指纹指标化，3 套黄金剧本（51 探针）入库为可回放基线，版本门禁三关卡（pytest 全绿 / 剧本 diff / 指纹漂移>15% 拦截）。Phase 2 验收达成——故意引入角色漂移被门禁拦截。
+
+### Added
+- **`tools/persona_fingerprint.py`（指纹 v1）**：自称命中率/动作密度/AI味每千字/情感极性分布/拉姆主动句/毒舌率/自卑率/称呼对象漂移；解析器兼容 4 种真机 transcript 格式；输出确定性 JSON（两次运行逐字节一致，Phase 0 验收口径）
+- **`tools/trial_gate.py`（版本门禁）**：三关卡 exit 0/1/2——pytest 全绿 → 黄金剧本子序列回放 diff（顺序敏感）→ 指纹漂移阈值（默认 15%，A 级发现即拦截）
+- **基线入库**：`docs/evaluation/baselines/persona_fingerprint_v14_9.json`（真机 LLM 数据，51 用户轮/52 蕾姆段；基线与黄金剧本**同语料**构建）+ `golden_inputs_v14_9.json`（3 套剧本：arc 漫游 11 / V14.8 场景验收 8 / 宅邸全场景漫游 32）
+- **测试 +11**：`tests/test_trial_gate.py`（解析/指标/确定性/子序列回放/最小样本量保护/门禁端到端双路径），全量 **185/185**
+
+### Fixed
+- **漂移对比方法论**：基线语料与黄金剧本不同源会产生假阳性漂移（实测 4 项假 A 级）——修正为同语料构建；漂移对比加双侧最小样本量保护（rem/ram≥5 段、sentiment≥10 段、AI味≥500 字，不足自动跳过）
+
+### 验收（Phase 2 达成）
+1. **漂移拦截自测 ✅**：51 探针+AI 化蕾姆回复（第一人称自指 1.0→0.0、AI 味 0.92→65.9/千字、动作密度 0.29→0）→ 门禁指纹关卡拦截 5 项 A 级，exit 1；未漂移真机语料 exit 0——证据 `docs/evaluation/sessions/trial_gate_selftest_2026-08-29/`
+2. 黄金剧本回放：3 套/51 探针按序命中
+3. 指纹确定性：同语料两次计算逐字节一致；解析口径变更后基线数值复算不变
+
+---
+
 ## [V14.9] - 2026-08-29 (Forensic 收口——GUI/EXE 取证接入 + stale 拦截 + M4 协议对接)
 
 > Forensic Kernel M1~M3 此前只覆盖 CLI 入口，打包 EXE（入口=gui.py）反而无黑匣子（研判 R1）。本版收口：EXE 侧取证接入、stale callback 由观测升级为拦截（消除旧会话流污染新会话的数据完整性风险）、状态轨迹进黑匣子、M4 案件编排与协议文档仓库化，首个真实案件走通 CASE_OPEN→CASE_CLOSED。
