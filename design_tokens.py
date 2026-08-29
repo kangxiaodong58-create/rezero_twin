@@ -227,3 +227,14 @@ SURFACE = {
     "glass_55": "rgba(18,19,25,0.55)",   # 主卡
     "glass_60": "rgba(18,19,25,0.60)",   # 输入框
 }
+
+
+# 布局骨架（DESIGN 解析 §1.1：左导航 12~14% / 中央 58~62% / 右状态 24~28%）
+LAYOUT = {
+    "header_h":  70,    # 顶部信息区（含世界状态 ambient）
+    "nav_w":     182,   # 左导航
+    "dash_w":    320,   # 右侧 Character Dashboard
+    "dock_h":    58,    # 底部图标坞
+    "center_stretch": 60,  # 中央:右侧 = 60:26（余量给固定栏）
+    "right_stretch": 26,
+}

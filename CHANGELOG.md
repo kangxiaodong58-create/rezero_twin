@@ -6,6 +6,26 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.0.0-mf] - 2026-08-29 (表现层 M_F——三分栏架构重构 + Character Dashboard + 世界状态映射)
+
+> 按「界面 UI 布局深度解析」完成架构级重排：左导航 12~14% / 中央 58~62% / 右状态 24~28%；顶部世界状态 ambient；右侧从单面板升级为 **Character Dashboard 双卡**（Persistent State：头像/心情/正在做/关系阶段/好感/忠诚）；状态反馈全面世界内化。缺失图片资源未随意添加（立绘层结构预留）。
+
+### Added
+- **`status_dashboard.py`（独立模块，拆分纪律延续）**：`CharacterCard`（头像/心情/正在做/关系阶段/好感/忠诚 六行卡，`set_data` 数据注入、`set_speaking` 说话描边）+ `CharacterDashboard` 双卡面板；SVG 头像内联 QSvgRenderer（不依赖 gui，无循环导入）；locked=None 行隐藏（拉姆无忠诚维度）
+- **世界状态→UI 映射接线（`_refresh_ambient`）**：顶部 ambient（🌙 时段·天气·事件·「与XX同行」）、左导航天气块、系统状态块（LLM · 人生账本 N 条）——挂入 `_update_status_bar` 刷新链，WorldState 变化自动投影
+- **左导航结构补全**（DESIGN 解析 §1.3）：Logo→**天气状态块**→一级导航→**系统状态块**→双子画面
+- **中央四层结构预留**：深色遮罩(app_shell)/场景背景(backdrop)/人物立绘（层位预留，缺图不添加）/聊天气泡浮层——Live2D/立绘可直接入 Layer3
+- **状态反馈世界内化**（§2.5 In-world Feedback）：streaming 标签"生成中…"→「蕾姆正在斟酌话语…/拉姆正在挑选用词…」（按角色，`WORLD_FEEDBACK` 表）
+- **比例**：中央:右 = 60:26 stretch（LAYOUT token）；`_update_panels` 数据注入 Dashboard（心情 emoji 档位/character_actions/FAVOR_LEVEL_CN/忠诚）；说话描边映射 Dashboard
+- **测试 +5**：`tests/test_status_dashboard.py`（set_data 渲染/locked 隐藏/说话高亮/数据注入/gui 集成+ambient 映射）；全量 **263/263**
+
+### 验收
+1. pytest **263/263** 零回归；EXE 57MB 重建成功
+2. 渲染验证：三分栏 + ambient（"🌙 上午 · 大雨 · 雨天的门厅…"）+ nav 天气块 + Dashboard 真实引擎数据（蕾姆 23/100、拉姆"靠在一旁休息"）全通
+3. 组件化路线（DESIGN 解析 §3.1 Design System/Feature Components/Page）已列入后续模块化计划
+
+---
+
 ## [V16.0.0-me] - 2026-08-29 (表现层 M_E——高清头像替换 + 聊天气泡形态优化)
 
 > 素材组交付蕾姆/拉姆高清立绘（2048²/1254²，发色采样自动识别）。**立绘暂不替换**（源图备份 `Temp/src_*_hd.png` 供后续），本版生成圆形聊天头像并优化气泡表现形式。

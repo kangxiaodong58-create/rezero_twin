@@ -78,6 +78,15 @@ _HISTORY_DISABLED = os.environ.get("REZERO_DISABLE_HISTORY", "") == "1"
 _VIGNETTE_DISABLED = os.environ.get("REZERO_DISABLE_VIGNETTE", "") == "1"
 
 # UI 动效开关（V12.0）：环境变量 REZERO_DISABLE_UI_MOTION=1 可整体关闭动效（验收对比/回滚）
+# V16-M_F：状态反馈的世界内表达（DESIGN 解析 §2.5）——
+# 不用"生成中/AI 思考中"等系统术语，让反馈留在宅邸世界观里。
+WORLD_FEEDBACK = {
+    "rem": "蕾姆正在斟酌话语…",
+    "ram": "拉姆正在挑选用词…",
+    "user": "双子正在准备回应…",
+}
+
+
 def _ui_motion_enabled() -> bool:
     """V16-M_B：动效统一门——收敛到 motion.enabled()（offscreen 恒禁用 /
     REZERO_DISABLE_UI_MOTION 旧开关兼容 / token 总开关）。"""
@@ -138,9 +147,9 @@ _log(f"=== PySide6 GUI 启动 (python={sys.executable}) ===")
 #  Design Tokens（V15.0-M3 出库：design_tokens.py 唯一真源，此处仅转口）
 # ═══════════════════════════════════════════════
 from design_tokens import (  # noqa: E402
-    COLORS, DIM, ELEVATION, FONT_FAMILY, FONT_SIZE, MOTION, RADIUS,
-    ROLE_BUBBLE_FALLBACK, ROLE_BUBBLE_STYLES, ROLE_COLORS, SPACING,
-    SURFACE, SURFACE_TINT, TYPE,
+    COLORS, DIM, ELEVATION, FONT_FAMILY, FONT_SIZE, LAYOUT, MOTION,
+    RADIUS, ROLE_BUBBLE_FALLBACK, ROLE_BUBBLE_STYLES, ROLE_COLORS,
+    SPACING, SURFACE, SURFACE_TINT, TYPE,
 )
 
 
@@ -645,7 +654,7 @@ class BubbleWidget(QFrame):
 
         # V11.10.1：streaming 顶部「生成中…」弱标签（text_muted 灰）
         if variant == "streaming":
-            tag = QLabel("生成中…")
+            tag = QLabel(WORLD_FEEDBACK.get(role, "双子正在准备回应…"))
             tag.setObjectName("bubble_tag")
             tag.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['caption']))
             tag.setStyleSheet(
@@ -1869,7 +1878,7 @@ class TwinChatApp(QMainWindow):
 
         # ── 顶部标题栏 ──
         header = QFrame()
-        header.setFixedHeight(66)
+        header.setFixedHeight(LAYOUT["header_h"])
         header.setStyleSheet(f"background-color: rgba(8,12,35,0.82); border: 1px solid {COLORS['border_subtle']}; border-radius: 18px;")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 0, 18, 0)
@@ -1903,6 +1912,13 @@ class TwinChatApp(QMainWindow):
         twin_mode.setStyleSheet("background: rgba(21,28,67,0.84); color: #f8e7f4; border: 1px solid rgba(211,193,238,0.42); border-radius: 13px; padding: 8px 14px; font-weight: bold;")
         header_layout.addWidget(twin_mode)
         header_layout.addStretch()
+
+        # V16-M_F：世界状态 ambient（DESIGN 解析 §1.4——环境信息，不要求点击）
+        self._ambient_label = QLabel("")
+        self._ambient_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
+        self._ambient_label.setStyleSheet(
+            f"color: {COLORS['text_secondary']}; padding-right: 6px;")
+        header_layout.addWidget(self._ambient_label)
 
         # 历史搜索
         self.search_box = QLineEdit()
@@ -2011,6 +2027,20 @@ class TwinChatApp(QMainWindow):
         nav_layout.setContentsMargins(12, 15, 12, 15)
         nav_layout.setSpacing(7)
 
+        # V16-M_F：天气状态块（DESIGN 解析 §1.3——Logo→天气→导航→系统状态）
+        self._nav_weather = QLabel("")
+        self._nav_weather.setAlignment(Qt.AlignCenter)
+        self._nav_weather.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
+        self._nav_weather.setStyleSheet(
+            f"background: rgba(21,28,67,0.66); color: {COLORS['text_secondary']};"
+            "border: 1px solid rgba(179,211,239,0.14); border-radius: 12px;"
+            "padding: 8px 6px;")
+        nav_layout.addWidget(self._nav_weather)
+        nav_sep = QFrame()
+        nav_sep.setFixedHeight(1)
+        nav_sep.setStyleSheet(f"background: {COLORS['border_subtle']}; border: none;")
+        nav_layout.addWidget(nav_sep)
+
         def nav_button(label: str, icon: str, callback, active: bool = False) -> QPushButton:
             btn = QPushButton(label)
             btn.setIcon(_theme_icon(icon))
@@ -2033,6 +2063,13 @@ class TwinChatApp(QMainWindow):
         nav_layout.addWidget(nav_button("设置", "icon_settings.svg", lambda: self._handle_command("/toggle")))
         nav_layout.addWidget(nav_button("关于", "icon_info.svg", self._open_history))
         nav_layout.addStretch()
+        # V16-M_F：系统状态块
+        self._nav_sysstatus = QLabel("LLM · 记忆同步中")
+        self._nav_sysstatus.setAlignment(Qt.AlignCenter)
+        self._nav_sysstatus.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['caption']))
+        self._nav_sysstatus.setStyleSheet(
+            f"color: {COLORS['text_muted']}; padding: 2px 0 6px 0;")
+        nav_layout.addWidget(self._nav_sysstatus)
         nav_twins = QLabel()
         nav_twins.setAlignment(Qt.AlignCenter)
         nav_twins.setPixmap(QPixmap(_asset_path("app_icon.png")).scaled(140, 140, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
@@ -2174,7 +2211,7 @@ class TwinChatApp(QMainWindow):
         input_layout.addLayout(input_row)
         chat_section.addWidget(input_frame)
 
-        body.addLayout(chat_section, 1)
+        body.addLayout(chat_section, LAYOUT['center_stretch'])
 
         # 右侧：拉姆面板
         self.ram_panel = CharacterPanel(
@@ -2184,6 +2221,13 @@ class TwinChatApp(QMainWindow):
         self.ram_panel.sprite_dropped.connect(
             lambda p: self._on_sprite_dropped("ram", p))
         body.addWidget(self.ram_panel)
+
+        # V16-M_F：右侧 Character Dashboard（DESIGN 解析 §1.5——Persistent State 双卡；
+        # rem/ram CharacterPanel 转隐藏，状态同步/说话描边能力保留）
+        self.ram_panel.hide()  # 右栏由 Character Dashboard 替代（V16-M_F）。
+        from status_dashboard import CharacterDashboard
+        self.dashboard = CharacterDashboard()
+        body.addWidget(self.dashboard, LAYOUT['right_stretch'])
 
         # 右栏以双子画面取代单一立绘的留白，让状态面板更接近参考图。
         self.ram_panel.avatar_image.setPixmap(
@@ -3051,8 +3095,49 @@ class TwinChatApp(QMainWindow):
             emotion=ram_emotion,
         )
 
+        # V16-M_F：Character Dashboard 数据注入（Persistent State 映射）
+        try:
+            dashboard = getattr(self, "dashboard", None)
+            if dashboard is not None:
+                actions = getattr(self.world, "character_actions", {}) or {}
+                rem_lock = bool(state.locked)
+                dashboard.set_data(
+                    rem={"mood": rem_emotion, "doing": actions.get("rem", "—"),
+                         "stage": FAVOR_LEVEL_CN.get(state.favor_level.name,
+                                                     state.favor_level.name),
+                         "favor": state.favor, "locked": rem_lock},
+                    ram={"mood": ram_emotion, "doing": actions.get("ram", "—"),
+                         "stage": state.ram_stage.value,
+                         "favor": state.ram_favor, "locked": None},
+                )
+        except Exception as e:
+            _log(f"Dashboard 更新异常: {e}")
+
+    def _refresh_ambient(self) -> None:
+        """V16-M_F：世界状态 → 顶部/左导航的映射（DESIGN 解析 §1.4/§1.3）。"""
+        try:
+            state = self.engine.snapshot()
+            ev = self.world.active_event or ""
+            ev_short = ev[:14] + "…" if len(ev) > 14 else ev
+            ambient = f"🌙 {self.world.period} · {self.world.weather}"
+            if ev_short and event_compatible(self.world.period, self.world.weather, ev):
+                ambient += f" · {ev_short}"
+            if state.user_name:
+                ambient += f"  ·  与{state.user_name}同行"
+            self._ambient_label.setText(ambient)
+            self._nav_weather.setText(f"{self.world.period}\n{self.world.weather}")
+            try:
+                from shared import life_ledger
+                n = life_ledger.get_default_ledger().count()
+                self._nav_sysstatus.setText(f"LLM · 人生账本 {n} 条")
+            except Exception:
+                self._nav_sysstatus.setText("LLM · 记忆同步正常")
+        except Exception as e:
+            _log(f"ambient 刷新异常: {e}")
+
     def _update_status_bar(self) -> None:
         try:
+            self._refresh_ambient()
             state = self.engine.snapshot()
             w = self.world if hasattr(self, 'world') else WorldState.now()
             # 活跃事件可见化：有事件且与 period/weather 相容才追加（V11.9.2）
@@ -3140,6 +3225,9 @@ class TwinChatApp(QMainWindow):
         try:
             self.rem_panel.set_speaking(speaker == "rem")
             self.ram_panel.set_speaking(speaker == "ram")
+            dashboard = getattr(self, "dashboard", None)
+            if dashboard is not None:
+                dashboard.set_speaking(speaker)
         except Exception as e:
             _log(f"_set_speaking_panels 异常: {e}")
 
