@@ -1,0 +1,16 @@
+{
+  "scores": {
+    "emotional_connection": 7,
+    "trustworthiness": 8,
+    "memory_book": 6,
+    "portability": 9,
+    "uniqueness": 8
+  },
+  "reasons": {
+    "emotional_connection": "主动纪念重要时刻能增强陪伴感，但尚未达到真实人际互动的深度。",
+    "trustworthiness": "规则记录+AI不编造的设计显著提升可信度，但底层仍是AI生成内容。",
+    "memory_book": "功能齐全但界面可能缺乏沉浸感，统计条略显机械。",
+    "portability": "数据导出导入是长期使用的关键保障，极大降低迁移成本。",
+    "uniqueness": "定位独特，但需警惕同类产品快速跟进，且执行细节决定成败。"
+  }
+}

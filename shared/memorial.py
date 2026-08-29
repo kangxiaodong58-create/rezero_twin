@@ -15,7 +15,7 @@ import os
 from datetime import date as _date
 from typing import Any, Callable, Dict, List, Optional
 
-from .config import get_data_dir
+from . import config
 
 # 触发优先级（同日多事实时取第一个命中的种类）
 CARD_KINDS = ("days_milestone", "genesis_annual", "festival")
@@ -26,7 +26,8 @@ _ALBUM_DIRNAME = "album"
 
 
 def album_dir(data_dir: Optional[str] = None) -> str:
-    return os.path.join(data_dir or get_data_dir(), _ALBUM_DIRNAME)
+    # 晚绑定（同 life_ledger：避免 from-import 锁死首个数据目录）
+    return os.path.join(data_dir or config.get_data_dir(), _ALBUM_DIRNAME)
 
 
 def card_path(kind: str, today: Any, data_dir: Optional[str] = None) -> str:

@@ -1,0 +1,383 @@
+{
+ "scripts": [
+  {
+   "id": "script_arc_roam_v148",
+   "turns": [
+    {
+     "input": "去厨房",
+     "arc": "mansion_era",
+     "scene": "KITCHEN",
+     "sec": 2.3,
+     "fallback": false
+    },
+    {
+     "input": "下午茶准备好了吗",
+     "arc": "mansion_era",
+     "scene": "KITCHEN",
+     "sec": 1.3,
+     "fallback": false
+    },
+    {
+     "input": "去营地",
+     "arc": "empire_era",
+     "scene": "CAMP",
+     "sec": 1.9,
+     "fallback": false
+    },
+    {
+     "input": "我们是不是见过",
+     "arc": "empire_era",
+     "scene": "CAMP",
+     "sec": 2.1,
+     "fallback": false
+    },
+    {
+     "input": "去营火边",
+     "arc": "late_arc",
+     "scene": "CAMPFIRE",
+     "sec": 1.8,
+     "fallback": false
+    },
+    {
+     "input": "明天的战斗拜托了",
+     "arc": "late_arc",
+     "scene": "CAMPFIRE",
+     "sec": 2.3,
+     "fallback": false
+    },
+    {
+     "input": "回房间",
+     "arc": "mansion_era",
+     "scene": "ROOM",
+     "sec": 1.5,
+     "fallback": false
+    },
+    {
+     "input": "我需要你的力量！",
+     "arc": "mansion_era",
+     "scene": "ROOM",
+     "sec": 2.3,
+     "fallback": false
+    },
+    {
+     "input": "今天宅邸有什么新鲜事？",
+     "arc": "mansion_era",
+     "scene": "ROOM",
+     "sec": 2.7,
+     "fallback": false
+    },
+    {
+     "input": "拉姆，你会在战场上保护我吗？",
+     "arc": "late_arc",
+     "scene": "ROOM",
+     "sec": 2.2,
+     "fallback": false
+    },
+    {
+     "input": "你觉得我帅不帅？yyds不yyd",
+     "arc": "late_arc",
+     "scene": "ROOM",
+     "sec": 1.8,
+     "fallback": false
+    }
+   ]
+  },
+  {
+   "id": "script_v148_scene_accept",
+   "turns": [
+    {
+     "input": "去营地",
+     "arc": "empire_era",
+     "scene": "CAMP",
+     "sec": 2.8,
+     "fallback": false
+    },
+    {
+     "input": "你觉得我这个人可以信任吗？",
+     "arc": "empire_era",
+     "scene": "CAMP",
+     "sec": 2.7,
+     "fallback": false
+    },
+    {
+     "input": "到旅店投宿",
+     "arc": "empire_era",
+     "scene": "INN",
+     "sec": 2.4,
+     "fallback": false
+    },
+    {
+     "input": "我们以前是不是见过？",
+     "arc": "empire_era",
+     "scene": "INN",
+     "sec": 2.6,
+     "fallback": false
+    },
+    {
+     "input": "去营火边",
+     "arc": "late_arc",
+     "scene": "CAMPFIRE",
+     "sec": 2.8,
+     "fallback": false
+    },
+    {
+     "input": "明天的战斗，我们一起面对吧。",
+     "arc": "late_arc",
+     "scene": "CAMPFIRE",
+     "sec": 3.0,
+     "fallback": false
+    },
+    {
+     "input": "去战场",
+     "arc": "late_arc",
+     "scene": "BATTLEFIELD",
+     "sec": 3.4,
+     "fallback": false
+    },
+    {
+     "input": "有你在，我就安心了。",
+     "arc": "late_arc",
+     "scene": "BATTLEFIELD",
+     "sec": 2.8,
+     "fallback": false
+    }
+   ]
+  },
+  {
+   "id": "script_scene_walkthrough",
+   "turns": [
+    {
+     "input": "去厨房",
+     "arc": "mansion_era",
+     "scene": "KITCHEN",
+     "sec": 3.9,
+     "fallback": false
+    },
+    {
+     "input": "厨房里有点心吗",
+     "arc": "mansion_era",
+     "scene": "KITCHEN",
+     "sec": 2.4,
+     "fallback": false
+    },
+    {
+     "input": "回房间",
+     "arc": "mansion_era",
+     "scene": "ROOM",
+     "sec": 2.5,
+     "fallback": false
+    },
+    {
+     "input": "房间窗外的月色真美",
+     "arc": "mansion_era",
+     "scene": "ROOM",
+     "sec": 3.5,
+     "fallback": false
+    },
+    {
+     "input": "到花园走走",
+     "arc": "mansion_era",
+     "scene": "GARDEN",
+     "sec": 3.8,
+     "fallback": false
+    },
+    {
+     "input": "今天的花开得怎么样",
+     "arc": "mansion_era",
+     "scene": "GARDEN",
+     "sec": 2.7,
+     "fallback": false
+    },
+    {
+     "input": "去书库",
+     "arc": "mansion_era",
+     "scene": "LIBRARY",
+     "sec": 3.3,
+     "fallback": false
+    },
+    {
+     "input": "书库里有什么有趣的书",
+     "arc": "mansion_era",
+     "scene": "LIBRARY",
+     "sec": 3.2,
+     "fallback": false
+    },
+    {
+     "input": "去餐厅",
+     "arc": "mansion_era",
+     "scene": "DINING",
+     "sec": 3.5,
+     "fallback": false
+    },
+    {
+     "input": "晚餐吃什么",
+     "arc": "mansion_era",
+     "scene": "DINING",
+     "sec": 3.3,
+     "fallback": false
+    },
+    {
+     "input": "去走廊",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.4,
+     "fallback": false
+    },
+    {
+     "input": "刚才在厨房泡的茶",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.4,
+     "fallback": false
+    },
+    {
+     "input": "今天天气不错",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 4.0,
+     "fallback": false
+    },
+    {
+     "input": "你们平时几点起床",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 3.1,
+     "fallback": false
+    },
+    {
+     "input": "蕾姆你喜欢什么颜色",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.2,
+     "fallback": false
+    },
+    {
+     "input": "拉姆你怕黑吗",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 3.2,
+     "fallback": false
+    },
+    {
+     "input": "我有点想家了",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.6,
+     "fallback": false
+    },
+    {
+     "input": "蕾姆做的点心真好吃",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.1,
+     "fallback": false
+    },
+    {
+     "input": "宅邸的夜晚安静吗",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.6,
+     "fallback": false
+    },
+    {
+     "input": "你们会做梦吗",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.4,
+     "fallback": false
+    },
+    {
+     "input": "讲讲你们小时候的事",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 3.2,
+     "fallback": false
+    },
+    {
+     "input": "拉姆怎么看待罗兹瓦尔大人",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.9,
+     "fallback": false
+    },
+    {
+     "input": "蕾姆你觉得姐姐怎么样",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.3,
+     "fallback": false
+    },
+    {
+     "input": "我明天想去镇上",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.2,
+     "fallback": false
+    },
+    {
+     "input": "蕾姆会唱歌吗",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.3,
+     "fallback": false
+    },
+    {
+     "input": "拉姆会做饭吗",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.4,
+     "fallback": false
+    },
+    {
+     "input": "你们喜欢什么样的天气",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.2,
+     "fallback": false
+    },
+    {
+     "input": "蕾姆你的名字有什么含义吗",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.4,
+     "fallback": false
+    },
+    {
+     "input": "拉姆你有想守护的东西吗",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.7,
+     "fallback": false
+    },
+    {
+     "input": "蕾姆你觉得什么是幸福",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.0,
+     "fallback": false
+    },
+    {
+     "input": "如果有一天我走了呢",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.5,
+     "fallback": false
+    },
+    {
+     "input": "不管怎样我都会回来的",
+     "arc": "mansion_era",
+     "scene": "HALLWAY",
+     "sec": 2.8,
+     "fallback": false
+    }
+   ]
+  }
+ ],
+ "total_elapsed": 134.01940774917603,
+ "summary": {
+  "probes": 51,
+  "fallbacks": 0,
+  "elapsed_sec": 134.0,
+  "est_cost_yuan": 0.29
+ }
+}

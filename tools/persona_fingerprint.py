@@ -256,6 +256,11 @@ _MIN_SUPPORT = [
     ("ai_flavor_per_kilochar", ("twin_chars",), 500),
 ]
 
+# 近零基线保护：基线绝对值低于该阈值的比例型指标跳过相对漂移对比——
+# 0 → 0.068 这类低频事件波动在二项噪声范围内（52 段中 3~4 段），
+# 相对漂移公式会给出荒谬的百万级百分比（V15.0 首次版本 diff 实测暴露）。
+_NEAR_ZERO_BASE = 0.02
+
 
 def _metric_support(metric: str, counts: Dict) -> Optional[int]:
     for prefix, fields, minimum in _MIN_SUPPORT:
@@ -295,6 +300,9 @@ def diff_fingerprint(baseline: Dict, current: Dict,
         if sb is None or sc is None:
             skipped.append(key)
             continue
+        if abs(base_val) < _NEAR_ZERO_BASE and not isinstance(base_val, int):
+            skipped.append(key)
+            continue  # 近零基线：相对漂移无统计意义（低频事件二项噪声）
         denom = max(abs(base_val), 1e-6)
         drift = abs(cur_val - base_val) / denom
         if drift > threshold:

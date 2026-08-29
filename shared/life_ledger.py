@@ -35,7 +35,7 @@ import sqlite3
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 
-from .config import get_data_dir
+from . import config
 
 
 def _now_str() -> str:
@@ -144,8 +144,10 @@ _default_ledger: Optional[LifeLedger] = None
 def get_default_ledger() -> LifeLedger:
     global _default_ledger
     if _default_ledger is None:
+        # 晚绑定：get_data_dir 在调用时解析（V15.0-M5：导入时绑定的
+        # from-import 会让单例锁死首个数据目录——frozen/多目录场景放错文件）
         path = os.environ.get("REZERO_LIFE_DB") or os.path.join(
-            get_data_dir(), "life.db")
+            config.get_data_dir(), "life.db")
         _default_ledger = LifeLedger(path)
     return _default_ledger
 

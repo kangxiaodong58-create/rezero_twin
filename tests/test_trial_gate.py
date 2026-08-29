@@ -180,3 +180,13 @@ def test_gate_passes_clean_style(tmp_path):
         capture_output=True, text=True, encoding="utf-8", errors="replace",
     )
     assert proc.returncode == 0, proc.stdout
+
+
+def test_diff_fingerprint_near_zero_baseline_skipped():
+    """V15.0 首次版本 diff 暴露：0 → 0.068 的低频波动不应产出百万级百分比 A 级。"""
+    base = _fp({"sentiment_negative_share": 0.0,
+                "rem_self_reference_rate": 1.0}, {"rem_segments": 52})
+    cur = _fp({"sentiment_negative_share": 0.068,
+               "rem_self_reference_rate": 1.0}, {"rem_segments": 59})
+    findings, skipped = diff_fingerprint(base, cur, return_skipped=True)
+    assert findings == [] and "sentiment_negative_share" in skipped
