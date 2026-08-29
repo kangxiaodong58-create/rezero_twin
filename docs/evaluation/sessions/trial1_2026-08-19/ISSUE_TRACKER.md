@@ -5,6 +5,7 @@
 > 证据目录：docs/evaluation/sessions/trial1_2026-08-19/
 > 状态：**S-01/S-02/A-01 已修复并回归（106/106 pytest 全绿 + Trial 指标达标），Phase 2 部分完成**
 > 【2026-08-29 回填】至 Trial #5 为止全台账闭环：S×2 / A×4（A-02 因 local 退场移除）/ B×3 / E-03 关闭（=E-01 同根因）/ F-01 修复；观察项仅 O-5（P2）仍 open，O-1~O-4/G-1/H-1 闭环记录见文末回填节。当前全量 pytest **167 passed**。
+> 【2026-08-29 二次回填】O-5 已随 V14.11（名场面 24h 冷却）修复闭环——**S/A/B/C 与观察项全台账零 open**。当前全量 pytest **195 passed**。
 
 ---
 
@@ -191,7 +192,7 @@
 - [x] 修复 test_quote_reply_v142 测试隔离性（mock LLM bot）——✅ 随 V14.5 基建三连修复，commit `1506e34`
 - [x] B-01 离屏引言崩溃（VignetteWorker 离屏/无 key 检测）——✅ 随 V14.5 基建三连修复，commit `1506e34`【2026-08-29 回填勾选】
 - [x] B-02 输入框/搜索框视觉区分——✅ 随 V14.5 基建三连修复（聚焦高亮），commit `1506e34`【2026-08-29 回填勾选】
-- [ ] O-5 名场面「从零开始」触发冷却确认（P2，见 accept_v1457 报告）——**当前台账唯一 open 项**
+- [x] O-5 名场面「从零开始」触发冷却确认（P2，见 accept_v1457 报告）——✅ V14.11 名场面 24h 冷却落地闭环【2026-08-29 回填勾选】。**S/A/B/C 与观察项全台账零 open**
 
 ---
 
@@ -203,7 +204,7 @@
 | O-2 | 「对这件事怎么看」依赖 active_event 存在 | ✅ 关闭（非 bug）：load_or_create 会生成事件，构造 WorldState 未触发事件属测试脚本问题 | accept_v1457/REPORT.md |
 | O-3 | 「在X」句式误触场景切换 | ✅ 已修复 | commit `99e7581`（V14.7 真机验收 17/17） |
 | O-4 | 场景互动文案长会话轮转重复 | ✅ 已完成去重（LRU 思路） | commit `1aea880`；trial4/REPORT.md（pytest 127/127 含 O-4 断言） |
-| O-5 | 名场面「从零开始」触发权重/冷却需确认 | 🔵 **仍 open（P2）**——情感场景层 24h 冷却已有，名场面层待确认 | accept_v1457/REPORT.md |
+| O-5 | 名场面「从零开始」触发权重/冷却需确认 | ✅ 已修复（V14.11）：名场面语感注入加 24h 冷却（`SceneManager.get_milestone_for_prompt/consume_milestone` + `WorldState.milestone_cooldowns` 持久化）——状态持续命中（如 loyalty_lock 每轮）不再逐轮重复注入；冷却期内 consume 不续期。**台账至此全部闭环** | tests/test_v14_11_experience.py（门控流/到期恢复/不续期/持久化 3 项） |
 | G-1 | 事件注入被长会话对话历史稀释 | ✅ 已修复：事件注入强化（加粗/前置），Trial #5 确认「忽略事件」不再发生 | commit `fbbbc38`；trial5/REPORT.md（C2 观察） |
 | H-1 | 后期来信回应语感漂移回宅邸意象 | ✅ 已修复：`_build_arc_flavor_section` 篇章语感注入 | commit `768036c`；trial5/REPORT.md 发现 |
 

@@ -6,6 +6,31 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V14.11] - 2026-08-29 (体验补全——名场面冷却/偶发一句/立绘自定义/长会话内存有界)
+
+> 研判第四批。四项体验侧收尾：O-5 名场面防疲劳冷却（台账最后一项 open 闭环）、内容密度研判 Step 5「偶发一句」落地、立绘支持用户拖入替换、长会话 history 内存有界化。另据复核：体验审查两项「未做」判定失实——气泡 600px 上限自 V11.10 已生效、立绘 sprite 自 V10.0 已加载。
+
+### Added
+- **O-5 名场面 24h 冷却**：`SceneManager.get_milestone_for_prompt/consume_milestone` + `WorldState.milestone_cooldowns`（持久化）——状态持续命中（loyalty_lock 等）不再逐轮重复注入名场面语感；冷却期内 consume 不续期；PromptBuilder 注入口接门控，bridge 成功路径记冷却起点
+- **Step 5 偶发一句（ambient_remark）**：`WorldState.ambient_state` 门控（事件触发 + 冷却 2h + 每日 3 条 + 同一事件 TTL 内最多 1 句）+ registry 新增 9 条（3 arc × 3）+ GUI `_show_ambient_line` 附 💬 一行（View-Only，不进好感/事件记忆通道）；选型 seed=日|事件id 确定性
+- **立绘自定义**：面板支持拖入 PNG/JPG/WEBP——复制到 `data/sprites/{rem,ram}.{ext}`（文件即持久化，重启经 `_resolve_sprite` 自动生效）；解析优先级 用户自定义 > 内置 assets > emoji 占位
+- **厨房小池加厚**：KITCHEN 三时段 interaction 各补至 3 条（MORNING +1 / AFTERNOON +2 / NIGHT +2）
+- **测试 +12**：`tests/test_v14_11_experience.py`（名场面冷却 3 / 偶发一句 4 / trim 1 / 立绘 2）；全量 **195/195**
+
+### Fixed
+- **长会话 history 内存无界**：bridge 运行中每轮成功 append 从不裁剪（真机 30 轮涨到 30 条），`_trim_history()` 在 chat/chat_stream 成功路径裁剪至 max_history——LLM messages 窗口语义不变，更早内容永久保存在 ConversationStore；同步修正 `test_history_bounded` 空转断言（原断言从不触发 append，形同虚设）
+
+### 复核（体验审查两项失实判定澄清）
+- **气泡最大宽度上限（P1）**：`DIM['bubble_max_w']=600px` 自 V11.10–V12.0（commit `3a20837`）即存在并对气泡/系统标签生效——审查报告「无固定上限」判定失实，无需改动
+- **立绘支持（P2）**：`rem/ram_sprite.jpg` 自 V10.0（a39ce1c）即存在且面板加载——审查报告「占位无交互」判定失实；本版补齐的缺口是**用户自定义**（拖入替换 + 持久化）
+
+### 验收
+1. pytest **195/195**（V14.10 后新增 10 项 + registry 计数/回落链 2 项旧假设按新事实更新）
+2. 台账 **S/A/B/C 与观察项全部闭环**（O-5 为最后一项）
+3. registry 73→82 条（ambient_remark 3 arc 全覆盖）；KITCHEN 3/3/3；schema 2.0 未变
+
+---
+
 ## [V14.10] - 2026-08-29 (审判循环 Phase 2——人设指纹 + 版本门禁 + 黄金剧本基线入库)
 
 > 「V13→V14 角色变没变」从玄学变测试：8 项人设指纹指标化，3 套黄金剧本（51 探针）入库为可回放基线，版本门禁三关卡（pytest 全绿 / 剧本 diff / 指纹漂移>15% 拦截）。Phase 2 验收达成——故意引入角色漂移被门禁拦截。
