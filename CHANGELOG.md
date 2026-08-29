@@ -6,6 +6,28 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.0.0-mc] - 2026-08-29 (表现层 M_C——视觉素材接入：宅邸夜色显真 + SVG 全链路 EXE 稳健化)
+
+> 素材组交付首批视觉资产（8 张 SVG：宅邸夜景背景板 / 双子+用户+系统头像 / 回忆之书·回忆·搜索图标），全部同色系设计（蕾姆冰蓝 / 书签金 / 深夜蓝）。玻璃五档 token 从"隐形纪律"变"显真"——界面第一次透出场景。
+
+### Added（素材组贡献 + 接线）
+- **宅邸夜景背景板**：`app_shell` border-image 接入 `mansion_backdrop.svg`（1600×1000，月晕/雾/剪影，与 bg 同色相）——聊天流首次坐在场景上
+- **玻璃显真**：COLORS 表面从纯色改**分档半透明**（面板 .91 / 气泡 .84 / 顶栏 .95 / 输入 .94）+ 冷蓝边框调和（border_subtle 0.16 / focus 冰蓝 0.68）——DESIGN_SYSTEM_V2 §四落地
+- **SVG 全链路**：双子/用户/系统四头像进聊天气泡与面板（AvatarLabel 角色映射）；回忆之书/回忆/搜索三按钮换主题图标（`_theme_icon`）
+
+### Fixed（EXE 稳健化，三处隐性缺陷）
+- **QtSvg 显式渲染**：`QPixmap`/`QIcon` 直读 SVG 依赖 qsvg 图片插件——EXE 内插件缺失时头像/图标/背景会**静默空白**。改 `QSvgRenderer` 显式渲染（`_svg_pixmap` 2x 超采样）+ 失败回退角色 emoji；`_theme_icon`/`AvatarLabel.set_image` 全部切换
+- **背景板预渲染缓存**：QSS border-image 同样走图片插件 → `_backdrop_image_url()` 启动时把 SVG 预渲染为 `data/backdrop_cache.png`（随素材更新再生），EXE 无插件环境稳显
+- **`spec` 显式收集 `PySide6.QtSvg`**（Qt6Svg.dll + qsvg 插件入包，TOC 已验证）
+- 基线工具临时件改系统 temp（M_A 曾误将 `_tmp/life.db`、`_cmp_tmp/*` 入库——已清出并 gitignore）；`data/backdrop_cache.png` 为再生缓存不入库
+
+### 验收
+1. pytest **258/258**（零回归）；截图基线重采（玻璃显真后新基线，自对比 0.00%）
+2. SVG 链路全通：头像/图标/背景板渲染非空（QSvgRenderer 路径，无插件依赖）
+3. **EXE 56.4MB 构建成功**，Qt6Svg/qsvg 已收集（Analysis/PKG TOC 双验证）——SVG 素材在分发版稳定呈现
+
+---
+
 ## [V16.0.0-mb] - 2026-08-29 (表现层 M_B——动效层：MOTION token 全面落地)
 
 > V16 第二个里程碑：界面从"能动"升级为按宪法动——统一动效门（offscreen 恒禁用）、消息入场 token 化 220ms/OutCubic、历史回放从"全静态"升级为"前 8 条 30ms 级联"、浮层 fade+上浮入场、列表级联显形、页签 press 下沉微交互。性能红线全部内建。

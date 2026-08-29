@@ -88,7 +88,8 @@ def capture(out_dir: str = BASE_DIR) -> list:
     """采集全部确定性面 → out_dir/<name>.png；返回 [(name, path)]。"""
     _ensure_app()
     os.makedirs(out_dir, exist_ok=True)
-    tmp_root = os.path.join(out_dir, "_tmp")
+    import tempfile
+    tmp_root = tempfile.mkdtemp(prefix="rz-shot-")  # M_A 复盘：临时件不落基线目录
     saved = []
     for name, widget in build_surfaces(tmp_root):
         widget.resize(widget.sizeHint().width() or 640, widget.sizeHint().height() or 120)
@@ -123,8 +124,8 @@ def _diff_ratio(a_path: str, b_path: str, tol: int = 8) -> float:
 def compare(baseline_dir: str, threshold: float = DEFAULT_TOLERANCE) -> int:
     """重采并对比基线。返回超阈值张数（0=通过）。"""
     _ensure_app()
-    tmp_root = os.path.join(baseline_dir, "_cmp_tmp")
-    os.makedirs(tmp_root, exist_ok=True)
+    import tempfile
+    tmp_root = tempfile.mkdtemp(prefix="rz-cmp-")
     exceeded = 0
     for name, widget in build_surfaces(tmp_root):
         fresh = os.path.join(tmp_root, f"{name}.png")

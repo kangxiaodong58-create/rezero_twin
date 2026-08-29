@@ -43,6 +43,7 @@ a = Analysis(
         'PySide6.QtCore',
         'PySide6.QtGui',
         'PySide6.QtWidgets',
+        'PySide6.QtSvg',          # V16 素材：SVG 图标/头像/背景板渲染
         'shiboken6',
         'pydantic_core',
     ],

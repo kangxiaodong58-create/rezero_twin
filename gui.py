@@ -91,13 +91,20 @@ from PySide6.QtCore import (
     Qt, QTimer, Signal, QObject, QThread, QSize,
     QPropertyAnimation, QSequentialAnimationGroup, QAbstractAnimation, QEasingCurve,
 )
-from PySide6.QtGui import QFont, QFontMetrics, QIcon, QPixmap
+from PySide6.QtGui import QFont, QFontMetrics, QIcon, QPainter, QPixmap
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QTextEdit, QLineEdit, QPushButton, QLabel, QFrame, QScrollArea,
     QMessageBox, QSizePolicy, QSplitter, QProgressBar, QGraphicsOpacityEffect,
     QMenu,
 )
+
+try:  # V16 素材：SVG 显式渲染（EXE 内不赌 qsvg 图片插件）
+    from PySide6.QtSvg import QSvgRenderer
+    _SVG_OK = True
+except Exception:  # pragma: no cover
+    QSvgRenderer = None
+    _SVG_OK = False
 
 from shared.state import StoryArc, OniStage, FAVOR_LEVEL_CN
 from shared.memory_store import MemoryStore
@@ -429,6 +436,69 @@ def _asset_path(filename: str) -> str:
     return os.path.join(base, "assets", filename)
 
 
+def _svg_pixmap(filename: str, size: int, *, size_h: int = 0) -> QPixmap:
+    """SVG → QPixmap（QSvgRenderer 显式渲染，不依赖 qsvg 图片插件——EXE 稳健）。
+
+    2x 超采样抗锯齿；文件缺失/渲染失败返回空 QPixmap（调用端回退文字）。
+    """
+    if not _SVG_OK:
+        return QPixmap()
+    path = filename if os.path.isabs(filename) else _asset_path(filename)
+    if not os.path.isfile(path):
+        return QPixmap()
+    try:
+        renderer = QSvgRenderer(path)
+        if not renderer.isValid():
+            return QPixmap()
+        w = size * 2
+        h = (size_h or size) * 2
+        pm = QPixmap(w, h)
+        pm.fill(Qt.transparent)
+        painter = QPainter(pm)
+        renderer.render(painter)
+        painter.end()
+        return pm
+    except Exception:
+        return QPixmap()
+
+
+def _backdrop_image_url() -> str:
+    """宅邸背景的 QSS 可用 URL。
+
+    优先预渲染 PNG 缓存（data/backdrop_cache.png，随 SVG 更新再生）——
+    QSS border-image 走图片插件，EXE 内插件缺失时 SVG 直引会静默空白；
+    PNG 预渲染只依赖 QSvgRenderer（hiddenimports 显式收集），稳健。
+    """
+    svg = _asset_path("mansion_backdrop.svg")
+    fallback = svg.replace(os.sep, "/")
+    if not _SVG_OK or not os.path.isfile(svg):
+        return fallback
+    try:
+        out = os.path.join(get_data_dir(), "backdrop_cache.png")
+        if (not os.path.isfile(out)
+                or os.path.getmtime(out) < os.path.getmtime(svg)):
+            renderer = QSvgRenderer(svg)
+            if not renderer.isValid():
+                return fallback
+            pm = QPixmap(1600, 1000)
+            pm.fill(Qt.transparent)
+            painter = QPainter(pm)
+            renderer.render(painter)
+            painter.end()
+            pm.save(out, "PNG")
+        if os.path.isfile(out):
+            return out.replace(os.sep, "/")
+    except Exception:
+        pass
+    return fallback
+
+
+def _theme_icon(filename: str) -> QIcon:
+    """加载主题 SVG 图标（QSvgRenderer 显式渲染）；缺失时返回空图标，调用端仍保持文字可用。"""
+    pm = _svg_pixmap(filename, 32)
+    return QIcon(pm) if not pm.isNull() else QIcon()
+
+
 # ── V14.11：立绘自定义（用户拖入 > 内置 assets > 占位）──────────────
 
 _SPRITE_EXTS = ("png", "jpg", "jpeg", "webp")
@@ -478,13 +548,13 @@ def _resolve_sprite(data_dir: str, key: str, asset_path: str) -> str:
 # ═══════════════════════════════════════════════
 
 class AvatarLabel(QLabel):
-    """圆形头像。支持 emoji 文字或 PNG 图片。"""
+    """圆形主题头像。优先使用项目资产，避免随系统字体变化的 emoji。"""
     
     SIZE = DIM['avatar_size']  # V10.15c：走 token
 
-    def __init__(self, emoji: str = "", parent=None):
+    def __init__(self, role: str = "user", parent=None):
         super().__init__(parent)
-        self._emoji = emoji
+        self._role = role
         self._pixmap_path: Optional[str] = None
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setAlignment(Qt.AlignCenter)
@@ -496,11 +566,31 @@ class AvatarLabel(QLabel):
                 border: 1px solid {COLORS['border_subtle']};
             }}
         """)
-        self.setText(emoji)
+        self._emoji_fallback = {"rem": "🩵", "ram": "💗", "user": "🙂", "system": "❄"}.get(role, "·")
+        avatar_files = {
+            "rem": "rem_avatar.svg", "ram": "ram_avatar.svg",
+            "user": "user_avatar.svg", "system": "system_avatar.svg",
+        }
+        path = _asset_path(avatar_files.get(role, "user_avatar.svg"))
+        if os.path.isfile(path):
+            self.set_image(path)
+        else:
+            self.setText(self._emoji_fallback)
 
     def set_image(self, path: str) -> None:
-        """加载 PNG 立绘头像。"""
+        """加载头像：SVG 走 QSvgRenderer 显式渲染（EXE 稳健），位图走 QPixmap。
+
+        渲染失败回退角色 emoji（避免空白圆）。
+        """
         self._pixmap_path = path
+        if path.lower().endswith(".svg"):
+            pm = _svg_pixmap(path, self.SIZE)
+            if not pm.isNull():
+                self.setPixmap(pm)
+                self.setText("")
+                return
+            self.setText(self._emoji_fallback)
+            return
         pixmap = QPixmap(path).scaled(
             self.SIZE, self.SIZE, Qt.KeepAspectRatio, Qt.SmoothTransformation
         )
@@ -739,17 +829,8 @@ class ChatMessageWidget(QWidget):
         layout.setContentsMargins(12, 5, 12, 5)
         layout.setSpacing(8)
 
-        # 头像
-        if role == "rem":
-            emoji = "🩵"
-        elif role == "ram":
-            emoji = "💗"
-        elif role == "user":
-            emoji = "👤"
-        else:
-            emoji = "📢"
-
-        avatar = AvatarLabel(emoji)
+        # 头像：由主题 SVG 提供，避免系统 emoji 的跨设备差异。
+        avatar = AvatarLabel(role)
 
         # 名字标签
         name_label = QLabel(sender)
@@ -897,10 +978,13 @@ class CharacterPanel(QFrame):
         name_label.setStyleSheet(f"color: {color};")
         layout.addWidget(name_label)
 
-        # ── ② 主信息：放大表情（视觉焦点）──
-        self.emotion_label = QLabel("😊")
-        self.emotion_label.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['emoji_lg']))
+        # ── ② 主信息：角色状态（用文本而非系统 emoji）──
+        self.emotion_label = QLabel("心绪 · 平静")
+        self.emotion_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small'], QFont.Bold))
         self.emotion_label.setAlignment(Qt.AlignCenter)
+        self.emotion_label.setStyleSheet(
+            f"color: {color}; background-color: {COLORS['bg_surface_2']};"
+            f"border: 1px solid {color}; border-radius: {RADIUS['pill']}px; padding: 3px 8px;")
         layout.addWidget(self.emotion_label)
 
         # ── ③ 主信息：好感数字 + 简条 ──
@@ -1013,17 +1097,23 @@ class CharacterPanel(QFrame):
             pass  # 提示失败不影响主显示
         self.favor_bar.setValue(favor)
         self.stage_label.setText(stage_text)
-        self.emotion_label.setText(emotion)
+        mood_names = {
+            "😰": "心绪 · 不安", "😡": "心绪 · 愠怒", "😠": "心绪 · 警觉",
+            "😤": "心绪 · 坚定", "😵": "心绪 · 恍惚", "😟": "心绪 · 忧虑",
+            "🥰": "心绪 · 依恋", "😌": "心绪 · 安然", "😍": "心绪 · 心动",
+            "😐": "心绪 · 克制", "😊": "心绪 · 平静",
+        }
+        self.emotion_label.setText(mood_names.get(emotion, "心绪 · 平静"))
 
         # 互斥标记
         if recovery < 0.5:
-            self.mark_label.setText("⚠ 记忆模糊")
+            self.mark_label.setText("记忆模糊")
             self.mark_label.setStyleSheet(f"color: {COLORS['text_muted']};")
         elif locked:
-            self.mark_label.setText("🔒 忠诚锁定")
+            self.mark_label.setText("忠诚锁定")
             self.mark_label.setStyleSheet(f"color: {COLORS['accent']};")
         elif independence >= 0.6:
-            self.mark_label.setText("✨ 独立人格")
+            self.mark_label.setText("独立人格")
             self.mark_label.setStyleSheet(f"color: {COLORS['accent']};")
         else:
             self.mark_label.setText("")
@@ -1765,6 +1855,7 @@ class TwinChatApp(QMainWindow):
 
     def _setup_ui(self) -> None:
         central = QWidget()
+        central.setObjectName("app_shell")
         self.setCentralWidget(central)
         main_layout = QVBoxLayout(central)
         main_layout.setContentsMargins(0, 0, 0, 0)
@@ -1773,11 +1864,14 @@ class TwinChatApp(QMainWindow):
         # ── 顶部标题栏 ──
         header = QFrame()
         header.setFixedHeight(DIM['header_h'])
-        header.setStyleSheet(f"background-color: {COLORS['bg_header']};")
+        header.setStyleSheet(f"background-color: {COLORS['bg_header']}; border-bottom: 1px solid {COLORS['border_subtle']};")
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 0, 18, 0)
 
-        title = QLabel("❄  Re:Zero 双子系统  —  Rem × Ram")
+        title_mark = QLabel()
+        title_mark.setPixmap(QPixmap(_asset_path("app_icon.png")).scaled(28, 28, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+        header_layout.addWidget(title_mark)
+        title = QLabel("Re:Zero 双子系统  ·  Rem × Ram")
         title.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['title_lg'], QFont.Bold))
         title.setStyleSheet(f"color: {COLORS['text_primary']};")
         header_layout.addWidget(title)
@@ -1807,7 +1901,10 @@ class TwinChatApp(QMainWindow):
         header_layout.addWidget(self.search_box)
 
         # 搜索按钮
-        search_btn = QPushButton("🔍")
+        search_btn = QPushButton()
+        search_btn.setIcon(_theme_icon("icon_search.svg"))
+        search_btn.setIconSize(QSize(17, 17))
+        search_btn.setToolTip("搜索对话")
         search_btn.setFixedSize(DIM['icon_btn'], DIM['icon_btn'])
         search_btn.setCursor(Qt.PointingHandCursor)
         search_btn.setStyleSheet(f"""
@@ -1831,7 +1928,9 @@ class TwinChatApp(QMainWindow):
         header_layout.addWidget(arc_label)
 
         # V10.10：历史浮层入口
-        history_btn = QPushButton("📖 回忆")
+        history_btn = QPushButton(" 回忆")
+        history_btn.setIcon(_theme_icon("icon_memory.svg"))
+        history_btn.setIconSize(QSize(16, 16))
         history_btn.setFixedHeight(DIM['history_btn_h'])
         history_btn.setCursor(Qt.PointingHandCursor)
         history_btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
@@ -1850,7 +1949,9 @@ class TwinChatApp(QMainWindow):
         header_layout.addWidget(history_btn)
 
         # V15.0-M3：回忆之书入口（概念稿侧栏「回忆之书」位；浮层为独立模块）
-        book_btn = QPushButton("📚 回忆之书")
+        book_btn = QPushButton(" 回忆之书")
+        book_btn.setIcon(_theme_icon("icon_book.svg"))
+        book_btn.setIconSize(QSize(16, 16))
         book_btn.setFixedHeight(DIM['history_btn_h'])
         book_btn.setCursor(Qt.PointingHandCursor)
         book_btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
@@ -1949,11 +2050,11 @@ class TwinChatApp(QMainWindow):
         quick_row = QHBoxLayout()
         quick_row.setSpacing(6)
         for i, (label, cmd) in enumerate([
-            ("📊 状态", "/status"),
-            ("🏠 宅邸篇", "/mansion"),
-            ("🗡️ 帝国篇", "/empire"),
-            ("⏳ 后期", "/late"),
-            ("🔄 切换模式", "/toggle"),
+            ("关系状态", "/status"),
+            ("宅邸篇", "/mansion"),
+            ("帝国篇", "/empire"),
+            ("后期篇", "/late"),
+            ("切换模式", "/toggle"),
         ]):
             btn = QPushButton(label)
             btn.setFixedHeight(DIM['quick_btn_h'])
@@ -2035,6 +2136,9 @@ class TwinChatApp(QMainWindow):
 
     def _apply_theme(self) -> None:
         self.setStyleSheet(f"""
+            QWidget#app_shell {{
+                border-image: url({_backdrop_image_url()}) 0 0 0 0 stretch stretch;
+            }}
             QMainWindow {{
                 background-color: {COLORS['bg_base']};
             }}
@@ -2046,7 +2150,7 @@ class TwinChatApp(QMainWindow):
                 border: 1px solid {COLORS['border_subtle']};
                 border-radius: {RADIUS['medium']}px;
                 padding: 8px 10px;
-                background-color: {COLORS['bg_surface']};
+                background-color: {COLORS['input']};
                 color: {COLORS['text_primary']};
             }}
             QTextEdit:focus {{
@@ -3481,11 +3585,11 @@ def main() -> None:
         else:
             _log("[警告] 图标文件不存在，QIcon 将为空，任务栏/窗口图标会异常")
 
-        # frozen 时补充：用 EXE 自身内嵌图标作为兜底（Windows 可从 PE 资源提取）
+        # frozen 时仅在主题 SVG 不可用时，用 EXE 内嵌图标作为兜底。
         if getattr(sys, "frozen", False) and sys.platform == "win32":
             try:
                 exe_icon = QIcon(sys.executable)
-                if not exe_icon.isNull():
+                if app_icon.isNull() and not exe_icon.isNull():
                     app_icon = exe_icon
                     _log(f"frozen 兜底: 使用 EXE 内嵌图标 ({sys.executable})")
                 else:

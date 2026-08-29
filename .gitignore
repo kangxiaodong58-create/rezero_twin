@@ -45,3 +45,13 @@ Temp/
 # Forensic 取证现场与案件工作目录（M4，证据不入库、结案摘录归档 docs/evaluation/sessions）
 incidents/
 .debug/
+
+# 截图对比临时目录（M_A 补丁：不入库）
+docs/evaluation/baselines/screenshots/_cmp_tmp/
+
+# 截图对比临时目录（不入库）
+docs/evaluation/baselines/screenshots/_cmp_tmp/
+
+# 宅邸背景板预渲染缓存（由 assets/mansion_backdrop.svg 再生）
+data/backdrop_cache.png
+docs/evaluation/baselines/screenshots/_tmp/
