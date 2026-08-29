@@ -48,6 +48,9 @@ def _make_window() -> gui.TwinChatApp:
     data/memory.json（并行会话盲测曾写入 mode=local 导致引用测试
     KeyError 回归；且构造期 _save_state/migrate 会污染真实存档）。
     临时 store 为空 → mode 默认 llm → LLM bridge 正确创建。
+    V14.8 修复：ConversationStore 同样隔离——__init__ 启动序列的
+    主动来信/历史写入走临时 DB（此前构造后才替换 conv_store，
+    来信已先写入真实 data/conversations.db）。
     """
     import tempfile
 
@@ -55,10 +58,13 @@ def _make_window() -> gui.TwinChatApp:
     tmp_dir = tempfile.mkdtemp(prefix="hermes-test-store-")
     orig_store = gui.MemoryStore
     gui.MemoryStore = lambda: orig_store(root_dir=tmp_dir)
+    orig_conv = gui.ConversationStore
+    gui.ConversationStore = lambda: orig_conv(db_path=os.path.join(tmp_dir, "conv.db"))
     try:
         win = gui.TwinChatApp()
     finally:
         gui.MemoryStore = orig_store
+        gui.ConversationStore = orig_conv
     win.show()
     while win.chat_layout.count() > 0:
         item = win.chat_layout.takeAt(0)

@@ -1,0 +1,40 @@
+{
+  "rounds": 30,
+  "ok": 30,
+  "fail": 0,
+  "fallback": 0,
+  "ooc_warn": 0,
+  "in_tokens": 64018,
+  "out_tokens": 1999,
+  "cost_yuan": 0.144,
+  "elapsed_sec": 47.9,
+  "scenes_switched": [
+    [
+      4,
+      "去厨房看看"
+    ],
+    [
+      9,
+      "回房间休息"
+    ],
+    [
+      14,
+      "我们去看花园"
+    ],
+    [
+      18,
+      "去书库找本书"
+    ],
+    [
+      23,
+      "去走廊走走"
+    ],
+    [
+      28,
+      "我们去餐厅吃饭"
+    ]
+  ],
+  "final_scene": "GARDEN",
+  "final_favor": 44,
+  "history_len": 30
+}
