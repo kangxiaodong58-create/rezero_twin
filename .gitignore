@@ -34,3 +34,10 @@ data/conversations.db*
 
 # Vignette cache (v10.4+)
 data/vignette_cache.json
+
+# Logs & stray runtime artifacts (2026-08-29 研判 R4)
+data/*.log
+/*.db
+venv/
+Temp/
+.pytest_cache/
