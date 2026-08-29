@@ -559,21 +559,26 @@ class AvatarLabel(QLabel):
         self.setFixedSize(self.SIZE, self.SIZE)
         self.setAlignment(Qt.AlignCenter)
         self.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['emoji_sm']))
+        # V16-M_E：角色色描边环——高清头像 + 角色识别锚点（rem 冰蓝 / ram 蔷薇粉）
+        ring = ROLE_COLORS.get(role, COLORS['text_muted'])
         self.setStyleSheet(f"""
             QLabel {{
                 background-color: {COLORS['bg_surface_2']};
                 border-radius: {self.SIZE // 2}px;
-                border: 1px solid {COLORS['border_subtle']};
+                border: 2px solid {ring};
             }}
         """)
         self._emoji_fallback = {"rem": "🩵", "ram": "💗", "user": "🙂", "system": "❄"}.get(role, "·")
         avatar_files = {
-            "rem": "rem_avatar.svg", "ram": "ram_avatar.svg",
-            "user": "user_avatar.svg", "system": "system_avatar.svg",
+            "rem": ["rem_avatar.png", "rem_avatar.svg"],
+            "ram": ["ram_avatar.png", "ram_avatar.svg"],
+            "user": ["user_avatar.svg"], "system": ["system_avatar.svg"],
         }
-        path = _asset_path(avatar_files.get(role, "user_avatar.svg"))
-        if os.path.isfile(path):
-            self.set_image(path)
+        for fname in avatar_files.get(role, ["user_avatar.svg"]):
+            path = _asset_path(fname)
+            if os.path.isfile(path):
+                self.set_image(path)
+                break
         else:
             self.setText(self._emoji_fallback)
 
@@ -675,8 +680,8 @@ class BubbleWidget(QFrame):
                 background-color: {bg};
                 color: {fg};
                 {border_css}
-                border-radius: {RADIUS['large']}px;
-                padding: 12px 16px;
+                border-radius: 14px;
+                padding: 10px 14px;
                 line-height: 150%;  /* V14.5：中文长文阅读行距优化 */
             }}
         """)
@@ -845,24 +850,25 @@ class ChatMessageWidget(QWidget):
         bubble.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
         self._bubble = bubble
 
-        # 左侧列：头像 + 名字
-        left_col = QVBoxLayout()
-        left_col.setSpacing(2)
-        left_col.addWidget(name_label, alignment=Qt.AlignLeft)
+        # V16-M_E：名字行真正显示（原 left_col 为死代码——名字标签从未加入布局，
+        # 聊天里只有头像+气泡）。现按概念稿：头像在侧，角色名小字在上、气泡在下。
+        name_col = QVBoxLayout()
+        name_col.setSpacing(3)
+        name_col.addWidget(name_label)
+        name_col.addWidget(bubble)
+        name_col.addStretch()
 
-        # 右侧列：气泡
-        # 组装
         inner = QHBoxLayout()
         inner.setSpacing(8)
 
         if role == "user":
-            inner.addStretch()
-            inner.addWidget(bubble)
-            inner.addWidget(avatar)
             name_label.setAlignment(Qt.AlignRight)
+            inner.addStretch()
+            inner.addLayout(name_col)
+            inner.addWidget(avatar, 0, Qt.AlignTop)
         else:
-            inner.addWidget(avatar)
-            inner.addWidget(bubble)
+            inner.addWidget(avatar, 0, Qt.AlignTop)
+            inner.addLayout(name_col)
             inner.addStretch()
 
         layout.addLayout(inner)
