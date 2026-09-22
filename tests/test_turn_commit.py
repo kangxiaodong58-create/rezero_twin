@@ -272,3 +272,32 @@ def test_discard_records_forensic_event(tmp_path) -> None:
         assert "TURN_DISCARDED" in blob, f"丢弃应记入取证缓冲: {blob[:400]}"
     finally:
         forensic.shutdown_forensic()
+
+
+# ── SPEC-04 残留：悬空事务句柄 ────────────────────────────────────
+
+def test_active_txn_cleared_on_cancel_and_stream_error() -> None:
+    """取消 / 流中断后不得留下悬空事务句柄（`_active_txn is None`）。
+
+    SPEC-20260922-04 登记：V16.2 只在成功/校验失败/API 异常分支清了句柄，
+    生成器内的取消与 stale 分支漏清——句柄悬空会让「上一轮的事务对象」
+    在下一轮 `begin_turn` 之前仍可达（弱引用级泄漏 + 语义误导）。
+    """
+    # ① 用户取消：消费一个 token 后取消，抽干生成器
+    bot = _bot("ok")
+    gen, _ = bot.chat_stream(PRAISE)
+    next(gen)
+    assert bot._active_txn is not None, "流进行中应持有事务句柄"
+    bot.cancel_stream()
+    list(gen)                       # 触发取消分支（静默结束）
+    assert bot._active_txn is None, "取消后应清空 _active_txn"
+    assert bot.engine.turn_count == 0, "取消轮不得推进状态"
+
+    # ② 流中途抛错：异常继续上抛，句柄同样不得残留
+    bot2 = _bot("boom_after_first")
+    gen2, _ = bot2.chat_stream(PRAISE)
+    next(gen2)
+    with pytest.raises(RuntimeError):
+        list(gen2)
+    assert bot2._active_txn is None, "流中断后应清空 _active_txn"
+    assert bot2.engine.turn_count == 0, "中断轮不得推进状态"

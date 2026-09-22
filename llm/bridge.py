@@ -525,6 +525,7 @@ class ReZeroLLMBridge:
                                generation=gen, payload_summary="stream generator started stale")
                         if txn is not None:
                             txn.discard("stale")   # V16.2（M3）
+                            self._active_txn = None   # SPEC-04：清悬空句柄
                         return
                     record("STREAM_START", component="bridge", generation=gen)
                     for chunk in stream:
@@ -532,6 +533,7 @@ class ReZeroLLMBridge:
                             # V13.0：用户取消——静默结束，不校验、不写 history
                             if txn is not None:
                                 txn.discard("cancelled")   # V16.2（M3）
+                                self._active_txn = None    # SPEC-04：清悬空句柄
                             return
                         # Forensic M4：chunk 级 stale 拦截（generation 中途变化，
                         # 如旧流在会话重置后继续产出）——记录后中止流：
@@ -542,6 +544,7 @@ class ReZeroLLMBridge:
                                    payload_summary=f"current_gen={self._generation}")
                             if txn is not None:
                                 txn.discard("stale")   # V16.2（M3）
+                                self._active_txn = None   # SPEC-04：清悬空句柄
                             return
                         delta = chunk.choices[0].delta.content
                         if delta:
@@ -551,6 +554,7 @@ class ReZeroLLMBridge:
                     if self._stream_cancelled:
                         if txn is not None:
                             txn.discard("cancelled")       # V16.2（M3）
+                            self._active_txn = None        # SPEC-04：清悬空句柄
                         return
 
                     # Forensic M4 末尾防线：流结束时已发生会话重置（chunk 检查点
@@ -560,6 +564,7 @@ class ReZeroLLMBridge:
                                generation=gen, payload_summary="stream finalized stale")
                         if txn is not None:
                             txn.discard("stale")           # V16.2（M3）
+                            self._active_txn = None        # SPEC-04：清悬空句柄
                         return
 
                     # 流式完整输出结束后校验；失败仅记录日志，不污染 history
@@ -616,11 +621,13 @@ class ReZeroLLMBridge:
                     if self._stream_cancelled:
                         if txn is not None:
                             txn.discard("cancelled")       # V16.2（M3）
+                            self._active_txn = None        # SPEC-04：清悬空句柄
                         return
                     record("STREAM_ERROR", component="bridge", generation=gen,
                            exception=str(e)[:500])
                     if txn is not None:
                         txn.discard("stream_error")        # V16.2（M3）：失败轮不落状态
+                        self._active_txn = None            # SPEC-04：清悬空句柄
                     raise
                 finally:
                     # V13.0：无论取消/异常/正常结束，关闭底层流并释放引用

@@ -6,6 +6,30 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.0] - 2026-09-22 (第 3 批整改：M6 文档真源收敛 + M7 CI 门禁 + 残留清理)
+
+> 架构审批强制整改第 3 批（M6/M7），SPEC-20260922-04。
+
+### Added
+- **`.github/workflows/ci.yml`（M7 门禁）**：push/PR 触发；结构守卫单独列一步便于日志定位；全量测试用隔离校验脚本包一层；冒烟回归；失败时上传 `data/gui.log`
+- **`scripts/verify_isolation.sh`**：测试隔离的**可执行判据**——跑命令前后对 `data/` 做 mtime+size 快照 diff，非空即失败。本地与 CI 共用；已做**正反双向验证**（干净运行 ✅ / 故意写探针文件 ❌ 被抓住）
+- **架构 Spec 新增 §4.6 线程模型与并发边界**：线程清单、跨线程共享状态按风险分级、三处存储的线程归属、已有护栏、候选修法
+- 债务台账新增 **A10**（跨线程并发写 / 撕裂读 / 陈旧整快照回写，登记未修）
+
+### Changed
+- `docs/architecture.md`、`技术研判报告_V14.8_2026-08-29.md` 顶部加**废弃头**，指向现行真源（`docs/architecture/逆向架构Spec_V16_2026-09-22.md`）
+
+### Fixed
+- `llm/bridge.py`：取消 / stale（起点、chunk 级、finalize 级）/ 流中断分支补 `self._active_txn = None`（V16.2 遗留的悬空事务句柄）
+
+### 验收
+- `pytest tests/ -q` → **295 passed**（294 → +1：取消/流中断后句柄必须清空）
+- `bash scripts/verify_isolation.sh env -u PYTHONPATH venv/Scripts/python.exe -m pytest tests/ -q` → ✅ 隔离通过
+- 冒烟 `tests/smoke_test.py` → **31/31**
+- ⚠️ CI 首次运行未在本地验证（无 Linux runner）——按 SPEC 风险段预留「首跑修红」预算
+
+---
+
 ## [V16.2.1] - 2026-09-22 (命令路由修复——重复定义覆盖导致「未知指令」)
 
 > 真机确认阶段暴露：切换篇章（`/empire` 等）提示「未知指令: /empire」。
