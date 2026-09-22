@@ -6,6 +6,26 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.2] - 2026-09-22 (CI 首跑修红 + 债务 A11/A12 登记)
+
+> SPEC-20260922-04 续（V16.3.2）。首跑 run#35730861302 报红，已定位并修 config 侧；测试侧属范围外 → RCR。
+
+### Fixed
+- **`.github/workflows/ci.yml`**：删除 job env 中误设的 `REZERO_DISABLE_UI_MOTION=1`（连带 `REZERO_DISABLE_VIGNETTE` / `REZERO_DISABLE_HISTORY`）——`tests/test_motion.py` 的两个「启用态」用例正是验证动效开启行为，被全局开关压成禁用态导致 CI 首跑 2 例失败。
+- `.github/workflows/ci.yml`：把「全量测试」与「数据隔离校验」拆为两步——测试步骤保持**阻断**；隔离步骤**临时非阻断**（yml 内注明原因与转正条件），因为它正确暴露了 A11。
+
+### Added（债务登记，未修）
+- **A11**：干净 checkout 下测试会往真实 `data/` 写 `backdrop_cache.png`（5 个构造 GUI 的测试文件）与 `conversations.db`（全量运行时）——隔离门禁报红是正确的；修复属 `tests/` 范围，需 RCR。
+- **A12**：直接运行 `tests/smoke_test.py`（不经 conftest）会往真实 `data/gui.log` 追写一行 134 字节的 import 期横幅。
+
+### 验收（复现实验存证）
+- 干净克隆 + 修正 env：`pytest tests/ -q -p no:randomly` → **295 passed**
+- 干净克隆放入真实 `data/` 副本 + 随机顺序 ×3：`data/` 未变（污染触发条件是「文件不存在」，非顺序）
+- 本机真项目：`295 passed` + 冒烟 `31/31`（`data/gui.log` 的变化来自直跑的 smoke，已登记 A12）
+- 方法沉淀：「干净克隆复现法」（`git clone --local` 到 scratch + 项目 venv），使 CI-only 问题本地可调试 —— 已写入 `rezero-twin-dev` 技能
+
+---
+
 ## [V16.3.1] - 2026-09-22 (协议修订：批准即授权执行 + V10.4 旧报告废弃头)
 
 > SPEC-20260922-05（L0，纯文档）。
