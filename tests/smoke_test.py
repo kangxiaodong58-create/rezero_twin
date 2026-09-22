@@ -21,6 +21,17 @@ import tempfile
 import time as _time
 import traceback
 
+# V16.3.3（A12）：直跑自我隔离——本文件既可被 pytest 收集，也可直接
+# `python tests/smoke_test.py` 运行；后者不经 conftest，若不在 import gui 之前
+# 设好隔离，gui 的 import 期横幅会写真实 data/gui.log、账本镜像会碰真实 data/life.db
+# （SPEC-04 CI 首跑期实证）。
+os.environ.setdefault(
+    "REZERO_GUI_LOG",
+    os.path.join(tempfile.mkdtemp(prefix="rz-smoke-log-"), "gui.log"))
+os.environ.setdefault(
+    "REZERO_LIFE_DB",
+    os.path.join(tempfile.mkdtemp(prefix="rz-smoke-life-"), "life.db"))
+
 # 项目根目录加入搜索路径
 PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 if PROJECT_ROOT not in sys.path:

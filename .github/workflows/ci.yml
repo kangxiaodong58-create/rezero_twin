@@ -49,15 +49,7 @@ jobs:
       - name: 结构守卫（单独列出，便于日志可读）
         run: python -m pytest tests/test_command_router.py::test_no_duplicate_method_definitions -q
 
-      - name: 全量测试
-        run: python -m pytest tests/ -q
-
-      - name: 数据隔离校验（跑测试前后 data/ 必须逐字节不变）
-        # ⚠️ 临时非阻断：CI 首跑已实证 A11——干净 checkout 下 5 个测试文件会用真实
-        # data/ 写 backdrop_cache.png（全量运行时另含 conversations.db）。隔离门禁
-        # 报红是**正确**的，修复属测试文件范围（需 RCR）。
-        # 修复落地后本步骤转回阻断，并与上面的「全量测试」合并为一步。
-        continue-on-error: true
+      - name: 全量测试 + 数据隔离校验（跑测试前后 data/ 必须逐字节不变）
         run: bash scripts/verify_isolation.sh python -m pytest tests/ -q
 
       - name: 冒烟回归（引擎纯逻辑）

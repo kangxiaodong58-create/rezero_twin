@@ -6,6 +6,24 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.3] - 2026-09-22 (RCR 批准：A11/A12 测试侧数据隔离修复 + CI 门禁转正)
+
+> SPEC-20260922-04 续批（V16.3.3）。用户批准 RCR（A11+A12），扩围 `tests/conftest.py`、`tests/smoke_test.py`。
+
+### Fixed
+- **A11**（`tests/conftest.py`）：新增 autouse 夹具 `_isolate_data_dir(tmp_path, monkeypatch)`，把 `get_data_dir()` 整体重定向到 per-test 临时目录。做法：先替换 `shared.config.get_data_dir`（源头 → 覆盖此后所有 from-import），再**全量扫描 `sys.modules`** 替换已完成导入的旧绑定。效果：干净 checkout 下全量测试跑完 `data/` **零文件**（此前会生成 `backdrop_cache.png` + `conversations.db`）。
+- **A12**（`tests/smoke_test.py`）：在 import 项目模块之前 `setdefault` `REZERO_GUI_LOG` / `REZERO_LIFE_DB` 到临时目录 → **直跑**冒烟不再写真实 `data/gui.log` / `data/life.db`。
+
+### Changed
+- `.github/workflows/ci.yml`：数据隔离校验**从临时非阻断转回阻断**，并与「全量测试」**合并回单步**（V16.3.2 里写明的转正条件已满足）。
+
+### 验收
+- **干净克隆（CI 等价）**：全量 `295 passed`，跑完 `data/` **零文件**；原 5 个泄漏源（test_command_router / test_motion / test_state_persistence / test_status_dashboard / test_ui_offscreen）逐文件复扫全部干净；直跑 smoke `31/31` 且不写盘。
+- **本机真项目**：`295 passed` + 隔离校验 ✅ + 直跑冒烟（**不加任何环境覆盖**）`31/31`，`data/` 六文件逐字节未变。
+- 方法论补记：`git clone --local` 只带**已提交**状态——用克隆体做验收前必须先提交（或把工作区文件拷进去），否则「修了还漏」是假象。
+
+---
+
 ## [V16.3.2] - 2026-09-22 (CI 首跑修红 + 债务 A11/A12 登记)
 
 > SPEC-20260922-04 续（V16.3.2）。首跑 run#35730861302 报红，已定位并修 config 侧；测试侧属范围外 → RCR。

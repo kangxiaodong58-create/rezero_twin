@@ -6,7 +6,10 @@ pytest 按字母序收集时 smoke_test.py 先 import gui（此时 env 未设）
 各直跑文件自己的 setdefault 无法影响已加载的 gui 模块——统一在此设置。
 """
 import os
+import sys
 import tempfile
+
+import pytest
 
 os.environ.setdefault("REZERO_DISABLE_VIGNETTE", "1")
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -19,3 +22,42 @@ os.environ.setdefault(
 os.environ.setdefault(
     "REZERO_GUI_LOG",
     os.path.join(tempfile.mkdtemp(prefix="rz-log-test-"), "gui.log"))
+
+
+@pytest.fixture(autouse=True)
+def _isolate_data_dir(tmp_path, monkeypatch):
+    """V16.3.3（A11）：把 `get_data_dir()` 整体重定向到 per-test 临时目录。
+
+    背景：SPEC-04 的 CI 首跑暴露——干净 checkout 下跑测试会创建真实
+    `data/backdrop_cache.png`（gui.py:492）与 `data/conversations.db`
+    （`ConversationStore` 默认库）；本机因这两个文件早已存在而长期看不出来。
+
+    做法：`get_data_dir` 在多个模块是 **from-import 绑定**，逐个替换模块属性；
+    替换 `shared.config` 一处同时覆盖晚绑定调用点（memory_store / life_ledger）。
+    """
+    data_dir = tmp_path / "data"
+    data_dir.mkdir(parents=True, exist_ok=True)
+    resolved = lambda: str(data_dir)  # noqa: E731
+
+    import shared.config as _config
+    monkeypatch.setattr(_config, "get_data_dir", resolved)
+
+    try:  # 收集期测试模块已 import gui；此处确保补丁一定落到 gui 的绑定上
+        import gui as _gui
+        monkeypatch.setattr(_gui, "get_data_dir", resolved)
+    except ImportError:  # 无 Qt 环境下非 GUI 测试仍可运行
+        pass
+
+    # 已完成导入的模块里，凡持有 `get_data_dir` 名字的（from-import 绑定）全部替换。
+    # 不逐个点名：漏一个就漏一类（A11 第一次修就栽在点名清单不全）。
+    # 未来导入的模块会拿到上面已改过的 `shared.config.get_data_dir`，天然被覆盖。
+    for _name, _mod in list(sys.modules.items()):
+        try:
+            if _mod is _config or _mod is None:
+                continue
+            if getattr(_mod, "get_data_dir", None) is not None:
+                monkeypatch.setattr(_mod, "get_data_dir", resolved, raising=False)
+        except Exception:  # 个别模块 __getattr__ 会抛错，跳过即可
+            continue
+
+    return str(data_dir)
