@@ -97,16 +97,18 @@
 
 | 用途 | 命令 | 当前基线 |
 |---|---|---|
-| 全量测试（零 API） | `env -u PYTHONPATH venv/Scripts/python.exe -m pytest tests/ -q` | **294 passed** |
+| 全量测试（零 API） | `env -u PYTHONPATH venv/Scripts/python.exe -m pytest tests/ -q` | **295 passed**（V16.3.3 基线；随版本更新，以最近报告 / CHANGELOG 为准） |
 | 冒烟回归 | `env -u PYTHONPATH venv/Scripts/python.exe tests/smoke_test.py` | **31/31** |
 | 打包 EXE | `env -u PYTHONPATH powershell.exe -NoProfile -ExecutionPolicy Bypass -File build.ps1` | `dist/ReZeroTwin.exe`（脚本内自动备份/恢复 `dist/.env` 与 `dist/data/`） |
-| 测试隔离校验 | 跑测试前后对 `data/memory.json data/memory.json.bak data/gui.log data/life.db data/conversations.db data/vignette_cache.json` 做 `stat -c '%n %Y %s'` 快照并 `diff` | **必须为空** |
+| 测试隔离校验 | `bash scripts/verify_isolation.sh <被测命令>`——对 `data/` **全部文件**（`find data -type f`）做 `stat -c '%n %Y %s'` 前后快照并 `diff` | **必须为空**（差集非空即失败） |
 
-本仓无 lint/typecheck 配置（无 pyproject/ruff/flake8/mypy/.pre-commit/CI）；报告里就写「未运行及原因」。
+本仓无 lint/typecheck 配置（无 pyproject/ruff/flake8/mypy/.pre-commit）；**CI 门禁自 V16.3.0 起存在**：`.github/workflows/ci.yml`（push/PR → 结构守卫 + 全量测试 + 数据隔离校验 + 冒烟）。报告里 lint/typecheck 仍写「未运行及原因」。
 
 ## 3. 「不改变文件的命令」在本仓的操作定义
 
-= **跑完测试后 `data/` 逐字节不变（mtime + size）**。凡是构造 `TwinChatApp` 的测试，必须把 `gui.MemoryStore` / `gui.ConversationStore` 补丁到 tmp，并设 `REZERO_LIFE_DB` / `REZERO_GUI_LOG`（`tests/conftest.py` 已默认隔离这两项）。
+= **跑完测试后 `data/` 逐字节不变（mtime + size）**。
+
+自 V16.3.3 起，`tests/conftest.py` 的 autouse 夹具 `_isolate_data_dir` 已把 `get_data_dir()` 整体重定向到 per-test 临时目录（连同 `REZERO_LIFE_DB` / `REZERO_GUI_LOG`）——**新增测试无需再手工补丁** `MemoryStore` / `ConversationStore` / backdrop 缓存。机械判据：**干净 checkout 跑完全量后 `find data -type f` 必须为空**；日常用 `scripts/verify_isolation.sh` 包裹测试命令即可。
 
 ## 4. 真机确认门禁（观感类 + 行为类）
 

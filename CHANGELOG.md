@@ -6,6 +6,21 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.4] - 2026-09-22 (AGENTS.md 验证章刷新：基线 / 隔离语义 / CI 事实)
+
+> SPEC-20260922-06（L0，纯文档）。
+
+### Changed
+- `AGENTS.md` §2 验证表：全量测试基线 `294 passed` → **`295 passed`**（注明「随版本更新，以最近报告 / CHANGELOG 为准」）；「测试隔离校验」行改为对 `data/` **全部文件**（`find data -type f`）快照并指向 `scripts/verify_isolation.sh`；表末「本仓…无 CI」更正为「**CI 门禁自 V16.3.0 起存在**（`.github/workflows/ci.yml`）」。
+- `AGENTS.md` §3：补 V16.3.3 隔离语义——`tests/conftest.py` 的 autouse 夹具已全局重定向 `get_data_dir()`，**新增测试无需手工补丁**；机械判据 = 干净 checkout 跑完全量后 `find data -type f` 为空。
+
+### 验收
+- `grep` 断言：AGENTS.md 含 `295 passed` / `verify_isolation.sh` / `.github/workflows/ci.yml`，且**不再**含 `294 passed`
+- `pytest tests/ -q` → **295 passed**（无代码改动，确认无回归）
+- **未打包 EXE / 未跑真机**：本 SPEC 无代码与行为变化，不适用（已在该 SPEC「执行记录」注明）
+
+---
+
 ## [V16.3.3] - 2026-09-22 (RCR 批准：A11/A12 测试侧数据隔离修复 + CI 门禁转正)
 
 > SPEC-20260922-04 续批（V16.3.3）。用户批准 RCR（A11+A12），扩围 `tests/conftest.py`、`tests/smoke_test.py`。
