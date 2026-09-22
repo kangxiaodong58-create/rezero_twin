@@ -19,7 +19,7 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ### 未跑项及原因
 - **EXE / 真机**：纯文档，无代码与行为变化。
-- `pytest` 未重复执行：本批未触碰任何 `.py`；最近一次全绿 = `e4d11e9` 批次 `295 passed` + 隔离校验通过。
+- `pytest`（本批为纯文档、无代码改动，仍按四件套跑一遍作证）→ **`295 passed, 33 warnings in 14.89s`** + 隔离校验通过（`data/` 逐字节未变）。
 
 ---
 
