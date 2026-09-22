@@ -2330,42 +2330,66 @@ class TwinChatApp(QMainWindow):
     # ── 命令处理 ────────────────────────────
 
     def _handle_command(self, cmd: str) -> None:
-        if cmd == "/status":
-            # V10.9.2：多行可读排版 + 瞬时消失 + 不存 DB
-            state = self.engine.snapshot()
-            arc_cn = ARC_CN.get(state.arc.value, state.arc.value)
-            favor_cn = FAVOR_LEVEL_CN.get(state.favor_level.name, state.favor_level.name)
-            oni_cn = ONI_STAGE_CN.get(state.oni_stage.name, state.oni_stage.name)
-            status_text = (
-                f"📊 状态\n"
-                f"篇章：{arc_cn}\n"
-                f"蕾姆：{favor_cn}（{state.favor}）· 独立 {state.independence:.2f}\n"
-                f"拉姆：{state.ram_stage.value}（{state.ram_favor}）\n"
-                f"鬼化：{oni_cn} · 残香 {state.witch_scent}\n"
-                f"⌁ 点击关闭"
-            )
-            self._append_parsed_message("系统", status_text, "system", save=False, transient=True)
-            self._update_panels()
-        elif cmd == "/mansion":
-            self.bot.set_arc(StoryArc.MANSION_ERA)
-            self.store.set("arc", StoryArc.MANSION_ERA.value)
-            self._append_parsed_message("系统", "→ 已切换至宅邸篇", "system")
-            self._arc_label.setText("Arc I · 罗兹瓦尔宅邸")
-            self._update_status_bar()
-        elif cmd == "/empire":
-            self.bot.set_arc(StoryArc.EMPIRE_ERA)
-            self.store.set("arc", StoryArc.EMPIRE_ERA.value)
-            self._append_parsed_message("系统", "→ 已切换至帝国篇（失忆）", "system")
-            self._arc_label.setText("Arc II · 帝国篇")
-            self._update_status_bar()
-        elif cmd == "/late":
-            self.bot.set_arc(StoryArc.LATE_ARC)
-            self.store.set("arc", StoryArc.LATE_ARC.value)
-            self._append_parsed_message("系统", "→ 已切换至后期篇章", "system")
-            self._arc_label.setText("Arc III · 后期篇章")
-            self._update_status_bar()
-        elif cmd == "/toggle":
-            self._switch_mode()
+        """唯一命令路由（V16.2.1 合并）。
+
+        支持：/status · /mansion · /empire · /late · /recover [0~1] · /toggle · /llm · /local
+
+        ⚠ 历史坑（V16.0-mf 引入 → V16.2.1 修复）：本类此前在文件后部**再定义了一份**
+        同名 `_handle_command`（V16-M_D 导航栏精简版）。类体后定义覆盖前定义 →
+        `/mansion /empire /late` 全部落进「未知指令」，且 V10.9.2 的状态面板变成死代码。
+        结构回归守卫：`tests/test_command_router.py`（重复方法名 AST 扫描 + 命令覆盖断言）。
+        """
+        raw = (cmd or "").strip()
+        low = raw.lower()
+        try:
+            if low == "/status":
+                # V10.9.2：多行可读排版 + 瞬时消失 + 不存 DB
+                state = self.engine.snapshot()
+                arc_cn = ARC_CN.get(state.arc.value, state.arc.value)
+                favor_cn = FAVOR_LEVEL_CN.get(state.favor_level.name, state.favor_level.name)
+                oni_cn = ONI_STAGE_CN.get(state.oni_stage.name, state.oni_stage.name)
+                status_text = (
+                    f"📊 状态\n"
+                    f"篇章：{arc_cn}\n"
+                    f"蕾姆：{favor_cn}（{state.favor}）· 独立 {state.independence:.2f}\n"
+                    f"拉姆：{state.ram_stage.value}（{state.ram_favor}）\n"
+                    f"鬼化：{oni_cn} · 残香 {state.witch_scent}\n"
+                    f"⌁ 点击关闭"
+                )
+                self._append_parsed_message("系统", status_text, "system", save=False, transient=True)
+                self._update_panels()
+            elif low == "/mansion":
+                self._apply_arc(StoryArc.MANSION_ERA, "Arc I · 罗兹瓦尔宅邸", "→ 已切换至宅邸篇")
+            elif low == "/empire":
+                self._apply_arc(StoryArc.EMPIRE_ERA, "Arc II · 帝国篇", "→ 已切换至帝国篇（失忆）")
+            elif low == "/late":
+                self._apply_arc(StoryArc.LATE_ARC, "Arc III · 后期篇章", "→ 已切换至后期篇章")
+            elif low.startswith("/recover"):
+                parts = raw.split()
+                try:
+                    p = float(parts[1])
+                except (IndexError, ValueError):
+                    p = 1.0
+                self.bot.recover(p)
+                self._save_state()      # V16.2：改走唯一保存入口（engine + 平铺键一并落盘）
+                self._append_parsed_message("系统", f"→ 记忆恢复进度设为 {p}", "system")
+                self._update_panels()
+            elif low in ("/toggle", "/llm", "/local"):
+                self._switch_mode()
+                self._update_panels()
+            else:
+                self._append_parsed_message(
+                    "系统", f"未知指令: {raw}", "system", save=False)
+        except Exception as e:
+            _log(f"_handle_command 异常: {e}\n{traceback.format_exc()}")
+
+    def _apply_arc(self, arc, label: str, message: str) -> None:
+        """切换篇章的唯一路径：改状态 → 落盘 → 提示 → 更新标签/状态栏/面板。"""
+        self.bot.set_arc(arc)
+        self._save_state()              # V16.2：改走唯一保存入口
+        self._append_parsed_message("系统", message, "system")
+        self._arc_label.setText(label)
+        self._update_status_bar()
         self._update_panels()
 
     def _switch_mode(self) -> None:
@@ -2744,27 +2768,9 @@ class TwinChatApp(QMainWindow):
         # V14.0：记录本轮用户句 widget（取消时标记 failed）
         self._pending_user_widget = self._append_parsed_message("你", text, "user")
 
-        # 命令检测
-        lowered = text.lower()
-        if lowered == "/status":
-            self._handle_command("/status")
-            return
-        if lowered in ("/mansion", "/empire", "/late"):
-            self._handle_command(lowered)
-            return
-        if lowered.startswith("/recover"):
-            parts = text.split()
-            try:
-                p = float(parts[1])
-            except (IndexError, ValueError):
-                p = 1.0
-            self.bot.recover(p)
-            self.store.set("recovery", p)
-            self._append_parsed_message("系统", f"→ 记忆恢复进度设为 {p}", "system")
-            self._update_panels()
-            return
-        if lowered in ("/llm", "/local", "/toggle"):
-            self._switch_mode()
+        # 命令检测（V16.2.1：全部指令收敛到唯一路由 _handle_command）
+        if text.startswith("/"):
+            self._handle_command(text)
             return
 
         # 有效对话：刷新世界状态的最后互动时间戳（v10.4）
@@ -3407,19 +3413,9 @@ class TwinChatApp(QMainWindow):
         self._history_overlay.setFocus()
         _log("历史浮层已打开")
 
-    def _handle_command(self, cmd: str) -> None:
-        """V16-M_D：导航栏/图标坞命令路由（/status /toggle）。"""
-        try:
-            if cmd == "/status":
-                self._append_parsed_message(
-                    "系统", self.bot.status(), "system", save=False)
-            elif cmd == "/toggle":
-                self._switch_mode()
-            else:
-                self._append_parsed_message(
-                    "系统", f"未知指令: {cmd}", "system", save=False)
-        except Exception as e:
-            _log(f"_handle_command 异常: {e}")
+    # V16.2.1：此处的第二份 `_handle_command`（V16-M_D 导航栏精简版）已删除。
+    # 它定义在类体后部 → 覆盖前面那份完整路由，导致 /mansion /empire /late
+    # 全部落入「未知指令」。命令路由现只有 gui.py 上部那一份（唯一真源）。
 
     def _open_memory_book(self) -> None:
         """V15.0-M3：懒创建并打开回忆之书浮层（独立模块 memory_book.py）。"""
@@ -3620,7 +3616,9 @@ class TwinChatApp(QMainWindow):
             )
             self.world.last_greeting_date = today_str
             # 立即持久化，防止崩溃丢失问候标记
-            self.store.set("world_state", self.world.save_dict())
+            # V16.2：改走唯一保存入口——此前只 set("world_state") 导致存档里
+            # 出现「world 是最新、engine/平铺键是上一轮」的部分保存
+            self._save_state()
             _log(f"日更问候已展示: period={period} weather={weather} date={today_str}")
         except Exception as e:
             _log(f"日更问候展示失败: {e}\n{traceback.format_exc()}")

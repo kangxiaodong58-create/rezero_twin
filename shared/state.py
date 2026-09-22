@@ -14,12 +14,19 @@ from enum import Enum, IntEnum
 from typing import Any, Dict, List, Optional
 
 
-def _trace_transition(component: str, from_state: str, to_state: str) -> None:
+def _trace_transition(component: str, from_state: str, to_state: str, *,
+                      sink: Optional[Dict[str, List[Any]]] = None) -> None:
     """Forensic M4：状态机跃迁写入取证黑匣子（未初始化时 no-op）。
 
     只记低频跃迁（篇章 / 好感等级 / 拉姆阶段 / 鬼化 / 锁定）——高频数值
     变化不进 200 容量环形缓冲，防止挤掉关键事件。任何失败静默。
+
+    V16.2（M3）：`sink` 非空时改为入队，延迟到事务 commit 才真正写入——
+    失败轮（API 异常/校验失败/取消）不该留下"从未发生"的跃迁轨迹。
     """
+    if sink is not None:
+        sink["transitions"].append((component, from_state, to_state))
+        return
     try:
         from runtime.forensic.recorder import transition
         transition(component, from_state, to_state)
@@ -33,12 +40,78 @@ def _life_ledger_mod():
     return life_ledger
 
 
-def _life_mirror(fn) -> None:
-    """人生账本镜像入口——任何失败静默，绝不影响状态机主流程。"""
+def _life_mirror(fn, *, sink: Optional[Dict[str, List[Any]]] = None) -> None:
+    """人生账本镜像入口——任何失败静默，绝不影响状态机主流程。
+
+    V16.2（M3）：`sink` 非空时改为入队，延迟到事务 commit 才真正落账——
+    账本 append-only 且无补偿通道，失败轮的事实绝不能被记进去。
+    """
+    if sink is not None:
+        sink["facts"].append(fn)
+        return
     try:
         fn()
     except Exception:
         pass
+
+
+class TurnTxn:
+    """一次对话轮的事务句柄（V16.2 / 架构审批 M3 强制项）。
+
+    背景：`engine.update()` 原本嵌在 `_build_messages()` 里、先于 API 调用执行，
+    于是网络异常 / 校验失败 / 用户取消的轮次同样推进好感、轮次与鬼化阶段，
+    并把「从未发生」的事实镜像进 append-only 的人生账本（无补偿通道）。
+
+    事务语义：
+    - `begin_turn(text)` 在**引擎副本**上推进状态，轮内产生的账本镜像与状态
+      轨迹先入队（sink），不落盘、不影响 `engine` 真身；
+    - `commit()` 把候选状态一次性写回引擎，再统一落地账本与轨迹；
+    - `discard(reason)` 丢弃候选状态与队列，只留一条 `TURN_DISCARDED` 取证记录。
+
+    线程约束：begin/commit/discard 必须在同一线程内完成（当前=LLM worker 线程）。
+    若线程被强杀（QThread.terminate），事务自然悬空——引擎不变，安全。
+    """
+
+    def __init__(self, engine: "HardStateEngine", candidate: "HardStateEngine",
+                 state: "TwinState", sink: Dict[str, List[Any]]) -> None:
+        self.engine = engine
+        self.candidate = candidate
+        self.state = state
+        self.sink = sink
+        self.committed = False
+        self.discarded = False
+
+    def defer_fact(self, fn) -> None:
+        """轮内追加「回复成功才落地」的副作用（如场景首访记账）。"""
+        self.sink["facts"].append(fn)
+
+    def commit(self) -> "TwinState":
+        if self.committed or self.discarded:
+            return self.state
+        self.committed = True
+        self.candidate._sink = None
+        self.engine.apply_dict(self.candidate.to_dict())
+        facts, transitions = self.sink["facts"], self.sink["transitions"]
+        self.sink = {"facts": [], "transitions": []}
+        for fn in facts:
+            _life_mirror(fn)
+        for component, a, b in transitions:
+            _trace_transition(component, a, b)
+        return self.state
+
+    def discard(self, reason: str = "unknown") -> None:
+        if self.committed or self.discarded:
+            return
+        self.discarded = True
+        self.candidate._sink = None
+        dropped = len(self.sink["facts"])
+        self.sink = {"facts": [], "transitions": []}
+        try:
+            from runtime.forensic import record
+            record("TURN_DISCARDED", component="engine",
+                   payload_summary=f"reason={reason} dropped_facts={dropped}")
+        except Exception:
+            pass
 
 
 class StoryArc(str, Enum):
@@ -786,6 +859,20 @@ class HardStateEngine:
         # V13.1：陪伴通道防刷（5涨3停，重启重置；非存档字段）
         self._companion_gains = 0
         self._companion_cooldown = 0
+        # V16.2（M3）：轮内副作用队列（非 None 时镜像/轨迹延迟到事务 commit）
+        self._sink: Optional[Dict[str, List[Any]]] = None
+
+    def begin_turn(self, user_input: str) -> "TurnTxn":
+        """开启一轮事务（V16.2/M3）：状态在**副本**上推进，回复成功才 commit。
+
+        真身 `self` 在本轮内保持不变——GUI 面板/状态栏读 `engine.snapshot()`
+        因此不会在流式过程中跳变，数值在 commit 后统一更新。
+        """
+        candidate = HardStateEngine.from_dict(self.to_dict(), arc=self.arc)
+        sink: Dict[str, List[Any]] = {"facts": [], "transitions": []}
+        candidate._sink = sink
+        state = candidate.update(user_input)
+        return TurnTxn(self, candidate, state, sink)
 
     # ── V16.1（M2）：引擎状态单源序列化 ─────────────────────────────
     # to_dict / from_dict / apply_dict 是存档的唯一入口。此前 GUI 逐字段手动
@@ -1033,7 +1120,7 @@ class HardStateEngine:
         if prev["user_name"] is None and self.user_name:
             self._add_event("name_first", f"第{n}次对话：用户第一次告知名字「{self.user_name}」", text)
             _life_mirror(lambda: _life_ledger_mod().mirror_first_name(
-                self.user_name, engine=self))
+                self.user_name, engine=self), sink=self._sink)
         # 好感等级跃迁
         level_now = self._get_favor_level()
         if level_now > prev["level"]:
@@ -1041,7 +1128,8 @@ class HardStateEngine:
         # 忠诚锁定达成
         if self.locked and not prev["locked"]:
             self._add_event("locked", f"第{n}次对话：好感抵达 95，忠诚锁定达成", text)
-            _life_mirror(lambda: _life_ledger_mod().mirror_loyalty_lock(engine=self))
+            _life_mirror(lambda: _life_ledger_mod().mirror_loyalty_lock(engine=self),
+                         sink=self._sink)
         # 拉姆阶段跃迁
         order = [RamStage.SUSPICIOUS, RamStage.OBSERVING, RamStage.DECENT,
                  RamStage.RELUCTANT, RamStage.ACKNOWLEDGED]
@@ -1051,7 +1139,8 @@ class HardStateEngine:
         # 记忆恢复重逢
         if self.is_reunion and not prev["reunion"]:
             self._add_event("reunion", f"第{n}次对话：记忆恢复，重逢", text)
-            _life_mirror(lambda: _life_ledger_mod().mirror_reunion(engine=self))
+            _life_mirror(lambda: _life_ledger_mod().mirror_reunion(engine=self),
+                         sink=self._sink)
         # 鬼化进入完全解放 / 失控边缘
         if self.oni_stage in (OniStage.FULL, OniStage.BRINK) and self.oni_stage != prev["oni"]:
             label = "完全解放" if self.oni_stage == OniStage.FULL else "失控边缘"
@@ -1059,7 +1148,8 @@ class HardStateEngine:
         # 破局者彩蛋
         if self.breaker_triggered and not prev["breaker"]:
             self._add_event("breaker", f"第{n}次对话：破局者时刻", text)
-            _life_mirror(lambda: _life_ledger_mod().mirror_breaker(engine=self))
+            _life_mirror(lambda: _life_ledger_mod().mirror_breaker(engine=self),
+                         sink=self._sink)
         # 身份肯定（「你不是替代品」式）
         if "替代品" in text and self._is_negated(text, "替代品"):
             self._add_event("affirm", f"第{n}次对话：用户肯定蕾姆是独立的个体", text)
@@ -1070,15 +1160,19 @@ class HardStateEngine:
         # Forensic M4：状态轨迹进黑匣子（跃迁才记录，设计 §4.3）。
         # 崩溃现场可回放数值迁移序列（如「锁定后突然跌档」类问题）。
         if level_now != prev["level"]:
-            _trace_transition("engine.favor", prev["level"].name, level_now.name)
+            _trace_transition("engine.favor", prev["level"].name, level_now.name,
+                              sink=self._sink)
         if self.locked != prev["locked"]:
             _trace_transition("engine.locked",
                               "LOCKED" if prev["locked"] else "UNLOCKED",
-                              "LOCKED" if self.locked else "UNLOCKED")
+                              "LOCKED" if self.locked else "UNLOCKED",
+                              sink=self._sink)
         if ram_now != prev["ram_stage"]:
-            _trace_transition("engine.ram", prev["ram_stage"].value, ram_now.value)
+            _trace_transition("engine.ram", prev["ram_stage"].value, ram_now.value,
+                              sink=self._sink)
         if self.oni_stage != prev["oni"]:
-            _trace_transition("engine.oni", prev["oni"].name, self.oni_stage.name)
+            _trace_transition("engine.oni", prev["oni"].name, self.oni_stage.name,
+                              sink=self._sink)
 
     def _classify_intent(self, text: str) -> Intent:
         lowered = text.lower()

@@ -6,6 +6,48 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.2.1] - 2026-09-22 (命令路由修复——重复定义覆盖导致「未知指令」)
+
+> 真机确认阶段暴露：切换篇章（`/empire` 等）提示「未知指令: /empire」。
+
+### Fixed
+- **重复方法定义覆盖**：`TwinChatApp` 里存在**两份** `_handle_command`（V16.0-mf 加导航栏时在文件后部又写了一份只认 `/status` `/toggle` 的精简版）——类体后定义静默覆盖前定义，于是：
+  - `/mansion` `/empire` `/late` 全部落入「未知指令」（真机症状）；
+  - V10.9.2 的富状态面板（篇章/独立/残香 + 点击关闭）自 V16.0-mf 起变成**死代码**，`/status` 走的是精简版的纯文本 `bot.status()`。
+- 现合并为**唯一路由** `_handle_command`（`gui.py` 上部，带 try/except 守卫 + 大小写/空格归一），并新增 `_apply_arc()` 作为篇章切换唯一路径；`_send_message` 的分散命令判断（`/status` `/recover` `/llm` `/local` 各写一段）一并收敛为「斜杠开头 → 交唯一路由」。
+
+### Added
+- **`tests/test_command_router.py`（+7 用例）**：
+  - **结构守卫**：全项目 AST 扫描「同类内重复方法定义」（property/setter 除外）——这类 bug 不报错、不告警、原测试照样全绿，必须用结构断言兜住；
+  - 路由字面量覆盖断言（防静默删分支）+ 未知分支存在性；
+  - offscreen 行为：三条篇章指令真切换且不报未知指令、`_send_message` 真实入口路径、`/recover` 缺省值、富状态面板复活、未知指令提示。
+
+---
+
+## [V16.2.0] - 2026-09-22 (两阶段提交 M3+M4/M5——架构审批强制整改第 2 批)
+
+> **M3**（状态提交时机 → 两阶段提交）、**M4**（三类失败路径测试）、**M5**（探针 C 假设固化）。范围不含 M6/M7（第 3 批）。含施工中新发现并修复的 P1：场景首访记账**从未生效**。
+
+### Added
+- **`TurnTxn` 事务句柄（`shared/state.py`）**：`begin_turn()` 在**引擎副本**上推进状态，`commit()` 才写回真身并落地账本/轨迹，`discard(reason)` 丢弃并记 `TURN_DISCARDED`（取证可回放「这轮为什么没涨」）
+- **轮内副作用队列（sink）**：`_life_mirror(fn, sink=…)` / `_trace_transition(…, sink=…)` 支持延迟——append-only 账本与状态跃迁轨迹只在提交后写入
+- **`tests/test_turn_commit.py`（+11 用例，零 API）**：API 异常 / 校验失败 / 取消 / 流中断 / stale 会话 / 账本只随提交 / 面板读真身 / 丢弃留痕
+
+### Fixed
+- **失败轮不再推进状态**：此前 `engine.update()` 嵌在 `_build_messages()` 内、先于 API 执行 → 网络抖动、校验失败、用户取消的轮次照样涨好感、涨轮次、进鬼化，并把「从未发生」的事实写进 append-only 账本（审批 A2）
+- **场景首访记账从未生效**：`mirror_scene_first(new_scene, arc_value)` 里 `arc_value` 是**未定义名**，恒抛 `NameError` 且被 `except Exception: pass` 吞掉——人生账本 `scene_first` 一条都没记过（`life.db` 只有 genesis 即证据）
+- **`_active_txn` 生命周期**：提交/丢弃后清空引用，防悬空事务句柄（`reset_session()` 一并丢弃）
+
+### Changed
+- **行为变化（真机确认项）**：流式期间右侧面板/状态栏数值**不再即时跳变**，改为回复成功后统一刷新（`engine.snapshot()` 只反映已提交状态）
+- **决策记录**：world 侧变更（场景切换/时段/事件刷新）仍**即时生效**——「用户动作即事实」；账本事实（scene_first 等）随提交
+
+### 验收
+- 全量 **287/287**（276 → +11）；冒烟 **31/31**；跑完测试后 `data/` 逐字节未变
+- 失败路径四维不变式逐条断言：引擎数值 / history / 账本 kind / 状态快照
+
+---
+
 ## [V16.1.0] - 2026-09-22 (状态持久化止血 M1+M2——架构审批强制整改第 1 批)
 
 > 依据《架构 Spec 审批意见》强制整改：**M1**（memory.json 原子写 + 损坏不静默）、**M2**（引擎状态单源序列化 + 保存/恢复往返等价测试）。范围不含 M3 提交语义（第 2 批）与 M6/M7（第 3 批）。

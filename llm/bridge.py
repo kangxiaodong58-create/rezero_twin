@@ -79,6 +79,8 @@ class ReZeroLLMBridge:
         self._stream_fallback_text: str = ""   # 流式校验失败回避文案（View-Only）
         self._active_stream = None             # 当前流式请求（取消用）
         self._stream_cancelled = False         # 取消标志（生成器内检查）
+        # V16.2（M3）：本轮事务句柄（两阶段提交：begin_turn → commit/discard）
+        self._active_txn = None
         # Forensic M1：会话 generation（stale callback 检测锚点；新会话/重置时递增）
         self._generation = 1
         self._restore_history_from_store()
@@ -155,9 +157,17 @@ class ReZeroLLMBridge:
             self.history = []
 
     def _build_messages(self, user_input: str, reply_to: Optional[Dict[str, Any]] = None):
-        state = self.engine.update(user_input)
+        # V16.2（M3）：两阶段提交——状态先在**引擎副本**上推进（不进真身、不落账本），
+        # 由调用方在回复成功后 commit、失败/取消时 discard。此前这里是
+        # `self.engine.update(user_input)`：API 异常、校验失败、用户取消的轮次
+        # 同样推进数值并把「从未发生」的事实镜像进 append-only 账本（审批 A2）。
+        txn = self.engine.begin_turn(user_input)
+        self._active_txn = txn
+        state = txn.state
+        arc_value = (state.arc.value
+                     if isinstance(getattr(state, "arc", None), StoryArc) else None)
         world = self.world or WorldState.now()
-        profile = StructuredProfile.from_engine(self.engine)
+        profile = StructuredProfile.from_engine(txn.candidate)
         # V14.7：空间场景切换识别（「去厨房」「回房间」→ 更新 world.scene + 开场）
         scene_opening = None
         try:
@@ -170,9 +180,13 @@ class ReZeroLLMBridge:
                     arc=getattr(state, "arc", None).value if getattr(state, "arc", None) else None)
                 logging.info("V14.7 场景切换 → %s", new_scene)
                 # V15.0-M1：场景首访记账（人生账本，幂等去重）
+                # V16.2（M3）：两处修复——① 记账改为随事务提交（commit 才落账，
+                # 失败轮不记）；② 修正 `arc_value` 未定义名（此前恒抛 NameError 被
+                # 下方 except 吞掉 → 场景首访记账**从未生效**，life.db 只有 genesis）。
                 try:
                     from shared.life_ledger import mirror_scene_first
-                    mirror_scene_first(new_scene, arc_value)
+                    txn.defer_fact(lambda s=new_scene, a=arc_value:
+                                   mirror_scene_first(s, a))
                 except Exception:
                     pass
                 # V14.7 优化 O-1：场景切换联动事件——若当前事件地点与新场景冲突
@@ -415,6 +429,7 @@ class ReZeroLLMBridge:
         record("MESSAGE_RECEIVED", component="bridge", generation=self._generation,
                payload_summary=f"len={len(user_input)}")
         messages, state = self._build_messages(user_input, reply_to=reply_to)
+        txn = self._active_txn          # V16.2（M3）：本轮事务（成功才 commit）
         try:
             record("API_REQUEST", component="bridge", generation=self._generation,
                    payload_summary="chat")
@@ -426,6 +441,9 @@ class ReZeroLLMBridge:
                    exception=str(e)[:500])
             logging.warning("chat API 调用失败: %s", e)
             # V11.10.0：错误返回角色格式，不写【系统】（避免被解析器误分类）
+            if txn is not None:
+                txn.discard("api_error")     # V16.2（M3）：失败轮不推进状态、不落账本
+            self._active_txn = None
             self._active_scene_id = None
             self._last_chat_fallback = True
             return '【蕾姆】: "……蕾姆好像没听清。请再说一次好吗？"'
@@ -434,10 +452,16 @@ class ReZeroLLMBridge:
             # 不写场景冷却（mark_interaction 保留：用户确实产生了互动）。
             record("VALIDATION_FAILED", component="bridge", generation=self._generation)
             logging.warning("chat 校验失败重试耗尽，返回 View-Only 兜底（不写 history）")
+            if txn is not None:
+                txn.discard("validation_failed")
+            self._active_txn = None
             self._last_chat_fallback = True
             self._active_scene_id = None
             return reply
         self._last_chat_fallback = False
+        if txn is not None:
+            txn.commit()                 # V16.2（M3）：回复成功 → 状态 + 账本一并落地
+        self._active_txn = None
         self.history.append({"role": "user", "content": user_input})
         self.history.append({"role": "assistant", "content": reply})
         self._trim_history()
@@ -469,6 +493,7 @@ class ReZeroLLMBridge:
           生成器在下一个检查点静默提前结束，不校验、不写 history。
         """
         messages, state = self._build_messages(user_input, reply_to=reply_to)
+        txn = self._active_txn          # V16.2（M3）：本轮事务（成功才 commit）
         record("MESSAGE_RECEIVED", component="bridge", generation=self._generation,
                payload_summary=f"len={len(user_input)}")
         # V13.0：每次调用重置流式状态（防陈旧回传）
@@ -498,11 +523,15 @@ class ReZeroLLMBridge:
                         # 旧会话的回复不得进入新会话（GUI 展示 / history 均不得）
                         record("STALE_CALLBACK_DETECTED", component="bridge",
                                generation=gen, payload_summary="stream generator started stale")
+                        if txn is not None:
+                            txn.discard("stale")   # V16.2（M3）
                         return
                     record("STREAM_START", component="bridge", generation=gen)
                     for chunk in stream:
                         if self._stream_cancelled:
                             # V13.0：用户取消——静默结束，不校验、不写 history
+                            if txn is not None:
+                                txn.discard("cancelled")   # V16.2（M3）
                             return
                         # Forensic M4：chunk 级 stale 拦截（generation 中途变化，
                         # 如旧流在会话重置后继续产出）——记录后中止流：
@@ -511,6 +540,8 @@ class ReZeroLLMBridge:
                             record("STALE_CALLBACK_OBSERVED", component="bridge",
                                    generation=gen,
                                    payload_summary=f"current_gen={self._generation}")
+                            if txn is not None:
+                                txn.discard("stale")   # V16.2（M3）
                             return
                         delta = chunk.choices[0].delta.content
                         if delta:
@@ -518,6 +549,8 @@ class ReZeroLLMBridge:
                             yield delta
 
                     if self._stream_cancelled:
+                        if txn is not None:
+                            txn.discard("cancelled")       # V16.2（M3）
                         return
 
                     # Forensic M4 末尾防线：流结束时已发生会话重置（chunk 检查点
@@ -525,6 +558,8 @@ class ReZeroLLMBridge:
                     if gen != self._generation:
                         record("STALE_CALLBACK_DETECTED", component="bridge",
                                generation=gen, payload_summary="stream finalized stale")
+                        if txn is not None:
+                            txn.discard("stale")           # V16.2（M3）
                         return
 
                     # 流式完整输出结束后校验；失败仅记录日志，不污染 history
@@ -538,6 +573,9 @@ class ReZeroLLMBridge:
                         )
                     if result.ok:
                         self._last_stream_ok = True
+                        if txn is not None:
+                            txn.commit()      # V16.2（M3）：回复成功 → 状态 + 账本落地
+                            self._active_txn = None
                         final = result.cleaned or full
                         self.history.append({"role": "user", "content": user_input})
                         self.history.append({"role": "assistant", "content": final})
@@ -558,6 +596,9 @@ class ReZeroLLMBridge:
                     else:
                         # V13.0：校验失败回传 GUI，由 GUI 展示 View-Only 回避文案
                         self._last_stream_ok = False
+                        if txn is not None:
+                            txn.discard("validation_failed")   # V16.2（M3）
+                            self._active_txn = None
                         self._stream_fallback_text = self._fallback_reply()
                         record("STREAM_VALIDATION_FAILED", component="bridge",
                                generation=gen, payload_summary=result.reason)
@@ -573,9 +614,13 @@ class ReZeroLLMBridge:
                     # 进行中的迭代会抛 httpx.ReadError（WinError 10038）——取消引发的
                     # 读中断应静默结束（V13.0「取消=安静」契约）；真实异常继续上抛。
                     if self._stream_cancelled:
+                        if txn is not None:
+                            txn.discard("cancelled")       # V16.2（M3）
                         return
                     record("STREAM_ERROR", component="bridge", generation=gen,
                            exception=str(e)[:500])
+                    if txn is not None:
+                        txn.discard("stream_error")        # V16.2（M3）：失败轮不落状态
                     raise
                 finally:
                     # V13.0：无论取消/异常/正常结束，关闭底层流并释放引用
@@ -590,6 +635,9 @@ class ReZeroLLMBridge:
             record("API_ERROR", component="bridge", generation=self._generation,
                    exception=str(e)[:500])
             logging.warning("chat_stream API 调用失败: %s", e)
+            if txn is not None:
+                txn.discard("api_error")       # V16.2（M3）：失败轮不推进状态
+            self._active_txn = None
             self._active_scene_id = None
             self._last_stream_ok = False
             self._stream_fallback_text = ""
@@ -635,6 +683,10 @@ class ReZeroLLMBridge:
         self.history = []
         self._active_stream = None
         self._stream_cancelled = False
+        # V16.2（M3）：会话重置时悬空事务一并丢弃（不得让旧轮状态在重置后落地）
+        if self._active_txn is not None:
+            self._active_txn.discard("session_reset")
+            self._active_txn = None
 
     def status(self) -> str:
         state = self.engine.snapshot()
