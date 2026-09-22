@@ -6,6 +6,30 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.5] - 2026-09-22 (GUI 组件树与状态归属审计（只读）)
+
+> SPEC-20260922-07（L0，**零代码改动**）。方法：前端架构反向梳理法（角色 / 锚点 / 诊断标准 / 结构化输出）适配 PySide6。
+
+### Added
+- **新增交付物** `docs/architecture/组件树与状态归属_V16_2026-09-22.md`：A 组件树（Mermaid，54 节点 / 9 子图）· B 状态归属矩阵（**36 行**，每行带 `file:line` 真理源）· C 痛点诊断（H4 / M6 / L4，含证据 + 建议动作 + 建议级别）· D 重构 Roadmap（B0–B8 批次，含依赖与真机确认点）；附**递进式微观梳理**（`gui.py` 内部逻辑树 + 状态归位 + 目标 `ui/` 包结构 + 六步迁移）。
+- **新增 devlog** `docs/devlog/架构可视化审计_2026-09-22.md`（扫描方法、机械判据、三个坑、边界）。
+
+### Changed
+- `docs/architecture/逆向架构Spec_V16_2026-09-22.md`：新增 **A′ 段（A13–A18 新登记）** + **复核更新表**（对 C1/D1/D3/B6/B1/B3/B4/D2 等既有条目的补强，**不重复发 ID**）；台账抬头补「行号基线」说明（既有条目行号漂移 +5~+6，实测校正 8 条）。
+
+### 关键结论（三条）
+- `gui.py` **不只是 UI 文件**：`event_compatible`(248) / 双子解析器(276/298/355) / `highlight_plain_text`(170) / 资源解析(445-565) / `_log`(137) 等约 500 行领域逻辑住在里面——这是巨型文件的真正成因（= **C1** 的机制解释）。
+- **僵尸组件双写**：`rem_panel`/`ram_panel` 已 `hide()`（2095/2232）但仍被 `_update_panels` 推送（3079/3103）（= **D3** 的施工化补强）。
+- **第二 WorldState 仍在生产路径**：`main.py:20/109/113` + `shared/vignette.py:878` 用 `shared.world_state`，GUI 用 `shared.state.WorldState`（= **B6** 定性升级）。
+
+### 验收
+- 机械判据全绿：Mermaid 自检 ✅（54 id / 25 边 / 无重复与悬空）· 真理源抽查 **32/32** ✅ · 覆盖度 44 节点 / 36 行 ✅ · 全文 158 处 `file:line`
+- `pytest tests/ -q` → **295 passed**（零代码改动，确认无回归）· 跑测以 `scripts/verify_isolation.sh` 包裹，`data/` 逐字节未变
+- `git status --porcelain` 只列出本 SPEC 允许的文档文件
+- **未打包 EXE / 未真机**：纯文档产出，无观感/行为变化可确认（交付物 §7 另列 5 条「未确认项」需单独立 L1 探针）
+
+---
+
 ## [V16.3.4] - 2026-09-22 (AGENTS.md 验证章刷新：基线 / 隔离语义 / CI 事实)
 
 > SPEC-20260922-06（L0，纯文档）。
