@@ -6,6 +6,29 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.6] - 2026-09-22 (M7 本地闭环留证 + 发现测试套件不自足（A19）)
+
+> 依据：审计结论《补充约束确认：GitHub 侧不稳定 → M7 判定标准需修订》——M7 事实闭环落在 **L2 本地等价门禁**，L3 远端首跑延至最终搬运日。
+
+### Added
+- **新增留证** `docs/devlog/M7本地闭环留证_2026-09-22.md`：干净克隆（`a010c11`，无 `.env` / 无 `data/` / 无宿主 `PYTHONPATH`）下逐条执行四条判据，附命令与原始结果。
+- `docs/specs/INDEX.md` 新增「M7 闭环判据与豁免条款」段（可审计豁免：**豁免的是「每次提交都推」，不豁免「门禁真实生效」**；L3 可延后不可取消，搬运日必须补全量 CI 并留证）。
+
+### 留证结果（摘要）
+- ② 冒烟：隔离脚本包裹 `tests/smoke_test.py` → **31/31 通过** + `data/` 逐字节未变 ✅
+- ③ 结构守卫：`pytest tests/test_command_router.py` → **7 passed** ✅
+- 跑完后 `find data -type f` = **0**，克隆体 `git status` 干净 ✅
+- ① 全量：**CI 等价环境（`DEEPSEEK_API_KEY=test-key-not-used`，同 `ci.yml`）→ `295 passed` + 隔离校验通过** ✅
+  **但裸干净 checkout（无 `.env`、无 key）→ `9 failed, 286 passed`** ❌ ← 本轮新发现
+
+### Fixed / 待修
+- **A19 [P2] 测试套件不自足**（新登记）：干净 checkout 无 key 时 9 个 `tests/test_ui_offscreen.py` 用例在 `gui.py:1844` 抛 `ValueError: 未找到 DEEPSEEK_API_KEY`；此前未暴露是因为 `ci.yml` 与我的验证脚本都注入了 dummy key。修法（一行）：`tests/conftest.py` import 期 `os.environ.setdefault("DEEPSEEK_API_KEY", "test-key-not-used")`——SPEC 草案见 `SPEC-20260922-08`（待批准）。
+
+### 结论
+**M7 本地闭环当前 = 未完全闭环**（缺口唯一且已定位；A19 修复 + 重新留证后成立）。L3 远端首跑按豁免条款延后至搬运日补。
+
+---
+
 ## [V16.3.5] - 2026-09-22 (GUI 组件树与状态归属审计（只读）)
 
 > SPEC-20260922-07（L0，**零代码改动**）。方法：前端架构反向梳理法（角色 / 锚点 / 诊断标准 / 结构化输出）适配 PySide6。
