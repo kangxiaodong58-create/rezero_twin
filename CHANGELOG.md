@@ -6,6 +6,23 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.9] - 2026-09-23 (F1/F4 只读核对报告 + INDEX 原话逐字/哈希补强)
+
+> 审计批准的两项只读核对（无需 SPEC）。报告：`docs/devlog/F1F4核对报告_2026-09-23.md`。
+
+### Added
+- **F1/F4 只读核对报告**：F1 逐字验证（断流协议正文 `cd32cba` vs `HEAD` **byte-identical**，sha256 `d62b7c44e8c1fea1`，73 行）✅；F4 INDEX 回填核对（9 行 ↔ 9 个 SPEC 文件 ↔ `git log master`/`origin/master` 三方一致）✅。
+
+### Fixed / 补强
+- **F1**：`docs/specs/INDEX.md` 的「远端推送策略」段补入**用户原话逐字**——此前只存了转述、未存原话。
+- **F4**：台账 SPEC-04/06/07/08/09 行的「合入提交」补上真实 squash 哈希（`fbad672`/`b65a1dd`/`07b4f2f` · `89cbb18` · `a010c11` · `0a807fb` · `e4d11e9`），消除「本批次 squash 提交」纯文字占位，使下次 F4 可全机械通过。
+
+### 未跑项及原因
+- **EXE / 真机**：纯文档，无代码与行为变化。
+- `pytest` 未重复执行：本批未触碰任何 `.py`；最近一次全绿 = `e4d11e9` 批次 `295 passed` + 隔离校验通过。
+
+---
+
 ## [V16.3.8] - 2026-09-22 (SPEC-09：AGENTS 债务入口刷新 + F7-1 修订段重复修复)
 
 > SPEC-20260922-09（L0，审计批准；依赖条件 SPEC-08 已满足）。依据：审计结论《SPEC-08 与 SPEC-09 审批 + M7 闭环状态判定》。
