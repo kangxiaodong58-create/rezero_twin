@@ -1,7 +1,8 @@
 ```
 SPEC-ID：SPEC-20260922-08
 级别：L1（局部修复，不改接口；改测试基建一行）
-状态：⏳ 待批准
+状态：✅ 已完成（审计批准 2026-09-23；附加条件已满足）
+分支：fix/SPEC-20260922-08-conftest-self-sufficient（已删除，squash 合入）
 ```
 
 # 测试套件自足化：conftest 注入 dummy API key（闭合 A19 → M7 本地闭环判据①③）
@@ -69,4 +70,20 @@ os.environ.setdefault("DEEPSEEK_API_KEY", "test-key-not-used")
 
 **低**。唯一注意点：若将来有测试要**故意**验证「无 key 时报错」，需在该用例内显式 `monkeypatch.delenv("DEEPSEEK_API_KEY", raising=False)`。已 grep 确认当前**无**此类用例（`tests/` 内对 `DEEPSEEK_API_KEY` 的引用只有 4 处 setenv + 1 处历史注释）。
 
-## 等待批准：是。请回复：**批准 L1 SPEC-20260922-08**
+## 等待批准：已批准（审计结论《SPEC-08 与 SPEC-09 审批 + M7 闭环状态判定》，2026-09-23）
+
+## 执行记录（2026-09-22 深夜）
+
+- **改动**：`tests/conftest.py` 顶部新增 4 行（注释 3 行 + `os.environ.setdefault("DEEPSEEK_API_KEY", "test-key-not-used")`）；提交 `24bb043`。
+- **附加条件（重跑裸干净 checkout 并留证）已满足**：`docs/devlog/M7本地闭环留证_2026-09-22.md` §4 含**命令原文 + 原始输出 + `find data -type f` 结果**：
+  - A) 裸环境（`env -u PYTHONPATH -u DEEPSEEK_API_KEY`）→ `295 passed, 33 warnings in 19.17s` + `✅ 数据隔离校验通过`
+  - B) CI 等价环境（`DEEPSEEK_API_KEY=test-key-not-used`）→ `295 passed, 33 warnings in 16.09s` + `✅ 数据隔离校验通过`
+  - C) 裸环境冒烟 → `31/31 通过` + `✅ 数据隔离校验通过`
+  - D) `find data -type f | wc -l` → `0`；克隆体 `git status` 干净
+- **判据 1–4 全部成立 → M7 本地闭环成立（L2）**。
+- **未跑项及原因**：打包 EXE / 真机——测试基建改动，无观感或行为变化；`gui.py` 生产逻辑未动，`.env` 场景下 `setdefault` 为 no-op。
+
+## 修订
+
+- v1（2026-09-22）：草案。
+- v2（2026-09-22 深夜）：执行完成回填（状态 + 执行记录：裸环境与 CI 等价双 295 passed 留证）。

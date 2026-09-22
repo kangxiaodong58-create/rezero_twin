@@ -30,15 +30,14 @@
 | [SPEC-20260922-05](SPEC-20260922-05-协议修订与旧报告废弃头.md) | L0 | 授权规则入档（AGENTS.md §0）+ V10.4 旧报告废弃头 | ✅ 已完成（用户批准，已推送） | `docs/SPEC-20260922-05-protocol-revision`（已删） | `2b673fb` | 2026-09-22 |
 | [SPEC-20260922-06](SPEC-20260922-06-AGENTS验证章刷新.md) | L0 | AGENTS.md 验证章刷新：基线 294→295 / 隔离语义 / CI 事实 | ✅ 已完成（用户批准） | `docs/SPEC-20260922-06-agents-verification-refresh`（已删） | 本批次 squash 提交（本地，随批量推送） | 2026-09-22 |
 | [SPEC-20260922-07](SPEC-20260922-07-GUI组件树与状态归属审计.md) | L0（零代码，证据深度按 L2 交付） | GUI 组件树 + 状态真理源矩阵 + 架构痛点诊断 + 重构 Roadmap（前端架构反向梳理法 · PySide6 版） | ✅ 已完成（用户批准） | `audit/SPEC-20260922-07-gui-arch-audit`（已删） | 本批次 squash 提交（本地，随批量推送） | 2026-09-22 |
-| [SPEC-20260922-08](SPEC-20260922-08-conftest自足化.md) | L1 | 测试套件自足化：conftest 注入 dummy API key（闭合 A19 → M7 本地闭环判据①③） | ⏳ **待批准** | — | — | 2026-09-22 |
+| [SPEC-20260922-08](SPEC-20260922-08-conftest自足化.md) | L1 | 测试套件自足化：conftest 注入 dummy API key（闭合 A19 → M7 本地闭环判据①③） | ✅ 已完成（审计批准；裸环境 + CI 等价双 295 passed 留证） | `fix/SPEC-20260922-08-conftest-self-sufficient`（已删） | 本批次 squash 提交（本地，随批量推送） | 2026-09-22 |
 | [SPEC-20260922-09](SPEC-20260922-09-AGENTS债务入口刷新.md) | L0 | AGENTS.md §8 债务入口刷新（A1–A19 / M1–M7 全落地）+ §2 门禁闭环口径指针 | ⏳ **待批准**（依赖 SPEC-08 先执行） | — | — | 2026-09-22 |
 
 ## ⏳ 待批准清单（等你一句话才动文件）
 
 | SPEC | 级别 | 一句话 | 依据 |
 |---|---|---|---|
-| [SPEC-20260922-08](SPEC-20260922-08-conftest自足化.md) | L1 | conftest 注入 dummy API key（一行）——闭合 A19，使「干净 checkout 裸跑即全绿」成立 | `docs/devlog/M7本地闭环留证_2026-09-22.md` §2 实测 `9 failed, 286 passed` |
-| [SPEC-20260922-09](SPEC-20260922-09-AGENTS债务入口刷新.md) | L0 | AGENTS.md §8 债务入口刷新（A1–A19 / M1–M7 全落地）+ §2 增「门禁闭环口径」指针 | M7 判定修订 + 台账实况；**依赖 SPEC-08** |
+| [SPEC-20260922-09](SPEC-20260922-09-AGENTS债务入口刷新.md) | L0 | AGENTS.md §8 债务入口刷新（A1–A19 / M1–M7 全落地）+ §2 增「门禁闭环口径」指针 | M7 判定修订 + 台账实况；**依赖 SPEC-08 = 已满足**（08 已执行并留证）✅ |
 
 **除此之外无待批准 SPEC。** 需要时我按 `docs/agents/SPEC_AGENT.md` 的格式起草新 SPEC 落到本目录，并在此登记状态。
 
@@ -104,7 +103,8 @@
 
 - 留证据：`docs/devlog/M7本地闭环留证_2026-09-22.md`（干净克隆 `a010c11`，逐条命令与原始输出）。
 - 判据 ②③④ 成立；判据 ① 在 **CI 等价环境**（`DEEPSEEK_API_KEY=test-key-not-used`，同 `ci.yml:25`）成立（`295 passed` + 隔离通过），**裸环境不成立**（`9 failed, 286 passed`，全部 `test_ui_offscreen.py` 缺 key）→ 缺口 = **A19**，修法见 `SPEC-20260922-08`。
-- **M7 本地闭环 = 待 SPEC-08 执行后正式成立**；L3 远端首跑 → 搬运日补，结果同样须留证。
+- **M7 本地闭环 = ✅ 已成立（L2，2026-09-22）**：SPEC-08 执行后**裸环境**（`env -u PYTHONPATH -u DEEPSEEK_API_KEY`）与 **CI 等价环境**均 `295 passed` + 隔离校验通过；留证见 devlog §4。
+- L3 远端首跑 → 搬运日补，结果同样须留证（**未完成，不可取消**）。
 
 ## 范围外变更请求（RCR）模板
 

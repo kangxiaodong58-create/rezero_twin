@@ -22,6 +22,10 @@ os.environ.setdefault(
 os.environ.setdefault(
     "REZERO_GUI_LOG",
     os.path.join(tempfile.mkdtemp(prefix="rz-log-test-"), "gui.log"))
+# A19（M7 本地闭环留证暴露）：套件自足——干净 checkout 无 .env 时，构造 TwinChatApp
+# 的用例在 gui.py:1844（_create_bot）抛 ValueError: 未找到 DEEPSEEK_API_KEY（9 例）。
+# setdefault 不覆盖环境中已有的真实 key；测试全程零 API 调用，dummy 仅过存在性检查。
+os.environ.setdefault("DEEPSEEK_API_KEY", "test-key-not-used")
 
 
 @pytest.fixture(autouse=True)

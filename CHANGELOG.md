@@ -6,6 +6,24 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.7] - 2026-09-22 (A19 修复：conftest 自足化 → M7 本地闭环成立)
+
+> SPEC-20260922-08（L1，审计批准）。附加条件已满足：重跑裸干净 checkout 并留证（`docs/devlog/M7本地闭环留证_2026-09-22.md` §4，含命令原文 + 原始输出 + `find data` 结果）。
+
+### Fixed
+- `tests/conftest.py` 顶部新增 `os.environ.setdefault("DEEPSEEK_API_KEY", "test-key-not-used")`：干净 checkout（无 `.env`）下不再有 9 例 `tests/test_ui_offscreen.py` 因缺 key 而失败；`setdefault` 不覆盖真实 key，测试零 API 调用。
+
+### 留证（干净克隆 `24bb043`，无 `.env` / 无 `data/`）
+- **裸环境**（`env -u PYTHONPATH -u DEEPSEEK_API_KEY`）→ `295 passed` + 隔离校验通过 ✅
+- **CI 等价环境**（`DEEPSEEK_API_KEY=test-key-not-used`）→ `295 passed` + 隔离校验通过 ✅
+- **裸环境冒烟** → `31/31 通过` + 隔离校验通过 ✅
+- `find data -type f` = **0**；克隆体 `git status` 干净 ✅
+
+### 结论
+**M7 本地闭环成立（L2）**：四条判据 ①②③④ 全部成立。L3 远端首跑按豁免条款延至最终搬运日补（不可取消）。
+
+---
+
 ## [V16.3.6] - 2026-09-22 (M7 本地闭环留证 + 发现测试套件不自足（A19）)
 
 > 依据：审计结论《补充约束确认：GitHub 侧不稳定 → M7 判定标准需修订》——M7 事实闭环落在 **L2 本地等价门禁**，L3 远端首跑延至最终搬运日。
