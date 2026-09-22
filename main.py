@@ -51,6 +51,11 @@ def run_llm(world: WorldState) -> None:
         conversation_store=conv_store,
     )
     bot.world = world
+    # V16.1（M2）：与 GUI 走同一恢复入口（CLI 此前完全不恢复引擎状态）
+    from shared.memory_store import MemoryStore
+    _mem = MemoryStore().load()
+    _saved_engine = _mem.get("engine")
+    bot.engine.apply_dict(_saved_engine if isinstance(_saved_engine, dict) else _mem)
     print("Re:Zero 双子系统已启动（LLM 桥接模式）")
     print("输入 status 查看硬状态 | empire / mansion / recover 0.7 切换状态 | quit 退出\n")
     try:

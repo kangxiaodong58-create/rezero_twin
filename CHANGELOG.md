@@ -6,6 +6,34 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.1.0] - 2026-09-22 (状态持久化止血 M1+M2——架构审批强制整改第 1 批)
+
+> 依据《架构 Spec 审批意见》强制整改：**M1**（memory.json 原子写 + 损坏不静默）、**M2**（引擎状态单源序列化 + 保存/恢复往返等价测试）。范围不含 M3 提交语义（第 2 批）与 M6/M7（第 3 批）。
+
+### Added
+- **`HardStateEngine.to_dict() / from_dict() / apply_dict()`（`shared/state.py`）**：引擎状态唯一序列化入口。此前 GUI 逐字段手动赋值是**第三处真源**——`_save_state` 写 9 键、`_create_bot` 只读 6 键、`memory_store.load()` 默认值又是第三份清单
+- **`MemoryStore` 原子写 + 备份轮转（`shared/memory_store.py`）**：`.tmp` → flush+fsync → 备份旧档 `.bak` → `os.replace`；`schema_version=2`
+- **损坏三级降级**：主档不可解析 → 从 `.bak` 恢复并原子写回（记 WARNING + 取证 `SAVE_REPAIRED_FROM_BACKUP`）；主档与备份皆坏 → 坏档改名 `memory.json.corrupt-<时间戳>` 留证 + `SAVE_CORRUPTED` 告警，**之后**才回落默认值
+- **`REZERO_GUI_LOG` 环境变量**（`gui.py`）：日志路径运行时可覆盖——测试/CI 不再追加写真实 `data/gui.log`
+- **`tests/test_state_persistence.py`（+13 用例）**：往返等价 / 重启存活 / 旧平铺格式兼容 / 坏字段容错 / 死字段回归 / 原子写与损坏恢复 / 晚绑定契约 / GUI 端到端
+
+### Fixed
+- **存档写读不对称（隐性数据蒸发）**：`locked` 写了不恢复；`oni_stage / oni_aftermath / witch_scent / is_reunion / breaker_triggered / turn_count / consecutive_*` **从不落盘** → 每次重启鬼化阶段、魔女残香、连续负面（`wants_push` 依赖）全部归零。现全部随存档往返
+- **死状态 `engine.context_emotions / open_topics`**：只在初始化与裁剪处出现、从未被写入 → prompt 与状态面板的「近期情绪倾向」**恒为「平稳」**。已删除，真源收敛到 `profile.context`（新增 `_context_summary()`）
+- **`memory_store` 数据目录 import 期绑定**：`from .config import get_data_dir` 使测试对 `shared.config.get_data_dir` 的补丁失效 → 真实 `data/memory.json` 被测试写坏（源码树存档的 `world_state`（场景/来信冷却/问候标记/活跃事件/离线天数）已被覆盖过；`dist/data/` 实战存档未受影响）。改为 `config.get_data_dir()` 调用时解析
+- **测试隔离漏洞（两处 `tests/`）**：`test_motion` / `test_status_dashboard` 构造主窗口未隔离存储，`win.close()` 的 `_save_state` 写真实存档；同时补齐 `DEEPSEEK_API_KEY` 占位（CI 无 .env 可跑）
+
+### Changed
+- `main.py`（CLI）：与 GUI 共用恢复入口（此前 CLI 完全不恢复引擎状态）
+- `.gitignore`：`data/memory.json` → `data/memory.json*`（覆盖 `.bak` / `.corrupt-*`）
+- 旧平铺键**双写一版**（`_save_state` 同时写 `engine` 新键与旧 9 键，读取优先新键）——`life_archive` 导出/导入与回滚兼容，下版本删旧键
+
+### 验收
+- 全量 **276/276 通过**（263 → +13）；`data/` 隔离实测：跑完测试后 `memory.json / .bak / gui.log / life.db / conversations.db / vignette_cache.json` 的 mtime+size **逐字节未变**
+- 真实存档只读校验：源码树与 dist 存档均可被新代码解析恢复（`favor / ram_favor / independence / recovery / locked / arc / events / user_name` 一致，`engine` 键与平铺键同值）
+
+---
+
 ## [V16.0.0-mf] - 2026-08-29 (表现层 M_F——三分栏架构重构 + Character Dashboard + 世界状态映射)
 
 > 按「界面 UI 布局深度解析」完成架构级重排：左导航 12~14% / 中央 58~62% / 右状态 24~28%；顶部世界状态 ambient；右侧从单面板升级为 **Character Dashboard 双卡**（Persistent State：头像/心情/正在做/关系阶段/好感/忠诚）；状态反馈全面世界内化。缺失图片资源未随意添加（立绘层结构预留）。

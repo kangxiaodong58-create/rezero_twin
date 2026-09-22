@@ -104,6 +104,13 @@ def test_stagger_reveal_enabled_hides_then_reveals(monkeypatch, qtapp):
 def test_append_message_accepts_motion_delay(qtapp, tmp_path, monkeypatch):
     """历史回放级联参数透传：offscreen 禁用态下 animate+delay 不破坏插入。"""
     import gui
+    from shared.conversation_store import ConversationStore
+    from shared.memory_store import MemoryStore
+    # V16.1：存储隔离——此前 win.close() 的 _save_state 会写真实 data/memory.json
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key-not-used")
+    monkeypatch.setattr(gui, "MemoryStore", lambda: MemoryStore(root_dir=str(tmp_path)))
+    monkeypatch.setattr(gui, "ConversationStore",
+                        lambda: ConversationStore(db_path=str(tmp_path / "conv.db")))
     monkeypatch.setattr(gui, "_load_history", lambda self: None, raising=False)
     win = gui.TwinChatApp()
     win.show()

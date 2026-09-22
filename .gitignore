@@ -17,7 +17,7 @@ dist/
 .env
 
 # Runtime data
-data/memory.json
+data/memory.json*
 
 # OS
 Thumbs.db

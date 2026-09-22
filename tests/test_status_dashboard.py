@@ -77,6 +77,13 @@ def test_dashboard_data_injection(qtapp):
 def test_gui_dashboard_integration(qtapp, tmp_path, monkeypatch):
     """offscreen 主窗口：Dashboard 存在、_refresh_ambient 映射生效。"""
     import gui
+    from shared.conversation_store import ConversationStore
+    from shared.memory_store import MemoryStore
+    # V16.1：存储隔离——此前 win.close() 的 _save_state 会写真实 data/memory.json
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "test-key-not-used")
+    monkeypatch.setattr(gui, "MemoryStore", lambda: MemoryStore(root_dir=str(tmp_path)))
+    monkeypatch.setattr(gui, "ConversationStore",
+                        lambda: ConversationStore(db_path=str(tmp_path / "conv.db")))
     monkeypatch.setenv("REZERO_LIFE_DB", str(tmp_path / "life.db"))
     from shared import life_ledger
     life_ledger.reset_default()

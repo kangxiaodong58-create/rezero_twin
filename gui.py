@@ -126,13 +126,19 @@ from runtime.forensic import record, shutdown_forensic, init_forensic
 # 日志与持久化统一走 get_data_dir()：
 # frozen 时指向 EXE 同级 data/，源码时指向项目根 data/。
 # 切勿用 _PROJECT_ROOT（frozen 下是 _MEIPASS 临时目录，退出即丢）。
-_LOG_PATH = os.path.join(get_data_dir(), "gui.log")
+# V16.1：支持 REZERO_GUI_LOG 覆盖——测试/CI 不得追加写真实 data/gui.log。
+def _log_path() -> str:
+    return os.environ.get("REZERO_GUI_LOG") or os.path.join(get_data_dir(), "gui.log")
+
+
+_LOG_PATH = _log_path()
 
 
 def _log(msg: str) -> None:
     try:
-        os.makedirs(os.path.dirname(_LOG_PATH), exist_ok=True)
-        with open(_LOG_PATH, "a", encoding="utf-8") as f:
+        path = _log_path()
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        with open(path, "a", encoding="utf-8") as f:
             f.write(f"[{datetime.now().isoformat()}] {msg}\n")
             f.flush()
             os.fsync(f.fileno())
@@ -1845,13 +1851,12 @@ class TwinChatApp(QMainWindow):
                 conversation_store=self.conv_store,
                 world=self.world,  # V14.7：注入持久化世界状态（场景切换跨会话保持）
             )
-            bot.engine.favor = self.mem.get("favor", 15)
-            bot.engine.ram_favor = self.mem.get("ram_favor", 8)
-            bot.engine.independence = self.mem.get("independence", 0.25)
-            bot.engine.recovery = self.mem.get("recovery", 1.0)
-            bot.engine.events = list(self.mem.get("events", []))
-            bot.engine.user_name = self.mem.get("user_name")
-            _log("LLM bot 创建成功")
+            # V16.1（M2）：存档恢复唯一入口——优先新格式 engine 键，回落旧平铺键。
+            # 修 V16.0 及以前的写读不对称：locked 写了不读，oni_stage/witch_scent/
+            # turn_count/consecutive_* 根本不落盘（重启归零）。
+            saved_engine = self.mem.get("engine")
+            bot.engine.apply_dict(saved_engine if isinstance(saved_engine, dict) else self.mem)
+            _log("LLM bot 创建成功（引擎状态已恢复）")
             return bot
         except Exception as e:
             _log(f"LLM bot 创建失败: {e}")
@@ -3341,6 +3346,9 @@ class TwinChatApp(QMainWindow):
             data = self.store.load()
             data.update({
                 "mode": self.mode,
+                # V16.1（M2）：单源序列化（新键，含 locked/oni/turn_count 等全字段）
+                "engine": engine.to_dict(),
+                # 旧平铺键：双写一版（life_archive / 外部读取与回滚兼容，下版本删）
                 "arc": engine.arc.value,
                 "favor": engine.favor,
                 "ram_favor": engine.ram_favor,

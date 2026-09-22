@@ -15,3 +15,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 os.environ.setdefault(
     "REZERO_LIFE_DB",
     os.path.join(tempfile.mkdtemp(prefix="rz-life-test-"), "life.db"))
+# V16.1：GUI 日志隔离——测试期 _log 曾追加写真实 data/gui.log。
+os.environ.setdefault(
+    "REZERO_GUI_LOG",
+    os.path.join(tempfile.mkdtemp(prefix="rz-log-test-"), "gui.log"))

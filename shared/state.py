@@ -779,8 +779,6 @@ class HardStateEngine:
         self.consecutive_procrastinate = 0
         self.is_reunion = False
         self.breaker_triggered = False
-        self.context_emotions: List[str] = []
-        self.open_topics: List[str] = []
         self.profile = UserProfile()
         # 长期事件记忆与对话计数（v9.3.0）
         self.events: List[Dict[str, Any]] = []
@@ -788,6 +786,146 @@ class HardStateEngine:
         # V13.1：陪伴通道防刷（5涨3停，重启重置；非存档字段）
         self._companion_gains = 0
         self._companion_cooldown = 0
+
+    # ── V16.1（M2）：引擎状态单源序列化 ─────────────────────────────
+    # to_dict / from_dict / apply_dict 是存档的唯一入口。此前 GUI 逐字段手动
+    # 赋值：_save_state 写 9 键、_create_bot 读 6 键 —— locked 写了不读，
+    # oni_stage / witch_scent / turn_count / consecutive_* 根本不落盘，
+    # 重启即归零（架构审批 M2 强制整改项）。
+    # 有意不持久化：_companion_gains/_companion_cooldown（V13.1 设计：重启重置）。
+
+    def to_dict(self) -> Dict[str, Any]:
+        """全字段快照（可直接 json 序列化，无枚举对象）。"""
+        return {
+            "schema_version": 2,
+            "arc": self.arc.value,
+            "favor": self.favor,
+            "locked": self.locked,
+            "independence": self.independence,
+            "recovery": self.recovery,
+            "ram_favor": self.ram_favor,
+            "oni_stage": self.oni_stage.name,
+            "oni_aftermath": self.oni_aftermath,
+            "witch_scent": self.witch_scent,
+            "user_name": self.user_name,
+            "consecutive_negative": self.consecutive_negative,
+            "consecutive_procrastinate": self.consecutive_procrastinate,
+            "is_reunion": self.is_reunion,
+            "breaker_triggered": self.breaker_triggered,
+            "turn_count": self.turn_count,
+            "events": [dict(ev) for ev in self.events],
+            "profile": {
+                "name": self.profile.name,
+                "patterns": dict(self.profile.interaction_patterns),
+                "context": {
+                    "emotional_trajectory": list(self.profile.context.emotional_trajectory),
+                    "open_topics": list(self.profile.context.open_topics),
+                    "last_drop_reason": self.profile.context.last_drop_reason,
+                },
+            },
+        }
+
+    @classmethod
+    def from_dict(cls, data: Optional[Dict[str, Any]],
+                  arc: StoryArc = StoryArc.MANSION_ERA) -> "HardStateEngine":
+        """从存档构造引擎（缺字段取默认；旧平铺格式亦兼容）。"""
+        engine = cls(arc=arc)
+        engine.apply_dict(data or {})
+        return engine
+
+    def apply_dict(self, data: Optional[Dict[str, Any]]) -> None:
+        """把存档写回当前引擎（保存/恢复唯一入口；容错旧平铺格式）。
+
+        旧格式：顶层直接是 favor / ram_favor / independence / recovery /
+        events / user_name / arc / locked（V16.0 及以前）——同样被接受，
+        因此调用方可无条件传 `mem.get("engine") or mem`。
+        """
+        if not isinstance(data, dict) or not data:
+            return
+
+        def _num(key: str, default, cast=float):
+            v = data.get(key, None)
+            if v is None:
+                return default
+            try:
+                return cast(v)
+            except (TypeError, ValueError):
+                return default
+
+        def _bool(key: str, default: bool) -> bool:
+            v = data.get(key, None)
+            return default if v is None else bool(v)
+
+        arc_value = data.get("arc")
+        if arc_value:
+            try:
+                self.arc = StoryArc(arc_value)
+            except ValueError:
+                pass  # 未知篇章保持当前值
+
+        self.favor = _num("favor", self.favor, int)
+        self.locked = _bool("locked", self.locked)
+        self.independence = _num("independence", self.independence)
+        self.recovery = _num("recovery", self.recovery)
+        self.ram_favor = _num("ram_favor", self.ram_favor, int)
+        self.oni_aftermath = _num("oni_aftermath", self.oni_aftermath, int)
+        self.witch_scent = _num("witch_scent", self.witch_scent, int)
+        self.consecutive_negative = _num("consecutive_negative",
+                                         self.consecutive_negative, int)
+        self.consecutive_procrastinate = _num("consecutive_procrastinate",
+                                              self.consecutive_procrastinate, int)
+        self.is_reunion = _bool("is_reunion", self.is_reunion)
+        self.breaker_triggered = _bool("breaker_triggered", self.breaker_triggered)
+        self.turn_count = _num("turn_count", self.turn_count, int)
+
+        oni_name = data.get("oni_stage")
+        if isinstance(oni_name, str):
+            try:
+                self.oni_stage = OniStage[oni_name]
+            except KeyError:
+                pass
+
+        name = data.get("user_name", None)
+        self.user_name = str(name) if name else None
+        self.profile.name = self.user_name
+
+        events = data.get("events")
+        if isinstance(events, list):
+            self.events = [dict(ev) for ev in events if isinstance(ev, dict)]
+
+        profile = data.get("profile")
+        if isinstance(profile, dict):
+            patterns = profile.get("patterns")
+            if isinstance(patterns, dict):
+                self.profile.interaction_patterns = {
+                    str(k): int(v) for k, v in patterns.items()
+                    if isinstance(v, (int, float))
+                }
+            pname = profile.get("name")
+            if pname:
+                self.profile.name = str(pname)
+            ctx = profile.get("context")
+            if isinstance(ctx, dict):
+                traj = ctx.get("emotional_trajectory")
+                if isinstance(traj, list):
+                    self.profile.context.emotional_trajectory = [str(x) for x in traj][-5:]
+                topics = ctx.get("open_topics")
+                if isinstance(topics, list):
+                    self.profile.context.open_topics = [str(x) for x in topics][-4:]
+                drop = ctx.get("last_drop_reason")
+                self.profile.context.last_drop_reason = str(drop) if drop else None
+
+    def _context_summary(self) -> str:
+        """上下文摘要（V16.1：真源收敛）。
+
+        此前 update()/snapshot() 读 `engine.context_emotions`，而该字段只在
+        初始化与裁剪处出现、**从未被写入** → 摘要首段恒为「平稳」，prompt 里
+        永远是失真信号。现统一取 profile.context（唯一真源）。
+        """
+        traj = self.profile.context.emotional_trajectory
+        head = (f"近期情绪倾向: {' → '.join(traj[-3:])}" if traj
+                else "近期情绪倾向: 平稳")
+        return f"{head} | {self.profile.context.brief()}"
 
     def _get_favor_level(self) -> FavorLevel:
         for lv in reversed(FavorLevel):
@@ -1108,14 +1246,7 @@ class HardStateEngine:
         self.profile.record_pattern(intent.value)
 
         # 上下文摘要
-        if len(self.context_emotions) > 5:
-            self.context_emotions = self.context_emotions[-5:]
-        summary = (
-            f"近期情绪倾向: {' → '.join(self.context_emotions[-3:])}"
-            if self.context_emotions
-            else "平稳"
-        )
-        summary += f" | {self.profile.context.brief()}"
+        summary = self._context_summary()
 
         # 重要时刻检测（长期事件记忆，v9.3.0）
         self._detect_events(text, intent, prev)
@@ -1152,17 +1283,12 @@ class HardStateEngine:
         返回与 update() 末尾相同字段的 TwinState，但保证零副作用：
         - 不推进鬼化余韵、不改变鬼化阶段
         - 不衰减连续负面 / 连续拖延计数
-        - 不记录意图、不裁剪 context_emotions、不写 profile
+        - 不记录意图、不写 profile
 
         专供状态显示（status 指令 / GUI 状态栏）使用；
         真实用户输入的状态更新仍必须走 update()。
         """
-        summary = (
-            f"近期情绪倾向: {' → '.join(self.context_emotions[-3:])}"
-            if self.context_emotions
-            else "平稳"
-        )
-        summary += f" | {self.profile.context.brief()}"
+        summary = self._context_summary()
 
         favor_level = self._get_favor_level()
         wants_push = favor_level >= FavorLevel.DEAR and (
