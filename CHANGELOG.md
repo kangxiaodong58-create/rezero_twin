@@ -6,6 +6,27 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.4.0] - 2026-09-23 (第 4 批：GUI 首梯队 B0–B2 零观感 + 债务 A13/A15/A16/A17 收口)
+
+> SPEC-20260922-12（L0+L1，用户批准 + F12-1/2/3 前置检查）。施工记录：`docs/devlog/第4批B0B2零观感梯队_2026-09-23.md`。
+
+### 改动（4 条提交，可单项回滚）
+- **B0（A16/A17）**：删除工作区破坏性脚本 `test_mode.py`（`test_mode.py:11-12` 会 `os.remove` 真实存档；全文已留档 SPEC 附录）；顶栏角色 tab / 「双子模式」标签加显式注释标注为**装饰性死 UI**（零观感变化）。
+- **B1（A13）**：`self.mem` 陈旧快照**全部 8 处引用清零**（复核修正：台账原记「读点仅 2 处」；实为 8 处）——加载期读走局部变量，运行期读一律 `store.load()` 现读（`_create_bot` 的 `arc`/`engine` 改现读并复用同一份 `saved`）。
+- **B2-A3**：`mode` 字段**全链删除**（读/写/判定 + `MemoryStore` 默认值 + smoke 断言改「已删除」守卫）。`/toggle` 命令**保留**——只读侦察发现它仍绑定顶栏「设置」入口（删了会变「未知指令」，属交互回归）。
+- **B2-A15**：世界行收口为 `format_world_line()`（截断长度/分隔符/行首参数化，调用点现值保留 ⇒ **文案零变化**）。
+- **B2-D3**：拉姆「档位 → 表情」查表出库 `design_tokens`（`RAM_EMOTION_BY_STAGE` 等 4 个 token），优先级链原序不动 ⇒ **视觉零变化**。
+
+### 验证（全部真跑留证）
+- 全量测试 **295 passed** + 数据隔离校验通过（`scripts/verify_isolation.sh` 包裹）；冒烟 **31/31**。
+- 机械判据：A15 **180 组用例逐字等价**（6 时段 × 3 天气 × 10 事件，失配 0）；D3 token 与旧字面量全等；`grep -c "self\.mem|self\.mode|ram_emotion_map|ev\[:14\]|ev\[:16\]"` 全为 **0**。
+- **A18 实测**（只读探针）：现行 `_log`(open+write+flush+fsync) **729 µs/条** vs 缓冲写 **8 µs/条** → **94×**；改与否另批定（数据入 devlog）。
+
+### 范围注记
+- `shared/memory_store.py`、`tests/smoke_test.py` 的改动为审计 **F12-3** 指令连带（RCR-12-1）；两份台账回填为 RCR-12-2。
+
+---
+
 ## [V16.3.12] - 2026-09-23 (L3 远端门禁转绿 → M7 完整闭环（L2+L3）)
 
 > SPEC-20260922-11（L0）。留证：`docs/devlog/L3远端首跑留证_2026-09-23.md` §7.4 / §8。

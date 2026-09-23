@@ -77,7 +77,6 @@ class MemoryStore:
             "recovery": 1.0,
             "arc": "mansion_era",
             "chat_history": [],
-            "mode": "llm",
             "events": [],
         }
 

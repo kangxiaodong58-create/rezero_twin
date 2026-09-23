@@ -154,8 +154,9 @@ _log(f"=== PySide6 GUI 启动 (python={sys.executable}) ===")
 # ═══════════════════════════════════════════════
 from design_tokens import (  # noqa: E402
     COLORS, DIM, ELEVATION, FONT_FAMILY, FONT_SIZE, LAYOUT, MOTION,
-    RADIUS, ROLE_BUBBLE_FALLBACK, ROLE_BUBBLE_STYLES, ROLE_COLORS,
-    SPACING, SURFACE, SURFACE_TINT, TYPE,
+    RADIUS, RAM_EMOTION_BY_STAGE, RAM_EMOTION_DEFAULT, RAM_EMOTION_ONI,
+    RAM_EMOTION_WITCH, ROLE_BUBBLE_FALLBACK, ROLE_BUBBLE_STYLES,
+    ROLE_COLORS, SPACING, SURFACE, SURFACE_TINT, TYPE,
 )
 
 
@@ -271,6 +272,26 @@ def event_compatible(period: str, weather: str, event: str) -> bool:
             return False
 
     return True
+
+
+def format_world_line(period: str, weather: str, event: str, *,
+                      max_event: int = 14, prefix: str = "",
+                      head: bool = True, suffix_sep: str = " · ") -> str:
+    """A15（SPEC-20260922-12 B2）：世界行**唯一**格式化实现。
+
+    此前 `_refresh_ambient` 与 `_update_status_bar` 各自内联「事件相容判定 + 截断」，
+    两处截断长度还不一致（14 / 16 字）。本函数收口为单一实现，
+    截断长度、分隔符、是否带 `period · weather` 行首全部参数化——
+    **调用点现值原样保留 ⇒ 文案零变化**（是否统一长度属观感决策，留待真机批次）。
+
+    head=False 时只返回事件后缀（供状态栏拼接用）。
+    """
+    ev = event or ""
+    head_txt = f"{prefix}{period} · {weather}" if head else ""
+    if ev and event_compatible(period, weather, ev):
+        ev_short = ev[:max_event] + "…" if len(ev) > max_event else ev
+        return f"{head_txt}{suffix_sep}{ev_short}"
+    return head_txt
 
 
 def match_speaker_tag(line: str) -> tuple:
@@ -1658,19 +1679,23 @@ class TwinChatApp(QMainWindow):
         # MemoryStore() 无参：统一走 get_data_dir()（frozen → EXE 同级 data/）
         # 禁止传 _PROJECT_ROOT：frozen 下指向 _MEIPASS，world_state 会丢
         self.store = MemoryStore()
-        self.mem = self.store.load()
+        # A13（SPEC-20260922-12 B1）：加载期一次性读取 → **局部变量**。
+        # 此前是**长期驻留的加载期快照属性**，任何后续代码读它都会静默拿到陈旧值。
+        # 运行期需要存档数据时一律 `self.store.load()` 现读（见 `_create_bot`）。
+        mem = self.store.load()
         self.conv_store = ConversationStore()
-        _log(f"记忆加载: mode={self.mem.get('mode')} arc={self.mem.get('arc')} data={self.store.path}")
+        _log(f"记忆加载: arc={mem.get('arc')} data={self.store.path}")
 
         # 迁移旧 JSON chat_history → SQLite（仅首次）
-        old_history = self.mem.get("chat_history", [])
+        old_history = mem.get("chat_history", [])
         if old_history:
             migrated = self.conv_store.migrate_from_json(old_history)
             if migrated:
                 _log(f"SQLite 迁移: {migrated} 条旧消息")
                 self.store.set("chat_history", [])  # 清空 JSON 中的旧历史
 
-        self.mode = self.mem.get("mode", "llm")
+        # A3 收口（SPEC-20260922-12 B2）：`mode` 字段随「本地模板模式下线」一并删除
+        # （V14.4 Phase C 起 LLM 已是唯一运行模式，字段早已无实际切换作用）。
         self._streaming_bubbles: list[ChatMessageWidget] = []  # V11.11：多临时泡列表
         self._streaming_buffer: str = ""
         self._streaming_active: bool = False
@@ -1687,7 +1712,7 @@ class TwinChatApp(QMainWindow):
 
         # 世界状态（持久化）
         from shared.state import WorldState
-        saved_world = self.mem.get("world_state")
+        saved_world = mem.get("world_state")
         self.world = WorldState.load_or_create(saved_world)
         _log(f"世界加载: {self.world.period} {self.world.weather}")
 
@@ -1777,7 +1802,7 @@ class TwinChatApp(QMainWindow):
                      or os.environ.get("QT_QPA_PLATFORM", "") == "offscreen"
                      or not os.getenv("DEEPSEEK_API_KEY"))
         llm_callable = None
-        if not safe_path and self.mode == "llm" and hasattr(self.bot, "raw_completion"):
+        if not safe_path and hasattr(self.bot, "raw_completion"):
             llm_callable = lambda p: self.bot.raw_completion(  # noqa: E731
                 "你是《Re:Zero》双子（蕾姆第三人称自称、拉姆毒舌而温柔）。"
                 "写一张纪念卡的正文，30-60 字，只输出正文。",
@@ -1832,11 +1857,9 @@ class TwinChatApp(QMainWindow):
 
     def _create_bot(self):
         # V14.4（Phase C）：本地模式移除——LLM 是唯一运行模式（退场研判）
-        _log(f"_create_bot mode={self.mode}")
-        if self.mode != "llm":
-            # 存档里残留的 local 模式强制回 LLM（本地模板模式已下线）
-            self.mode = "llm"
-            self.store.set("mode", "llm")
+        # A13（B1）：存档数据**现读**，不再用加载期快照（陈旧读防线）。
+        saved = self.store.load()
+        _log("_create_bot: LLM 为唯一运行模式")
         try:
             from llm import ReZeroLLMBridge
             api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -1846,7 +1869,7 @@ class TwinChatApp(QMainWindow):
                 api_key=api_key,
                 base_url="https://api.deepseek.com",
                 model_name="deepseek-chat",
-                arc=StoryArc(self.mem.get("arc", "mansion_era")),
+                arc=StoryArc(saved.get("arc", "mansion_era")),
                 max_history=8,
                 conversation_store=self.conv_store,
                 world=self.world,  # V14.7：注入持久化世界状态（场景切换跨会话保持）
@@ -1854,8 +1877,8 @@ class TwinChatApp(QMainWindow):
             # V16.1（M2）：存档恢复唯一入口——优先新格式 engine 键，回落旧平铺键。
             # 修 V16.0 及以前的写读不对称：locked 写了不读，oni_stage/witch_scent/
             # turn_count/consecutive_* 根本不落盘（重启归零）。
-            saved_engine = self.mem.get("engine")
-            bot.engine.apply_dict(saved_engine if isinstance(saved_engine, dict) else self.mem)
+            saved_engine = saved.get("engine")
+            bot.engine.apply_dict(saved_engine if isinstance(saved_engine, dict) else saved)
             _log("LLM bot 创建成功（引擎状态已恢复）")
             return bot
         except Exception as e:
@@ -1895,6 +1918,11 @@ class TwinChatApp(QMainWindow):
         title.setFont(QFont("Georgia", 18, QFont.Bold))
         title.setStyleSheet("color: #ffd1ea;")
         header_layout.addWidget(title)
+        # A17（SPEC-20260922-12 B0，**装饰性死 UI，勿当入口**）：
+        # 以下两个角色 tab 与「双子模式」标签全是局部变量（无 self. 引用、无交互接线）
+        # —— 视觉上呈现双子身份，但不承担点击/切换功能（真实篇章切换走命令路由
+        # `/mansion` `/empire` `/late`）。若要接成真实入口（点击聚焦/切换角色），
+        # 属**观感/交互变更**，须先过真机确认门禁再改（台账 A17 待真机批次）。
         for name, en, avatar_asset, bg, fg in [
             ("蕾姆", "Rem", "rem_avatar.svg", "rgba(222,241,255,0.94)", "#5b9bea"),
             ("拉姆", "Ram", "ram_avatar.svg", "rgba(255,222,238,0.94)", "#e879ac"),
@@ -1912,6 +1940,7 @@ class TwinChatApp(QMainWindow):
             tab_title.setStyleSheet(f"color: {fg};")
             tab_layout.addWidget(tab_title)
             header_layout.addWidget(tab)
+        # A17：静态装饰标签（无引用、无交互）——见上方注释
         twin_mode = QLabel("双子模式")
         twin_mode.setAlignment(Qt.AlignCenter)
         twin_mode.setStyleSheet("background: rgba(21,28,67,0.84); color: #f8e7f4; border: 1px solid rgba(211,193,238,0.42); border-radius: 13px; padding: 8px 14px; font-weight: bold;")
@@ -2417,7 +2446,7 @@ class TwinChatApp(QMainWindow):
         """
         _log("引言生成触发")
         try:
-            if self.mode != "llm" or not hasattr(self.bot, 'world'):
+            if not hasattr(self.bot, 'world'):
                 self._append_parsed_message(
                     "系统", "欢迎回到罗兹瓦尔宅邸。输入消息开始对话。", "system", save=False
                 )
@@ -2797,18 +2826,15 @@ class TwinChatApp(QMainWindow):
                 reply_to = {"id": self._quote["id"], "preview": self._quote["preview"]}
             self._clear_quote()  # 引用一次性消费（无论成功与否）
 
-        if self.mode == "llm" and hasattr(self.bot, 'chat_stream'):
+        if hasattr(self.bot, 'chat_stream'):
             self._send_llm_stream(text, reply_to=reply_to)
         else:
             QTimer.singleShot(50, lambda: self._send_sync(text))
 
     def _send_sync(self, text: str) -> None:
-        """同步发送（本地模式 或 旧的 LLM 同步模式）。"""
+        """同步发送（LLM 同步模式；本地模板模式已下线——A3 收口）。"""
         try:
-            if self.mode == "llm":
-                reply = self.bot.chat(text)
-            else:
-                reply = self.bot.interact(text)
+            reply = self.bot.chat(text)
             _log(f"回复: {reply[:60]}")
         except Exception as e:
             # V11.10.0：错误不走解析器，直接 system 消息
@@ -3086,19 +3112,14 @@ class TwinChatApp(QMainWindow):
         )
 
         # ── 拉姆表情（8 档：姐姐危险感知 + 自身阶段）──
+        # D3（B2）：档位→表情查表已出库 design_tokens（唯一真源，改表情只改那里）
         if state.witch_scent >= 3:
-            ram_emotion = "😠"       # P1 姐姐的怒意
+            ram_emotion = RAM_EMOTION_WITCH    # P1 姐姐的怒意
         elif state.oni_stage >= OniStage.FULL:
-            ram_emotion = "😤"       # P2 姐姐的警惕
+            ram_emotion = RAM_EMOTION_ONI      # P2 姐姐的警惕
         else:
-            ram_emotion_map = {
-                "可疑": "😒",
-                "观察中": "🤔",
-                "还算守规矩": "😐",
-                "勉强认可": "😏",
-                "真正承认": "😌",
-            }
-            ram_emotion = ram_emotion_map.get(state.ram_stage.value, "😐")
+            ram_emotion = RAM_EMOTION_BY_STAGE.get(
+                state.ram_stage.value, RAM_EMOTION_DEFAULT)
 
         self.ram_panel.update_state(
             favor=state.ram_favor,
@@ -3129,10 +3150,9 @@ class TwinChatApp(QMainWindow):
         try:
             state = self.engine.snapshot()
             ev = self.world.active_event or ""
-            ev_short = ev[:14] + "…" if len(ev) > 14 else ev
-            ambient = f"🌙 {self.world.period} · {self.world.weather}"
-            if ev_short and event_compatible(self.world.period, self.world.weather, ev):
-                ambient += f" · {ev_short}"
+            # A15（B2）：世界行统一实现——max_event=14 与 " · " 分隔为本站现值（文案零变化）
+            ambient = format_world_line(self.world.period, self.world.weather, ev,
+                                        max_event=14, prefix="🌙 ")
             if state.user_name:
                 ambient += f"  ·  与{state.user_name}同行"
             self._ambient_label.setText(ambient)
@@ -3154,9 +3174,9 @@ class TwinChatApp(QMainWindow):
             # 活跃事件可见化：有事件且与 period/weather 相容才追加（V11.9.2）
             ram_part = state.ram_stage.value
             ev = w.active_event or ""
-            if ev and event_compatible(w.period, w.weather, ev):
-                event_short = ev[:16] + '…' if len(ev) > 16 else ev
-                ram_part += f"  ·  {event_short}"
+            # A15（B2）：同一实现，head=False 只取事件后缀（16 字 / 双空格分隔为本站现值）
+            ram_part += format_world_line(w.period, w.weather, ev,
+                                          max_event=16, head=False, suffix_sep="  ·  ")
             # V10.14：RichText 主次分层（金色模式 / 次亮主信息 / 弱化次信息）
             # V14.4（Phase C）：本地模式已移除，状态栏恒定 LLM
             mode_text = "LLM"
@@ -3351,7 +3371,7 @@ class TwinChatApp(QMainWindow):
             engine = self.engine
             data = self.store.load()
             data.update({
-                "mode": self.mode,
+                # A3 收口（B2）：`mode` 不再落盘（本地模式已下线，字段无消费者）
                 # V16.1（M2）：单源序列化（新键，含 locked/oni/turn_count 等全字段）
                 "engine": engine.to_dict(),
                 # 旧平铺键：双写一版（life_archive / 外部读取与回滚兼容，下版本删）

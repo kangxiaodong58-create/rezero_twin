@@ -87,7 +87,9 @@ def test_memory_store() -> None:
     with tempfile.TemporaryDirectory() as tmp:
         store = MemoryStore(tmp)
         mem = store.load()
-        assert mem["mode"] == "llm" and mem["favor"] == 15 and mem["chat_history"] == []
+        assert mem["favor"] == 15 and mem["chat_history"] == []
+        # A3 收口（SPEC-20260922-12）：本地模式已下线，mode 字段整体移除
+        assert "mode" not in mem, "mode 字段应已随本地模式下线删除"
         store.set("favor", 42)
         store.append_chat("你", "测试消息")
         store2 = MemoryStore(tmp)  # 模拟重开
