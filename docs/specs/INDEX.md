@@ -31,7 +31,7 @@
 | [SPEC-20260922-06](SPEC-20260922-06-AGENTS验证章刷新.md) | L0 | AGENTS.md 验证章刷新：基线 294→295 / 隔离语义 / CI 事实 | ✅ 已完成（用户批准） | `docs/SPEC-20260922-06-agents-verification-refresh`（已删） | `89cbb18`（本地，随批量推送） | 2026-09-22 |
 | [SPEC-20260922-07](SPEC-20260922-07-GUI组件树与状态归属审计.md) | L0（零代码，证据深度按 L2 交付） | GUI 组件树 + 状态真理源矩阵 + 架构痛点诊断 + 重构 Roadmap（前端架构反向梳理法 · PySide6 版） | ✅ 已完成（用户批准） | `audit/SPEC-20260922-07-gui-arch-audit`（已删） | `a010c11`（本地，随批量推送） | 2026-09-22 |
 | [SPEC-20260922-08](SPEC-20260922-08-conftest自足化.md) | L1 | 测试套件自足化：conftest 注入 dummy API key（闭合 A19 → M7 本地闭环判据①③） | ✅ 已完成（审计批准；裸环境 + CI 等价双 295 passed 留证） | `fix/SPEC-20260922-08-conftest-self-sufficient`（已删） | `0a807fb`（本地，随批量推送） | 2026-09-22 |
-| [SPEC-20260922-10](SPEC-20260922-10-CI首跑修红与可观测性.md) | L1 | CI 首跑修红：失败取证 annotations 化（免登录可远程定位）+ Qt 夹具可移植化（session 级 `qapp`） | ✅ 已执行（本地 295 passed；**远端复跑结果待回填**） | `fix/SPEC-20260922-10-ci-red-portable-fixture`（已删） | 见 `docs/devlog/L3远端首跑留证_2026-09-23.md` | 2026-09-23 |
+| [SPEC-20260922-10](SPEC-20260922-10-CI首跑修红与可观测性.md) | L1 | CI 首跑修红：失败取证 annotations 化（免登录可远程定位）+ Qt 夹具可移植化（session 级 `qapp`） | ✅ 已执行（本地 295 passed；远端：首跑红 → 取证步生效 → **真因 A20 已修**，三跑待回填） | `fix/SPEC-20260922-10-ci-red-portable-fixture`（已删） | 见 `docs/devlog/L3远端首跑留证_2026-09-23.md` | 2026-09-23 |
 | [SPEC-20260922-09](SPEC-20260922-09-AGENTS债务入口刷新.md) | L0 | AGENTS.md §8 债务入口刷新（A1–A19 / M1–M7 全落地）+ §2 门禁闭环口径指针 | ✅ 已完成（审计批准；含 F7-1 同批修） | `docs/SPEC-20260922-09-agents-debt-refresh`（已删） | `e4d11e9`（本地，随批量推送） | 2026-09-22 |
 
 ## ⏳ 待批准清单（等你一句话才动文件）
@@ -106,7 +106,7 @@
 - 留证据：`docs/devlog/M7本地闭环留证_2026-09-22.md`（干净克隆 `a010c11`，逐条命令与原始输出）。
 - 判据 ②③④ 成立；判据 ① 在 **CI 等价环境**（`DEEPSEEK_API_KEY=test-key-not-used`，同 `ci.yml:25`）成立（`295 passed` + 隔离通过），**裸环境不成立**（`9 failed, 286 passed`，全部 `test_ui_offscreen.py` 缺 key）→ 缺口 = **A19**，修法见 `SPEC-20260922-08`。
 - **M7 本地闭环 = ✅ 已成立（L2，2026-09-22）**：SPEC-08 执行后**裸环境**（`env -u PYTHONPATH -u DEEPSEEK_API_KEY`）与 **CI 等价环境**均 `295 passed` + 隔离校验通过；留证见 devlog §4。
-- L3 远端首跑：**已触发并留证**——2026-09-23 首次搬运（`2b673fb..290eb9f`）时 CI 首跑 `#35800087797` **红**（步骤 7），修复见 `SPEC-20260922-10`；复跑结果回填 `docs/devlog/L3远端首跑留证_2026-09-23.md` §7。**在复跑转绿并留证前，L3 视为未闭环。**
+- L3 远端门禁：**已触发、有留证、尚未转绿**——首次搬运 `2b673fb..290eb9f` → 首跑 `#35800087797` 红（步骤 7；日志 403、artifacts=0 → 取证受阻）→ 加取证步 + Qt 夹具可移植化（`SPEC-20260922-10`）→ 二跑 `f181fb5` `#35800505406` 仍红，但**取证步把真因写进了 annotations**：`tools/screenshot_baseline.py` 的 `compare()` 与 `capture()` 渲染尺寸不对称（新债 **A20**，Windows 靠 Qt 隐式重排侥幸通过）→ 已修并本地验证（五面 diff 0.00%）→ 三跑待回填。**在转绿并留证前，L3 视为未闭环，冻结维持。**
 
 ## 范围外变更请求（RCR）模板
 

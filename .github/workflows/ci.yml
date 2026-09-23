@@ -65,13 +65,15 @@ jobs:
             echo "::error::未生成 pytest 日志（步骤 7 可能未执行到 tee；见步骤自身输出）"
             exit 0
           fi
-          echo "=== 失败摘要（annotations）==="
-          grep -aE "^(FAILED|ERROR)|AssertionError|Error:|Fatal|fatal error|Could not load|qt\.qpa|Aborted" "$LOG" \
-            | head -50 | while IFS= read -r line; do echo "::error::${line}"; done
-          echo "=== 日志尾部 25 行（annotations）==="
-          tail -25 "$LOG" | while IFS= read -r line; do echo "::notice::${line}"; done
+          echo "=== 失败用例列表（short test summary）==="
+          grep -aA 25 "short test summary info" "$LOG" | head -27 | while IFS= read -r line; do echo "::error::${line}"; done
+          echo "=== 关键断言/异常文本 ==="
+          grep -aE "AssertionError|Error:|Fatal|fatal error|Could not load|qt\.qpa|Aborted" "$LOG" \
+            | head -10 | while IFS= read -r line; do echo "::error::${line}"; done
+          echo "=== 日志尾部 12 行（annotations）==="
+          tail -12 "$LOG" | while IFS= read -r line; do echo "::notice::${line}"; done
           echo "=== 若为 Qt 平台崩溃，附平台相关行 ==="
-          grep -anE "QT_QPA_PLATFORM|platform plugin|xcb|offscreen" "$LOG" | head -10 | while IFS= read -r line; do echo "::warning::${line}"; done
+          grep -anE "QT_QPA_PLATFORM|platform plugin|xcb|offscreen" "$LOG" | head -6 | while IFS= read -r line; do echo "::warning::${line}"; done
 
       - name: 冒烟回归（引擎纯逻辑）
         run: python tests/smoke_test.py

@@ -6,6 +6,35 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.11] - 2026-09-23 (CI 复跑红 → 定位真因：截图基线工具尺寸不对称（A20）→ 修)
+
+> SPEC-20260922-10 续批（同一 SPEC，依「红了当场修」）。留证：`docs/devlog/L3远端首跑留证_2026-09-23.md`。
+
+### 复跑（第 2 次搬运）
+- `290eb9f..f181fb5` → CI `#35800505406` **仍红**；**新增的取证步生效**（annotations 可免登录读）→ 拿到真因。
+
+### 根因（A20，实测证据）
+- 失败点：`tests/test_screenshot_baseline.py::test_screenshot_capture_and_compare`（`AssertionError: 同 token 同渲染应零差异`）。
+- 机制：`tools/screenshot_baseline.py` 中 `capture()` 先 `resize(sizeHint)` 再 `grab()`，而 `compare()` **直接 grab()**。本机探针实测：
+  - 旧路径 `grab()` 会**顺带触发 Qt 隐式布局重排**（抓图前 `(640,480)` → 抓图后 `(239,58)` 等 sizeHint 尺寸）→ Windows 上"侥幸正确"（diff 0.00%）；
+  - 该隐式路径在 Linux runner 上不成立 → 基线与重采尺寸不一致 → `_diff_ratio` 直接返回 **1.0（100%）** → 必然超阈值。
+- 结论：**这不是测试太严，是工具两侧渲染尺寸不对称**——Windows 长期掩盖了它。
+
+### Fixed
+- `tools/screenshot_baseline.py`：新增 `_prepare(widget)`（显式 `resize(sizeHint)`），`capture()` 与 `compare()` **同一入口**统一尺寸；旧写法不再依赖 Qt 的隐式重排。
+- `ci.yml` 失败取证步补强：新增「short test summary（失败用例全列表）」段，annotations 容量控制在 45 条内。
+
+### 验收（本地）
+- 探针：五面 `diff 0.00%`（修复后两侧完全一致）
+- `pytest tests/test_screenshot_baseline.py -q` → **4 passed**
+- 隔离脚本包裹 `pytest tests/ -q` → **295 passed** + `data/` 逐字节未变
+
+### 未跑项及原因
+- EXE / 真机：工具与 CI 配置改动，生产渲染逻辑零改动。
+- 远端复跑：本次推送后触发，结果回填 `L3远端首跑留证` §7。
+
+---
+
 ## [V16.3.10] - 2026-09-23 (CI 首跑红：批量搬运 + 失败取证可观测化 + Qt 夹具可移植化)
 
 > SPEC-20260922-10（L1，依审计授权「红了当场修」执行）。全程留证：`docs/devlog/L3远端首跑留证_2026-09-23.md`。

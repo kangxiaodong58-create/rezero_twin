@@ -84,6 +84,18 @@ def build_surfaces(tmp_root: str):
     return surfaces
 
 
+def _prepare(widget, default_w: int = 640, default_h: int = 120):
+    """渲染前统一尺寸：与采集完全同款（否则 compare 与 capture 尺寸不一致）。
+
+    SPEC-20260922-10：此前 `capture()` 会 resize 到 sizeHint，而 `compare()` 直接
+    `grab()` —— Windows 上两者尺寸恰好相同而侥幸通过；Linux runner 字体度量不同
+    导致尺寸不一致 → `_diff_ratio` 直接返回 1.0 → 全量比对必然超阈值（CI 首跑红）。
+    """
+    widget.resize(widget.sizeHint().width() or default_w,
+                  widget.sizeHint().height() or default_h)
+    return widget
+
+
 def capture(out_dir: str = BASE_DIR) -> list:
     """采集全部确定性面 → out_dir/<name>.png；返回 [(name, path)]。"""
     _ensure_app()
@@ -92,7 +104,7 @@ def capture(out_dir: str = BASE_DIR) -> list:
     tmp_root = tempfile.mkdtemp(prefix="rz-shot-")  # M_A 复盘：临时件不落基线目录
     saved = []
     for name, widget in build_surfaces(tmp_root):
-        widget.resize(widget.sizeHint().width() or 640, widget.sizeHint().height() or 120)
+        _prepare(widget)
         pix = widget.grab()
         path = os.path.join(out_dir, f"{name}.png")
         pix.save(path)
@@ -129,6 +141,7 @@ def compare(baseline_dir: str, threshold: float = DEFAULT_TOLERANCE) -> int:
     exceeded = 0
     for name, widget in build_surfaces(tmp_root):
         fresh = os.path.join(tmp_root, f"{name}.png")
+        _prepare(widget)  # 与 capture() 同款尺寸（SPEC-20260922-10 修不对称）
         widget.grab().save(fresh)
         base = os.path.join(baseline_dir, f"{name}.png")
         if not os.path.isfile(base):
