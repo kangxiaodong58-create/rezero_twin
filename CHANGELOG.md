@@ -6,6 +6,33 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+## [V16.3.10] - 2026-09-23 (CI 首跑红：批量搬运 + 失败取证可观测化 + Qt 夹具可移植化)
+
+> SPEC-20260922-10（L1，依审计授权「红了当场修」执行）。全程留证：`docs/devlog/L3远端首跑留证_2026-09-23.md`。
+
+### 搬运（首次批量推送）
+- `git push origin master`：**`2b673fb..290eb9f`**（9 提交 / 17 文件）→ 触发 CI 首跑 **`#35800087797`**。
+
+### 发现（首跑红 + 取证受阻）
+- 步骤 6 结构守卫 ✅；步骤 7「全量测试 + 数据隔离校验」❌（`Process completed with exit code 1.`）；步骤 8 冒烟 ⏭ skipped。
+- **原始日志 403（需登录）、artifacts = 0** → 远端取证能力为零，这是本次暴露的组织级缺口。
+
+### Changed
+- `.github/workflows/ci.yml`（**可观测性**）：步骤 7 加 `tee "$RUNNER_TEMP/pytest.log"`（保留 `pipefail` 阻断语义）；新增「失败取证」步（`if: failure()` + `continue-on-error`）把失败摘要 / 尾部 / Qt 平台行转成 **annotations**——**免登录即可远程定位**。
+- `tests/conftest.py`：新增 **session 级 `qapp` 夹具**（先于 function 级 `monkeypatch` 创建 QApplication，避免平台插件被中途改掉）。
+- `tests/test_motion.py`：三个启用态用例 `(monkeypatch, qtapp)` → `(qapp, monkeypatch)`；**断言零改动**（修的是 `test_motion.py:37/84/94` 的 `QT_QPA_PLATFORM=windows` 在 Linux 上加载不存在的平台插件这一平台专有风险）。
+
+### 验收（本地）
+- `pytest tests/test_motion.py -q` → **9 passed**
+- 隔离脚本包裹 `pytest tests/ -q` → **295 passed** + `data/` 逐字节未变
+- `ci.yml` YAML 解析 ✅（9 步骤）
+
+### 未跑项及原因
+- EXE / 真机：测试基建与 CI 配置，生产代码零改动。
+- 远端复跑：本次推送后自动触发，结果回填 `L3远端首跑留证` §7。
+
+---
+
 ## [V16.3.9] - 2026-09-23 (F1/F4 只读核对报告 + INDEX 原话逐字/哈希补强)
 
 > 审计批准的两项只读核对（无需 SPEC）。报告：`docs/devlog/F1F4核对报告_2026-09-23.md`。

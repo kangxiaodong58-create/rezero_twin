@@ -33,7 +33,9 @@ def test_enabled_offscreen_always_false(monkeypatch):
     assert motion.enabled() is False
 
 
-def test_enabled_respects_switches(monkeypatch):
+def test_enabled_respects_switches(qapp, monkeypatch):
+    # SPEC-20260922-10：先由 session 级 qapp 固化 offscreen 平台，再改环境变量
+    # （否则 Linux runner 会尝试加载不存在的 windows 平台插件而致命报错）
     monkeypatch.setenv("QT_QPA_PLATFORM", "windows")
     monkeypatch.setenv("REZERO_DISABLE_UI_MOTION", "")
     assert motion.enabled() is True
@@ -79,7 +81,7 @@ def test_stagger_reveal_disabled_hides_nothing(qtapp):
         "禁用态不得隐藏任何行（立即呈现最终状态）"
 
 
-def test_fade_in_enabled_attaches_and_cleans(monkeypatch, qtapp):
+def test_fade_in_enabled_attaches_and_cleans(qapp, monkeypatch):
     from PySide6.QtWidgets import QLabel
     monkeypatch.setenv("QT_QPA_PLATFORM", "windows")
     w = QLabel("x")
@@ -89,7 +91,7 @@ def test_fade_in_enabled_attaches_and_cleans(monkeypatch, qtapp):
     assert w.graphicsEffect() is None
 
 
-def test_stagger_reveal_enabled_hides_then_reveals(monkeypatch, qtapp):
+def test_stagger_reveal_enabled_hides_then_reveals(qapp, monkeypatch):
     from PySide6.QtWidgets import QListWidget, QListWidgetItem
     monkeypatch.setenv("QT_QPA_PLATFORM", "windows")
     lw = QListWidget()

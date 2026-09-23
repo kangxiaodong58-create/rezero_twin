@@ -50,7 +50,28 @@ jobs:
         run: python -m pytest tests/test_command_router.py::test_no_duplicate_method_definitions -q
 
       - name: 全量测试 + 数据隔离校验（跑测试前后 data/ 必须逐字节不变）
-        run: bash scripts/verify_isolation.sh python -m pytest tests/ -q
+        run: |
+          set -o pipefail
+          bash scripts/verify_isolation.sh python -m pytest tests/ -q 2>&1 | tee "$RUNNER_TEMP/pytest.log"
+
+      # 失败取证：GitHub Actions 原始日志需登录（403），而 check-run annotations
+      # 无需凭证即可读（公开仓库）——把失败文本转成 annotations，CI 才「可远程审计」。
+      - name: 失败取证（annotations 公开可读，免登录定位失败用例）
+        if: failure()
+        continue-on-error: true
+        run: |
+          LOG="$RUNNER_TEMP/pytest.log"
+          if [ ! -f "$LOG" ]; then
+            echo "::error::未生成 pytest 日志（步骤 7 可能未执行到 tee；见步骤自身输出）"
+            exit 0
+          fi
+          echo "=== 失败摘要（annotations）==="
+          grep -aE "^(FAILED|ERROR)|AssertionError|Error:|Fatal|fatal error|Could not load|qt\.qpa|Aborted" "$LOG" \
+            | head -50 | while IFS= read -r line; do echo "::error::${line}"; done
+          echo "=== 日志尾部 25 行（annotations）==="
+          tail -25 "$LOG" | while IFS= read -r line; do echo "::notice::${line}"; done
+          echo "=== 若为 Qt 平台崩溃，附平台相关行 ==="
+          grep -anE "QT_QPA_PLATFORM|platform plugin|xcb|offscreen" "$LOG" | head -10 | while IFS= read -r line; do echo "::warning::${line}"; done
 
       - name: 冒烟回归（引擎纯逻辑）
         run: python tests/smoke_test.py

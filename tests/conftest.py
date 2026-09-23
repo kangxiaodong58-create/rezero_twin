@@ -28,6 +28,22 @@ os.environ.setdefault(
 os.environ.setdefault("DEEPSEEK_API_KEY", "test-key-not-used")
 
 
+@pytest.fixture(scope="session")
+def qapp():
+    """全 session 唯一 QApplication，且**先于**任何 function 级夹具创建。
+
+    SPEC-20260922-10：`tests/test_motion.py` 的启用态用例需要临时把
+    `QT_QPA_PLATFORM` 从 `offscreen` 改成别的值（否则 `motion.enabled()` 恒为 False，
+    见 `motion.py:25`）。若该环境变量在 QApplication **创建之前**就被改掉，Linux runner
+    会尝试加载不存在的平台插件（`windows`）→ Qt 致命错误 → CI 整步失败。
+    session 级夹具由 pytest 的 scope 规则保证先于 function 级 `monkeypatch` 建好，
+    因此应用始终以 offscreen 起步；session 级引用同时避免应用被 GC 后重建。
+    """
+    from PySide6.QtWidgets import QApplication
+    app = QApplication.instance() or QApplication([])
+    yield app
+
+
 @pytest.fixture(autouse=True)
 def _isolate_data_dir(tmp_path, monkeypatch):
     """V16.3.3（A11）：把 `get_data_dir()` 整体重定向到 per-test 临时目录。
