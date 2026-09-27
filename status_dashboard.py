@@ -23,6 +23,7 @@ from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 from design_tokens import (
     COLORS, DIM, ELEVATION, FONT_FAMILY, FONT_SIZE, RADIUS, SURFACE_TINT,
 )
+from ui import theme  # SPEC-20260922-18：QSS 单一真源（B6·A14 收口）
 
 try:
     from PySide6.QtSvg import QSvgRenderer
@@ -88,19 +89,19 @@ class CharacterCard(QFrame):
         else:
             self._avatar.setText(name[:1])
         self._avatar.setStyleSheet(
-            f"border-radius: 23px; border: 2px solid {accent};")
+            theme.card_avatar(accent))
         head.addWidget(self._avatar)
 
         info = QVBoxLayout()
         info.setSpacing(2)
         self._name_label = QLabel(name)
         self._name_label.setFont(QFont(_UI_FONT, FONT_SIZE["body"], QFont.Bold))
-        self._name_label.setStyleSheet(f"color: {accent};")
+        self._name_label.setStyleSheet(theme.color_only(accent))
         info.addWidget(self._name_label)
 
         self._mood_label = QLabel("😊 平静")
         self._mood_label.setFont(QFont(_UI_FONT, FONT_SIZE["body"]))
-        self._mood_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self._mood_label.setStyleSheet(theme.color_only(COLORS['text_secondary']))
         info.addWidget(self._mood_label)
         head.addLayout(info, 1)
         lay.addLayout(head)
@@ -113,14 +114,7 @@ class CharacterCard(QFrame):
 
     def _style(self, speaking: bool) -> None:
         border = self._accent if speaking else COLORS["border_subtle"]
-        self.setStyleSheet(f"""
-            QFrame#dash_card_{self.role} {{
-                background-color: {COLORS['bg_surface']};
-                border: 1px solid {border};
-                border-top: 1px solid {ELEVATION['glow_top']};
-                border-radius: {RADIUS['medium']}px;
-            }}
-        """)
+        self.setStyleSheet(theme.card_frame(self.role, border))
 
     def _row_wrap(self, key: str, value: str):
         row = QFrame()
@@ -129,10 +123,10 @@ class CharacterCard(QFrame):
         rl.setSpacing(6)
         k = QLabel(key)
         k.setFont(QFont(_UI_FONT, FONT_SIZE["small"]))
-        k.setStyleSheet(f"color: {COLORS['text_muted']};")
+        k.setStyleSheet(theme.color_only(COLORS['text_muted']))
         v = QLabel(value)
         v.setFont(QFont(_UI_FONT, FONT_SIZE["small"]))
-        v.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        v.setStyleSheet(theme.color_only(COLORS['text_secondary']))
         rl.addWidget(k)
         rl.addStretch()
         rl.addWidget(v)
@@ -168,20 +162,14 @@ class CharacterDashboard(QFrame):
         super().__init__(parent)
         self.setObjectName("character_dashboard")
         self.setFixedWidth(DIM.get("dash_w", 320))
-        self.setStyleSheet(f"""
-            QFrame#character_dashboard {{
-                background-color: {SURFACE_TINT['detail']};
-                border: 1px solid {COLORS['border_subtle']};
-                border-radius: {RADIUS['large']}px;
-            }}
-        """)
+        self.setStyleSheet(theme.dashboard_frame())
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 12, 12, 12)
         lay.setSpacing(10)
 
         title = QLabel("双子状态")
         title.setFont(QFont(_UI_FONT, FONT_SIZE["body"], QFont.Bold))
-        title.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        title.setStyleSheet(theme.color_only(COLORS['text_secondary']))
         lay.addWidget(title)
 
         self.rem_card = CharacterCard("rem", "蕾 姆", COLORS["rem_accent"])
