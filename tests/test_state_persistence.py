@@ -236,3 +236,46 @@ def test_gui_save_restore_roundtrip(gui_env) -> None:
     assert e2.turn_count == engine.turn_count
     win.close()
     win2.close()
+
+# ── A5：来信冷却持久化时机（SPEC-20260922-14）─────────────────────
+
+def test_letter_cooldown_persisted_after_dispatch(gui_env) -> None:
+    """A5：来信派发后冷却必须**立刻落盘**，重启后仍然生效。
+
+    回归点：letter_manager 只在内存改 `last_letter_ts/date`（其注释明写
+    「调用方负责持久化 world」）；调用方 `_maybe_dispatch_letter` 此前没做 →
+    启动即来信后进程被杀 → 冷却丢失 → 同日可能重复来信。
+    """
+    gui, tmp_path = gui_env
+    win = gui.TwinChatApp()
+
+    dispatched_ts = 1758000000.0
+    sent_day = "2026-09-27"
+
+    def fake_dispatch(**kwargs):
+        state = kwargs["state"]
+        state.last_letter_ts = dispatched_ts       # 与生产同路径：由 manager 写回
+        state.last_letter_date = sent_day
+        return {"messages": [{"sender": "rem", "content": "测试来信"}],
+                "suppress_vignette": True}
+
+    win.letter_manager.evaluate_and_dispatch = fake_dispatch
+    letter = win._maybe_dispatch_letter(sent_day)
+    assert letter is not None
+
+    # ① 落盘断言：存档 world_state 里冷却已更新
+    raw = json.loads(open(win.store.path, encoding="utf-8").read())
+    ws = raw.get("world_state") or {}
+    assert ws.get("last_letter_ts") == dispatched_ts, "冷却时间戳必须随派发落盘"
+    assert ws.get("last_letter_date") == sent_day, "冷却日期必须随派发落盘"
+
+    # ② 重启断言：重建窗口后冷却仍生效（同日 + 8h 窗口内都不再来信）
+    win2 = gui.TwinChatApp()
+    assert win2.world.last_letter_ts == dispatched_ts, "重启后冷却时间戳必须恢复"
+    assert win2.letter_manager.check_cooldown(
+        win2.world, dispatched_ts + 3600, sent_day) is False, "同日内不应再次来信"
+    assert win2.letter_manager.check_cooldown(
+        win2.world, dispatched_ts + 3600, "2026-09-28") is False, "8h 冷却窗口内不应再次来信"
+
+    win.close()
+    win2.close()

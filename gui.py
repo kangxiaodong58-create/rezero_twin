@@ -1851,6 +1851,11 @@ class TwinChatApp(QMainWindow):
                 pass
             _log(f"主动来信触发: {len(letter['messages'])} 条"
                  f" (suppress_vignette={letter['suppress_vignette']})")
+            # A5（SPEC-20260922-14）：冷却写回**即时持久化**。
+            # letter_manager 只在内存里改 state.last_letter_ts/date（其注释明写
+            # 「调用方负责持久化 world」），此前调用方没做 → 启动即来信后进程被杀，
+            # 冷却丢失 → 同日/8h 内可能重复来信。此处补一次落盘（与日更问候/纪念卡同路径）。
+            self._save_state()
         return letter
 
     # ── Bot 创建 ────────────────────────────
