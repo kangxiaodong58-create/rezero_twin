@@ -6,6 +6,24 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 
 ---
 
+
+## [V16.5.0] - 2026-09-27 (步 1–4 零观感批：债务 A5/A6/A18/B4 收口)
+
+> 四份 SPEC 均经 2026-09-27 审计批复（SPEC-13/15 附条件已闭环、SPEC-14 无条件、SPEC-16 改**方案 B**）。施工记录：`docs/devlog/步1-4零观感批_2026-09-27.md`；前置材料：`docs/devlog/步1-4前置材料_2026-09-27.md`。**本批无需真机观感确认**（全部为内部语义/结构改动，文案与视觉零变化）。
+
+### 改动（4 条 SPEC，逐条独立提交可单条回滚）
+- **A18（`54aecc0`）`_log` 双档**：常开句柄 + `threading.Lock` + 导入期 `atexit` 注册；常规档只 `flush`（实测 **10.1 µs/条**，旧实现 953.4 µs/条 = **94.5×**），**53 处**关键事件（崩溃/异常/存档/生命周期/轮次中止）走 `durable=True` → `fsync`；崩溃路径 `acquire(timeout=0.5)` 不死锁；句柄关闭后自动重开 + 路径感知；`REZERO_LOG_DURABLE=1` 一键回退全 fsync。
+- **A5（`0f3d914`）来信冷却即时持久化**：`_maybe_dispatch_letter` 派发成功分支末补 `_save_state()` —— 消除「启动即来信 → 进程被杀 → 冷却丢失 → 同日重复来信」窗口。
+- **A6（`ad51b2e`）类级可变状态收口**：`SceneManager` 轮转游标从**类级**移到**世界实例**（`WorldState.scene_rotor/scene_last`，运行时字段、刻意不入存档；`get_scene_interaction(..., *, rotor, last)` 关键字注入，不传退模块级兜底）；`ReZeroLLMBridge._anniv_cache` 类级 → 实例级。
+- **B4（`5feaf12`）第二 WorldState 收口（方案 B）**：`main.py` 与 `vignette.prepare_session_opening` 改走核心 `shared.state.WorldState` + `MemoryStore` 单管线；`shared/world_state.py` 降级为**零逻辑 shim**（108 → 90 行，函数体全部转调核心；保留 docx 时代 4 个纯别名 property ⇒ 外部脚本不炸；**不删模块**）。
+
+### 验证（全部真跑留证）
+- 全量测试：**305 passed**（276→…→295 → **305**，本批 +10 例）+ `scripts/verify_isolation.sh` 数据隔离校验通过；冒烟 **31/31**。
+- 机械判据：`durable=True` 契约 = **53**（AST 复核「规则命中却未标记 = 0」，契约测试入套件）；生产代码 `grep "shared.world_state"` = **0**；`grep "SceneManager._interaction_rotor\|cls._interaction_rotor\|ReZeroLLMBridge._anniv_cache"` = **0**；`python main.py --help` / `import main` OK。
+- 探针：A18 计时（`Temp/hermes-verify-spec13-perf.py`）94.5×；A6 生产路径（`PromptBuilder.build`）轮转不回归 + 实例隔离 PASS。
+- 事故与恢复：一枚**未隔离**的 shim 探针直写真实 `data/memory.json`（`world_state` 派生字段被重算），已用其自动生成的 `.bak` **原样恢复**（mtime/size 复原为 1790078629/2612），其余键零变化；教训入 `rezero-twin-dev` 技能（见 devlog §5）。
+
+---
 ## [V16.4.0] - 2026-09-23 (第 4 批：GUI 首梯队 B0–B2 零观感 + 债务 A13/A15/A16/A17 收口)
 
 > SPEC-20260922-12（L0+L1，用户批准 + F12-1/2/3 前置检查）。施工记录：`docs/devlog/第4批B0B2零观感梯队_2026-09-23.md`。
