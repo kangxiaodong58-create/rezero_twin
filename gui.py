@@ -122,6 +122,7 @@ except Exception:  # pragma: no cover
 from shared.state import StoryArc, OniStage, FAVOR_LEVEL_CN
 from shared.memory_store import MemoryStore
 from shared.conversation_store import ConversationStore
+from shared.search_service import SearchService, format_preview  # SPEC-20260922-19：搜索单一入口（B7）
 from shared.letter_manager import LetterManager  # V14.3：主动来信
 # Forensic M4（R1 修复）：GUI/EXE 入口接入取证黑匣子——record 未初始化时为
 # 安全 no-op，init_forensic 只在 main() 调用（测试构造 TwinChatApp 不触发）
@@ -1438,6 +1439,8 @@ class HistoryOverlay(QWidget):
     def __init__(self, conv_store, parent=None):
         super().__init__(parent)
         self._conv_store = conv_store
+        # SPEC-20260922-19（B7）：复用同一 SearchService 实现（构造签名不变，内部自建）
+        self._search_service = SearchService(conv_store)
         self._search_timer: Optional[QTimer] = None
         self._keyword = ""
 
@@ -1575,10 +1578,8 @@ class HistoryOverlay(QWidget):
         if not keyword:
             self.load_recent()
             return
-        try:
-            results = self._conv_store.search(keyword, limit=50)
-        except Exception:
-            results = []
+        # SPEC-20260922-19（B7）：检索统一走 SearchService（异常兜底亦在服务层，见其 docstring）
+        results = self._search_service.search(keyword, limit=50)
         if not results:
             self._show_no_result(keyword)
             return
@@ -1651,6 +1652,8 @@ class TwinChatApp(QMainWindow):
         # 运行期需要存档数据时一律 `self.store.load()` 现读（见 `_create_bot`）。
         mem = self.store.load()
         self.conv_store = ConversationStore()
+        # SPEC-20260922-19（B7）：搜索单一入口——顶栏与历史浮层共用同一实现
+        self.search_service = SearchService(self.conv_store)
         _log(f"记忆加载: arc={mem.get('arc')} data={self.store.path}")
 
         # 迁移旧 JSON chat_history → SQLite（仅首次）
@@ -2422,7 +2425,9 @@ class TwinChatApp(QMainWindow):
         query = self.search_box.text().strip()
         if not query:
             return
-        results = self.conv_store.search(query, limit=10)
+        # SPEC-20260922-19（B7）：检索统一走 SearchService（原为直连 conv_store.search，
+        # 与历史浮层各写一套）；limit=10 为顶栏有意取值（每条结果渲染成系统条，防刷屏）。
+        results = self.search_service.search(query, limit=10)
         self.clear_all_highlights()  # V14.1：新搜索先清旧高亮
         if not results:
             self._append_parsed_message("系统", f"未找到包含「{query}」的对话。", "system", save=False, transient=True)
@@ -2440,7 +2445,8 @@ class TwinChatApp(QMainWindow):
             created = r.get("created_at", "")
             # 时间截取 MM-DD HH:MM（去掉年份和秒）
             time_str = created[5:16] if len(created) >= 16 else created
-            preview = text[:60] + ("…" if len(text) > 60 else "")
+            # SPEC-20260922-19：摘要格式抽为纯函数（format_preview 默认 60，值等价迁移）
+            preview = format_preview(text)
             self._append_parsed_message(
                 "系统", f"{time_str} · {sender} → {preview}", "system", save=False, transient=True
             )

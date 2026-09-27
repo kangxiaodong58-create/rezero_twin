@@ -7,7 +7,16 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 ---
 
 
-## [V16.5.2] - 2026-09-27 (步 6：QSS 收口到 `ui/theme.py` —— B6/A14，**视觉零变化**)
+## [V16.5.3] - 2026-09-27 (步 7：搜索合并 `SearchService` —— B7，零观感)
+
+- **单一入口**：新增 `shared/search_service.py`（`SearchService` + `format_preview`，零 Qt 依赖、可脱离 GUI 单测）——顶栏搜索与历史浮层搜索**不再各写一套检索逻辑**。
+- **收口面**：`gui.py` 仅 5 处（导入 / `TwinChatApp` 服务构造 / 顶栏检索+摘要 / 浮层构造+检索）；**文案、布局、交互零变化**（真机门禁=否）。
+- **口径写死**：limit 有意不同（顶栏 10 防刷屏 / 浮层 50 供浏览）⇒ 判据 = 「同 query + 同 limit → 结果集与顺序逐条相同」；无结果文案各留各的。
+- **兜底统一**：浮层原有 `try/except → []`，顶栏原**无**（DB 异常会冒泡）⇒ 由服务统一补上（仅影响错误路径）。
+- **结构守卫**：新增 AST 级用例——**UI 层禁止直连 `conv_store.search(`**（扫 `gui.py`/`status_dashboard.py`/`memory_book.py`/`motion.py`/`ui/**`，排除 `tests/**` 与 `shared/search_service.py` 自身；失败报「文件:行号」）。
+- **判据**：新增 **19** 用例全绿 · 全量 **331 passed**（312 → +19）· 隔离校验通过 · 冒烟 31/31 · 截图基线 5/5。
+
+## [V16.5.2] - 2026-09-27 (步 6：QSS 收口到 `ui/theme.py` —— B6/A14，视觉零变化)
 
 > SPEC-20260922-18（L2；用户「D4：起草」指示 + 2026-09-27 审计批准，附 **F18-1/2/3** 三项执行前确认——均已落实，见 `docs/devlog/步6前置材料_2026-09-27.md`）。**判据为机器判据**：QSS golden 快照逐字节等价。真机确认后合入 master（AGENTS §4）。施工记录：`docs/devlog/步6样式收口_2026-09-27.md`。
 
