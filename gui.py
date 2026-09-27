@@ -11,10 +11,12 @@
 
 from __future__ import annotations
 
+import atexit
 import ctypes
 import html
 import os
 import sys
+import threading
 import time
 
 # ── PyInstaller windowed 模式 (console=False) 下 sys.stdout/stderr 为 None ──
@@ -133,20 +135,78 @@ def _log_path() -> str:
 
 _LOG_PATH = _log_path()
 
+# ═══ A18（SPEC-20260922-13）：日志双档 ═══════════════════════════
+# 常规档：**常开句柄 + flush**（不 fsync）——实测 729 µs/条 → ≈8 µs/条（94×）。
+# 关键档 `durable=True`：flush + fsync，用于崩溃/异常/存档/生命周期/轮次中止等
+#   必须留证的事件（精确 53 处，清单见 docs/devlog/步1-4前置材料_2026-09-27.md §1）。
+# 线程安全：`VignetteWorker.run` 在 QThread 内调用 `_log`（gui.py:2509-2549 接线 +
+#   :2516/2531/2534 调用点）⇒ 必须加锁；崩溃路径不阻塞（acquire timeout 0.5s）。
+# 回退开关：`REZERO_LOG_DURABLE=1` → 全部走 fsync（取证/排障期一键回退，无需改码）。
+_LOG_LOCK = threading.Lock()
+_LOG_FH = None
+_LOG_FH_PATH = None
+_LOG_FSYNC_ALL = os.environ.get("REZERO_LOG_DURABLE", "") not in ("", "0", "false", "False")
 
-def _log(msg: str) -> None:
+
+def _log_open_locked():
+    """（调用方须持锁）打开/重开日志句柄。"""
+    global _LOG_FH, _LOG_FH_PATH
+    path = _log_path()
     try:
-        path = _log_path()
         os.makedirs(os.path.dirname(path), exist_ok=True)
-        with open(path, "a", encoding="utf-8") as f:
-            f.write(f"[{datetime.now().isoformat()}] {msg}\n")
-            f.flush()
-            os.fsync(f.fileno())
     except Exception:
         pass
+    _LOG_FH = open(path, "a", encoding="utf-8")
+    _LOG_FH_PATH = path
+    return _LOG_FH
 
 
-_log(f"=== PySide6 GUI 启动 (python={sys.executable}) ===")
+def _log_close() -> None:
+    """atexit（F13-3：模块导入期注册）：flush + close，置空句柄。"""
+    global _LOG_FH, _LOG_FH_PATH
+    with _LOG_LOCK:
+        try:
+            if _LOG_FH is not None:
+                _LOG_FH.flush()
+                _LOG_FH.close()
+        except Exception:
+            pass
+        _LOG_FH = None
+        _LOG_FH_PATH = None
+
+
+def _log_write_locked(msg: str, durable: bool) -> None:
+    global _LOG_FH
+    try:
+        f = _LOG_FH
+        # 重开条件：未打开 / 已被 atexit 关闭（F13-3）/ 目标路径已变（REZERO_GUI_LOG 或 get_data_dir）
+        if f is None or getattr(f, "closed", True) or _LOG_FH_PATH != _log_path():
+            f = _log_open_locked()
+        f.write(f"[{datetime.now().isoformat()}] {msg}\n")
+        f.flush()
+        if durable or _LOG_FSYNC_ALL:
+            os.fsync(f.fileno())
+    except Exception:
+        _LOG_FH = None    # 句柄异常（被清理/盘满）→ 丢弃本条并在下次重开
+
+
+def _log(msg: str, durable: bool = False) -> None:
+    """A18 双档日志：常规档缓冲写；`durable=True` 关键档强制 fsync。
+
+    绝不抛异常（日志不得影响主流程）；崩溃路径 acquire 超时即放弃本条。
+    """
+    if not _LOG_LOCK.acquire(timeout=0.5):
+        return
+    try:
+        _log_write_locked(msg, durable)
+    finally:
+        _LOG_LOCK.release()
+
+
+atexit.register(_log_close)   # F13-3：注册在模块导入期（最早时机）
+
+
+_log(f"=== PySide6 GUI 启动 (python={sys.executable}) ===", durable=True)
 
 
 # ═══════════════════════════════════════════════
@@ -445,7 +505,7 @@ class LLMWorker(QObject):
             if cancel_fn is not None:
                 cancel_fn()
         except Exception as e:
-            _log(f"LLMWorker.cancel 异常: {e}")
+            _log(f"LLMWorker.cancel 异常: {e}", durable=True)
 
     def run(self) -> None:
         try:
@@ -1179,7 +1239,7 @@ class CharacterPanel(QFrame):
                 }}
             """)
         except Exception as e:
-            _log(f"set_speaking 异常: {e}")
+            _log(f"set_speaking 异常: {e}", durable=True)
 
 
 # ═══════════════════════════════════════════════
@@ -1770,9 +1830,9 @@ class TwinChatApp(QMainWindow):
         try:
             self._maybe_show_memorial_card()
         except Exception as e:
-            _log(f"纪念卡流程异常: {e}")
+            _log(f"纪念卡流程异常: {e}", durable=True)
 
-        _log("TwinChatApp.__init__ 完成")
+        _log("TwinChatApp.__init__ 完成", durable=True)
 
     # ── V15.0-M2：纪念卡 ─────────────────────
 
@@ -1850,7 +1910,7 @@ class TwinChatApp(QMainWindow):
             except Exception:
                 pass
             _log(f"主动来信触发: {len(letter['messages'])} 条"
-                 f" (suppress_vignette={letter['suppress_vignette']})")
+                 f" (suppress_vignette={letter['suppress_vignette']})", durable=True)
             # A5（SPEC-20260922-14）：冷却写回**即时持久化**。
             # letter_manager 只在内存里改 state.last_letter_ts/date（其注释明写
             # 「调用方负责持久化 world」），此前调用方没做 → 启动即来信后进程被杀，
@@ -1864,7 +1924,7 @@ class TwinChatApp(QMainWindow):
         # V14.4（Phase C）：本地模式移除——LLM 是唯一运行模式（退场研判）
         # A13（B1）：存档数据**现读**，不再用加载期快照（陈旧读防线）。
         saved = self.store.load()
-        _log("_create_bot: LLM 为唯一运行模式")
+        _log("_create_bot: LLM 为唯一运行模式", durable=True)
         try:
             from llm import ReZeroLLMBridge
             api_key = os.getenv("DEEPSEEK_API_KEY")
@@ -1884,10 +1944,10 @@ class TwinChatApp(QMainWindow):
             # turn_count/consecutive_* 根本不落盘（重启归零）。
             saved_engine = saved.get("engine")
             bot.engine.apply_dict(saved_engine if isinstance(saved_engine, dict) else saved)
-            _log("LLM bot 创建成功（引擎状态已恢复）")
+            _log("LLM bot 创建成功（引擎状态已恢复）", durable=True)
             return bot
         except Exception as e:
-            _log(f"LLM bot 创建失败: {e}")
+            _log(f"LLM bot 创建失败: {e}", durable=True)
             QMessageBox.warning(
                 self, "LLM 模式不可用",
                 f"{e}\n\nRe:Zero 双子系统需要 LLM API 才能运行。"
@@ -2415,7 +2475,7 @@ class TwinChatApp(QMainWindow):
                 self._append_parsed_message(
                     "系统", f"未知指令: {raw}", "system", save=False)
         except Exception as e:
-            _log(f"_handle_command 异常: {e}\n{traceback.format_exc()}")
+            _log(f"_handle_command 异常: {e}\n{traceback.format_exc()}", durable=True)
 
     def _apply_arc(self, arc, label: str, message: str) -> None:
         """切换篇章的唯一路径：改状态 → 落盘 → 提示 → 更新标签/状态栏/面板。"""
@@ -2479,7 +2539,7 @@ class TwinChatApp(QMainWindow):
                         self.bot.set_opening_atmosphere(clean)
                     _log("引言回调完成")
                 except Exception as e:
-                    _log(f"引言回调异常: {e}\n{traceback.format_exc()}")
+                    _log(f"引言回调异常: {e}\n{traceback.format_exc()}", durable=True)
 
             # ── V10.10.4 + V14.4: 安全引言路径 ──
             # frozen EXE 下 QThread + LLM 调用触发原生崩溃（0xC0000409）；
@@ -2536,7 +2596,7 @@ class TwinChatApp(QMainWindow):
                         _log(f"引言生成完成: {text[:30]}...")
                         self.finished.emit(text)
                     except Exception as e:
-                        _log(f"引言 Worker 异常: {e}\n{traceback.format_exc()}")
+                        _log(f"引言 Worker 异常: {e}\n{traceback.format_exc()}", durable=True)
                         self.error.emit(str(e))
 
             _log("引言 Worker 创建")
@@ -2554,7 +2614,7 @@ class TwinChatApp(QMainWindow):
             thread.start()
             _log("引言子线程已启动")
         except Exception as e:
-            _log(f"引言生成启动失败: {e}\n{traceback.format_exc()}")
+            _log(f"引言生成启动失败: {e}\n{traceback.format_exc()}", durable=True)
             # 降级为静态欢迎语
             try:
                 self._append_parsed_message(
@@ -2626,7 +2686,7 @@ class TwinChatApp(QMainWindow):
                 label.setText(highlight_plain_text(content, keyword))
                 w._search_hit_text = content  # 原文留存，供 clear 恢复
             except Exception as e:
-                _log(f"高亮异常 #{getattr(w, 'message_id', '?')}: {e}")
+                _log(f"高亮异常 #{getattr(w, 'message_id', '?')}: {e}", durable=True)
 
     def clear_all_highlights(self) -> None:
         """清除全部黄高亮（恢复原文）。幂等；无高亮时无副作用。"""
@@ -2845,7 +2905,7 @@ class TwinChatApp(QMainWindow):
             # V11.10.0：错误不走解析器，直接 system 消息
             self._append_parsed_message("系统", f"出错了：{e}", "system")
             self._finish_reply()
-            _log(f"异常: {e}")
+            _log(f"异常: {e}", durable=True)
             return
 
         # V11.10.0：检查场景高光标记
@@ -2874,13 +2934,13 @@ class TwinChatApp(QMainWindow):
             try:
                 self._llm_worker.cancel()
             except Exception as e:
-                _log(f"worker.cancel 异常: {e}")
+                _log(f"worker.cancel 异常: {e}", durable=True)
         if self._llm_thread is not None:
             if self._llm_thread.isRunning():
                 self._llm_thread.requestInterruption()
                 self._llm_thread.quit()
                 if not self._llm_thread.wait(2000):
-                    _log("线程收尾超时（2s），最后手段 terminate")
+                    _log("线程收尾超时（2s），最后手段 terminate", durable=True)
                     self._llm_thread.terminate()
                     self._llm_thread.wait(1000)
         self._llm_worker = None
@@ -2890,7 +2950,7 @@ class TwinChatApp(QMainWindow):
 
     def _cancel_streaming(self) -> None:
         """V13.0：用户取消当前流式回复。V14.0：本轮用户句标记未送达（failed）。"""
-        _log("用户取消流式回复")
+        _log("用户取消流式回复", durable=True)
         record("UI_EVENT", component="gui", payload_summary="stream_cancelled")  # Forensic M4
         self._teardown_llm_thread()
         self._streaming_active = False
@@ -2901,7 +2961,7 @@ class TwinChatApp(QMainWindow):
                 pending.set_failed()
                 _log(f"取消：用户句 #{pending.message_id} 标记 failed")
             except Exception as e:
-                _log(f"失败态标记异常: {e}")
+                _log(f"失败态标记异常: {e}", durable=True)
         self._pending_user_widget = None
         self._set_breathing(True)  # 恢复状态栏呼吸
         self._set_speaking_panels(None)
@@ -2956,7 +3016,7 @@ class TwinChatApp(QMainWindow):
         # V13.0：校验失败回传——丢弃未通过校验的全文，展示 View-Only 回避文案
         stream_ok = getattr(self.bot, "_last_stream_ok", None)
         if stream_ok is False:
-            _log("流式校验失败：丢弃未校验全文，展示 View-Only 回避文案")
+            _log("流式校验失败：丢弃未校验全文，展示 View-Only 回避文案", durable=True)
             self._clear_streaming_bubbles()
             self._streaming_buffer = ""
             fallback_text = (
@@ -2965,7 +3025,7 @@ class TwinChatApp(QMainWindow):
             )
             self._parse_twin_reply(fallback_text, highlight=False, save=False)
             self._finish_reply()
-            _log("流式校验失败：已展示回避文案")
+            _log("流式校验失败：已展示回避文案", durable=True)
             return
         buffered = self._streaming_buffer or _final
         # V11.10.1：先解析插入正式泡，再删临时泡（减少空白帧跳变）
@@ -2988,7 +3048,7 @@ class TwinChatApp(QMainWindow):
         self._streaming_buffer = ""
         self._append_parsed_message("系统", f"出错了：{err}", "system")
         self._finish_reply()
-        _log(f"流式错误: {err}")
+        _log(f"流式错误: {err}", durable=True)
 
     def _parse_twin_reply(self, reply: str, highlight: bool = False, save: bool = True) -> None:
         """V11.10.0：解析双子回复，缓冲+flush 模型，speaker 继承。
@@ -3148,7 +3208,7 @@ class TwinChatApp(QMainWindow):
                          "favor": state.ram_favor, "locked": None},
                 )
         except Exception as e:
-            _log(f"Dashboard 更新异常: {e}")
+            _log(f"Dashboard 更新异常: {e}", durable=True)
 
     def _refresh_ambient(self) -> None:
         """V16-M_F：世界状态 → 顶部/左导航的映射（DESIGN 解析 §1.4/§1.3）。"""
@@ -3169,7 +3229,7 @@ class TwinChatApp(QMainWindow):
             except Exception:
                 self._nav_sysstatus.setText("LLM · 记忆同步正常")
         except Exception as e:
-            _log(f"ambient 刷新异常: {e}")
+            _log(f"ambient 刷新异常: {e}", durable=True)
 
     def _update_status_bar(self) -> None:
         try:
@@ -3227,7 +3287,7 @@ class TwinChatApp(QMainWindow):
             self._breath_group.start()
             _log("状态栏呼吸已启动")
         except Exception as e:
-            _log(f"呼吸动画创建异常: {e}")
+            _log(f"呼吸动画创建异常: {e}", durable=True)
             self._breath_group = None
 
     def _set_breathing(self, active: bool) -> None:
@@ -3248,7 +3308,7 @@ class TwinChatApp(QMainWindow):
                 if st == QAbstractAnimation.Running:
                     group.pause()
         except Exception as e:
-            _log(f"呼吸暂停/恢复异常: {e}")
+            _log(f"呼吸暂停/恢复异常: {e}", durable=True)
 
     def _set_speaking_panels(self, speaker: Optional[str]) -> None:
         """V12.0：点亮/复位侧栏说话描边。speaker=None 全部复位。
@@ -3265,7 +3325,7 @@ class TwinChatApp(QMainWindow):
             if dashboard is not None:
                 dashboard.set_speaking(speaker)
         except Exception as e:
-            _log(f"_set_speaking_panels 异常: {e}")
+            _log(f"_set_speaking_panels 异常: {e}", durable=True)
 
     def _play_entrance_animation(self, widget: QWidget, delay_ms: int = 0) -> None:
         """正式消息泡轻入场（V16-M_B：收敛到 motion.fade_in——MOTION token
@@ -3276,7 +3336,7 @@ class TwinChatApp(QMainWindow):
             import motion
             motion.fade_in(widget, delay_ms=delay_ms)
         except Exception as e:
-            _log(f"入场动画异常: {e}")
+            _log(f"入场动画异常: {e}", durable=True)
 
     # ── V14.2：引用回复 ────────────────────────
 
@@ -3285,7 +3345,7 @@ class TwinChatApp(QMainWindow):
         try:
             record = self.conv_store.get_by_id(message_id)
         except Exception as e:
-            _log(f"引用查询异常: {e}")
+            _log(f"引用查询异常: {e}", durable=True)
             record = None
         if not record or record.get("status") != "normal":
             self._append_parsed_message(
@@ -3311,7 +3371,7 @@ class TwinChatApp(QMainWindow):
         try:
             record = self.conv_store.get_by_id(message_id)
         except Exception as e:
-            _log(f"撤回查询异常: {e}")
+            _log(f"撤回查询异常: {e}", durable=True)
             return
         if not record or record.get("role") != "user" or record.get("status") != "normal":
             return
@@ -3320,7 +3380,7 @@ class TwinChatApp(QMainWindow):
         try:
             dt = datetime.strptime(created, "%Y-%m-%d %H:%M:%S")
         except (ValueError, TypeError):
-            _log(f"撤回：created_at 解析失败 {created!r}")
+            _log(f"撤回：created_at 解析失败 {created!r}", durable=True)
             return
         if (datetime.now() - dt).total_seconds() > 180:
             self._append_parsed_message(
@@ -3349,7 +3409,7 @@ class TwinChatApp(QMainWindow):
             try:
                 restore()
             except Exception as e:
-                _log(f"history 剪枝失败: {e}")
+                _log(f"history 剪枝失败: {e}", durable=True)
 
     def _mark_widget_recalled(self, message_id: int) -> None:
         """按 DB id 找到聊天区 widget 并置为撤回占位。"""
@@ -3391,9 +3451,9 @@ class TwinChatApp(QMainWindow):
                 "world_state": self.world.save_dict() if hasattr(self, 'world') else {},
             })
             self.store.save(data)
-            _log("状态保存成功")
+            _log("状态保存成功", durable=True)
         except Exception as e:
-            _log(f"保存状态失败: {e}")
+            _log(f"保存状态失败: {e}", durable=True)
 
     # ── 事件过滤 ────────────────────────────
 
@@ -3456,7 +3516,7 @@ class TwinChatApp(QMainWindow):
             self._memory_book_overlay.setFocus()
             _log("回忆之书已打开")
         except Exception as e:
-            _log(f"回忆之书打开失败: {e}")
+            _log(f"回忆之书打开失败: {e}", durable=True)
 
     def _close_history(self) -> None:
         """关闭历史浮层。"""
@@ -3511,7 +3571,7 @@ class TwinChatApp(QMainWindow):
                 content = record.get("content", "")
                 summary = (content[:60] + "…") if len(content) > 60 else content
         except Exception as e:
-            _log(f"定位降级查询异常: {e}")
+            _log(f"定位降级查询异常: {e}", durable=True)
 
         tip = "📍 该消息不在当前可见范围（可能已随对话滚动移出）。"
         if summary:
@@ -3529,7 +3589,7 @@ class TwinChatApp(QMainWindow):
             )
             QTimer.singleShot(2000, lambda: widget.setStyleSheet(""))
         except Exception as e:
-            _log(f"高亮异常: {e}")
+            _log(f"高亮异常: {e}", durable=True)
 
     def resizeEvent(self, event) -> None:
         """窗口 resize 时同步浮层遮罩尺寸。"""
@@ -3584,7 +3644,7 @@ class TwinChatApp(QMainWindow):
                 "msg_end_id": messages[-1]["id"],
             }
         except Exception as e:
-            _log(f"生成 session 摘要失败: {e}")
+            _log(f"生成 session 摘要失败: {e}", durable=True)
             return None
 
     def _save_session_summary(self) -> None:
@@ -3605,7 +3665,7 @@ class TwinChatApp(QMainWindow):
             )
             _log(f"session 摘要已保存: turns={summary['turn_count']}")
         except Exception as e:
-            _log(f"session 摘要保存失败: {e}")
+            _log(f"session 摘要保存失败: {e}", durable=True)
 
     def _show_daily_greeting(self, today_str: str) -> None:
         """V11.9.1：自然日首次问候 — 表驱动模板，View-Only。
@@ -3646,7 +3706,7 @@ class TwinChatApp(QMainWindow):
             self._save_state()
             _log(f"日更问候已展示: period={period} weather={weather} date={today_str}")
         except Exception as e:
-            _log(f"日更问候展示失败: {e}\n{traceback.format_exc()}")
+            _log(f"日更问候展示失败: {e}\n{traceback.format_exc()}", durable=True)
 
     def _show_ambient_line(self) -> None:
         """V11.9.0：同日轻氛围一行 — period · weather · active_event，View-Only。
@@ -3673,7 +3733,7 @@ class TwinChatApp(QMainWindow):
             self._append_parsed_message("系统", f"🌧️ {text}{extra}", "system", save=False)
             _log(f"轻氛围已展示: {text} | 偶发一句: {'有' if remark else '无'}")
         except Exception as e:
-            _log(f"轻氛围展示失败: {e}")
+            _log(f"轻氛围展示失败: {e}", durable=True)
 
     def _pick_ambient_remark(self) -> str:
         """V14.11 Step5：选取「偶发一句」。放行判定（WorldState）→ 注册表
@@ -3697,7 +3757,7 @@ class TwinChatApp(QMainWindow):
             self.world.record_ambient_remark()
             return item.get("text", "")
         except Exception as e:
-            _log(f"偶发一句选取失败: {e}")
+            _log(f"偶发一句选取失败: {e}", durable=True)
             return ""
 
     def _on_sprite_dropped(self, key: str, src: str) -> None:
@@ -3719,7 +3779,7 @@ class TwinChatApp(QMainWindow):
                 "系统", f"已更新{name}的立绘（重启后依然生效）。", "system", save=False)
             _log(f"立绘替换: {key} -> {dst}")
         except Exception as e:
-            _log(f"立绘替换异常: {e}")
+            _log(f"立绘替换异常: {e}", durable=True)
 
     def _show_resume_card(self) -> None:
         """启动时展示上次 session 摘要（续聊卡）。
@@ -3752,7 +3812,7 @@ class TwinChatApp(QMainWindow):
             self._append_parsed_message("系统", card_text, "system", save=False)
             _log(f"续聊卡已展示: turns={turns} time={time_str}")
         except Exception as e:
-            _log(f"续聊卡展示失败: {e}")
+            _log(f"续聊卡展示失败: {e}", durable=True)
 
     def closeEvent(self, event) -> None:
         self._teardown_llm_thread()  # V13.0：先收尾线程，再存状态（防 worker 写一半）
@@ -3773,7 +3833,7 @@ def _install_crash_handler() -> None:
     try:
         def _excepthook(exc_type, exc_value, exc_tb):
             msg = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
-            _log(f"未捕获异常: {exc_value}\n{msg}")
+            _log(f"未捕获异常: {exc_value}\n{msg}", durable=True)
             try:
                 with open(crash_path, "a", encoding="utf-8") as f:
                     f.write(f"\n[{datetime.now().isoformat()}] 未捕获异常:\n{msg}")
@@ -3781,7 +3841,7 @@ def _install_crash_handler() -> None:
                 pass
         sys.excepthook = _excepthook
     except Exception as e:
-        _log(f"崩溃处理器安装失败: {e}")
+        _log(f"崩溃处理器安装失败: {e}", durable=True)
 
 
 def main() -> None:
@@ -3805,7 +3865,7 @@ def main() -> None:
                 )
                 _log("AppUserModelID 已设置: ReZeroTwin.RemRam.1")
             except Exception as e:
-                _log(f"AppUserModelID 设置失败（非致命）: {e}")
+                _log(f"AppUserModelID 设置失败（非致命）: {e}", durable=True)
 
         app = QApplication(sys.argv)
 
@@ -3820,7 +3880,7 @@ def main() -> None:
                 app_icon.addFile(icon_path, QSize(sz, sz))
             _log(f"QIcon addFile 完成: 16/32/48/256 from {icon_path}")
         else:
-            _log("[警告] 图标文件不存在，QIcon 将为空，任务栏/窗口图标会异常")
+            _log("[警告] 图标文件不存在，QIcon 将为空，任务栏/窗口图标会异常", durable=True)
 
         # frozen 时仅在主题 SVG 不可用时，用 EXE 内嵌图标作为兜底。
         if getattr(sys, "frozen", False) and sys.platform == "win32":
@@ -3832,23 +3892,23 @@ def main() -> None:
                 else:
                     _log("frozen 兜底: EXE 内嵌图标为空，保持 ICO 文件图标")
             except Exception as e:
-                _log(f"frozen 兜底失败（非致命）: {e}")
+                _log(f"frozen 兜底失败（非致命）: {e}", durable=True)
 
         app.setWindowIcon(app_icon)
         app.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
-        app.aboutToQuit.connect(lambda: _log("aboutToQuit 信号触发"))
+        app.aboutToQuit.connect(lambda: _log("aboutToQuit 信号触发", durable=True))
         window = TwinChatApp()
         window.show()
         # show 后二次 setWindowIcon：强制任务栏刷新图标关联
         window.setWindowIcon(app_icon)
         _log("show 后二次 setWindowIcon 已执行")
         _log("窗口 show 完成")
-        _log("即将进入 app.exec() 事件循环")
+        _log("即将进入 app.exec() 事件循环", durable=True)
         ret = app.exec()
-        _log(f"app.exec() 返回 {ret}")
+        _log(f"app.exec() 返回 {ret}", durable=True)
         sys.exit(ret)
     except Exception as e:
-        _log(f"main 异常: {e}\n{traceback.format_exc()}")
+        _log(f"main 异常: {e}\n{traceback.format_exc()}", durable=True)
         raise
 
 
