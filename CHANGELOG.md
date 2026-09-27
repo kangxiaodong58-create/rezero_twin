@@ -17,6 +17,11 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - **A6（`ad51b2e`）类级可变状态收口**：`SceneManager` 轮转游标从**类级**移到**世界实例**（`WorldState.scene_rotor/scene_last`，运行时字段、刻意不入存档；`get_scene_interaction(..., *, rotor, last)` 关键字注入，不传退模块级兜底）；`ReZeroLLMBridge._anniv_cache` 类级 → 实例级。
 - **B4（`5feaf12`）第二 WorldState 收口（方案 B）**：`main.py` 与 `vignette.prepare_session_opening` 改走核心 `shared.state.WorldState` + `MemoryStore` 单管线；`shared/world_state.py` 降级为**零逻辑 shim**（108 → 90 行，函数体全部转调核心；保留 docx 时代 4 个纯别名 property ⇒ 外部脚本不炸；**不删模块**）。
 
+### 审计追加确认（F16-4/5/6，2026-09-27 审计「方案 B 批准」附条件）
+- **F16-4**：4 个模块函数签名 ↔ 核心能力逐条对照 → **全部一一对应**，无「兼容空转」项（唯一被忽略的参数 `weather_change_hours` 在改动前即被忽略）；别名 property 实为 **5 个**（审计文本记 4 个，已复核修正）。
+- **F16-5/F16-6**：smoke 兼容用例补强——`is not` 子类断言 + 5 区别名逐个 `hasattr` + **读/写双方向**逐条等价 + `hour` 非法输入边界。
+- 留证：`docs/devlog/步1-4零观感批_2026-09-27.md` §9；验证 305 passed + 冒烟 31/31 + 隔离 ✅。
+
 ### 验证（全部真跑留证）
 - 全量测试：**305 passed**（276→…→295 → **305**，本批 +10 例）+ `scripts/verify_isolation.sh` 数据隔离校验通过；冒烟 **31/31**。
 - 机械判据：`durable=True` 契约 = **53**（AST 复核「规则命中却未标记 = 0」，契约测试入套件）；生产代码 `grep "shared.world_state"` = **0**；`grep "SceneManager._interaction_rotor\|cls._interaction_rotor\|ReZeroLLMBridge._anniv_cache"` = **0**；`python main.py --help` / `import main` OK。

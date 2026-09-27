@@ -385,16 +385,18 @@ def test_world_state_docx_compat() -> None:
         original_get_data_dir = _config.get_data_dir
         _config.get_data_dir = lambda: tmp
         try:
-            # 可导入性 + 子类关系（外部脚本不炸）
+            # ── F16-5：可导入性 + **子类（非别名）** + 5 个别名 property 存在 ──
             assert issubclass(WS.WorldState, _core.WorldState), "shim 必须仍可导入且是核心类子类"
-            # 字段别名与当前核心字段一致（纯别名、零逻辑）
+            assert WS.WorldState is not _core.WorldState, "必须是子类，不能是核心类别名（否则别名 property 丢失）"
+            for _alias in ("last_real_timestamp", "last_interaction_real",
+                           "days_away", "system_date", "hour"):
+                assert hasattr(WS.WorldState, _alias), f"别名 property 缺失: {_alias}"
+
             ws = WS.WorldState.now()
+            alias_ws = WS.WorldState.now()   # F16-6 专用：可安全改值
             assert isinstance(ws, _core.WorldState)
-            assert ws.last_real_timestamp == ws.last_real_ts
-            assert ws.last_interaction_real == ws.last_interaction_ts
-            assert ws.days_away == ws.days_since_last
-            assert ws.system_date == ws.current_time[:10]
-            assert isinstance(ws.hour, int)
+
+            
 
             # 转调核心：save/load 仍走 memory.json，不新建 world_state.json
             WS.save_world_state(ws)
@@ -417,6 +419,29 @@ def test_world_state_docx_compat() -> None:
             # mark_interaction 清零离线天数
             WS.mark_interaction(ws3)
             assert ws3.days_away == 0 and ws3.last_interaction_real > 0
+            # ── F16-6：5 个别名 property ↔ 核心字段**逐条**等价（读 + 写双方向）──
+            # 用**独立实例**：避免上面的合成值污染 `ws` 的存档往返断言
+            # （`last_real_ts` 被改会让 `load_or_create` 重算 weather_seed）。
+            # 读方向：改核心字段 → 别名读出同值
+            alias_ws.last_real_ts = 111.5
+            assert alias_ws.last_real_timestamp == 111.5, "last_real_timestamp ↔ last_real_ts（读）"
+            alias_ws.last_interaction_ts = 222.5
+            assert alias_ws.last_interaction_real == 222.5, "last_interaction_real ↔ last_interaction_ts（读）"
+            alias_ws.days_since_last = 7
+            assert alias_ws.days_away == 7, "days_away ↔ days_since_last（读）"
+            alias_ws.current_time = "2026-09-27 08:00"
+            assert alias_ws.system_date == "2026-09-27", "system_date ↔ current_time[:10]（读）"
+            assert alias_ws.hour == 8, "hour ↔ current_time[11:13]（读）"
+            # 写方向：改别名 → 核心字段落值（3 个可写属性）
+            alias_ws.days_away = 3
+            assert alias_ws.days_since_last == 3, "days_away → days_since_last（写）"
+            alias_ws.last_real_timestamp = 333.5
+            assert alias_ws.last_real_ts == 333.5, "last_real_timestamp → last_real_ts（写）"
+            alias_ws.last_interaction_real = 444.5
+            assert alias_ws.last_interaction_ts == 444.5, "last_interaction_real → last_interaction_ts（写）"
+            # 边界：current_time 非法 → hour 回退为当前小时（int，不抛）
+            alias_ws.current_time = "坏值"
+            assert isinstance(alias_ws.hour, int), "hour 非法输入必须安全回退为 int"
         finally:
             _config.get_data_dir = original_get_data_dir
 
