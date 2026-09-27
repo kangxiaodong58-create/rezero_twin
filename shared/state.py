@@ -10,6 +10,7 @@
 from __future__ import annotations
 
 import re
+import threading
 from enum import Enum, IntEnum
 from typing import Any, Dict, List, Optional
 
@@ -73,11 +74,16 @@ class TurnTxn:
     """
 
     def __init__(self, engine: "HardStateEngine", candidate: "HardStateEngine",
-                 state: "TwinState", sink: Dict[str, List[Any]]) -> None:
+                 state: "TwinState", sink: Dict[str, List[Any]],
+                 base: Optional[Dict[str, Any]] = None) -> None:
         self.engine = engine
         self.candidate = candidate
         self.state = state
         self.sink = sink
+        # SPEC-20260922-21（A10/F21-3）：**begin_turn 时刻**的全字段快照，作为 delta 基线。
+        # 必须在 begin_turn 抓取、随事务保存——**不得**在 commit() 时重新取真身快照，
+        # 否则轮内被主线程改过的字段会被误判成「副本未跟上」而遭到回写覆盖。
+        self.base: Dict[str, Any] = base if base is not None else {}
         self.committed = False
         self.discarded = False
 
@@ -90,7 +96,12 @@ class TurnTxn:
             return self.state
         self.committed = True
         self.candidate._sink = None
-        self.engine.apply_dict(self.candidate.to_dict())
+        # SPEC-20260922-21（A10）：只写回**本轮真正改动过的字段**（candidate 与 base 的差集）——
+        # 此前整量回写会把 begin_turn 时刻的旧值盖回真身，静默丢弃轮内别处（主线程）的修改。
+        # 语义：同一字段若轮内被别处改过、且本轮也改了它 ⇒ **以本轮为准**；本轮没碰的不动。
+        candidate_dict = self.candidate.to_dict()
+        delta = {k: v for k, v in candidate_dict.items() if self.base.get(k) != v}
+        self.engine.apply_dict(delta)
         facts, transitions = self.sink["facts"], self.sink["transitions"]
         self.sink = {"facts": [], "transitions": []}
         for fn in facts:
@@ -864,6 +875,11 @@ class HardStateEngine:
         # V13.1：陪伴通道防刷（5涨3停，重启重置；非存档字段）
         self._companion_gains = 0
         self._companion_cooldown = 0
+        # SPEC-20260922-21（A10）：跨线程保护——commit 在 LLM worker 线程整段写状态，
+        # 主线程面板/状态栏同时 snapshot()；不加锁会读到「半数新半数旧」的混合态。
+        # 普通 Lock 即最小必要：持锁三方法（apply_dict/snapshot/to_dict）之间**无嵌套调用**；
+        # 若未来出现嵌套持锁路径（如持锁内再调 to_dict），须改用 threading.RLock。
+        self._lock = threading.Lock()
         # V16.2（M3）：轮内副作用队列（非 None 时镜像/轨迹延迟到事务 commit）
         self._sink: Optional[Dict[str, List[Any]]] = None
 
@@ -873,11 +889,12 @@ class HardStateEngine:
         真身 `self` 在本轮内保持不变——GUI 面板/状态栏读 `engine.snapshot()`
         因此不会在流式过程中跳变，数值在 commit 后统一更新。
         """
-        candidate = HardStateEngine.from_dict(self.to_dict(), arc=self.arc)
+        base = self.to_dict()  # F21-3：delta 基线 = begin_turn 时刻快照（与构造副本复用同一份）
+        candidate = HardStateEngine.from_dict(base, arc=self.arc)
         sink: Dict[str, List[Any]] = {"facts": [], "transitions": []}
         candidate._sink = sink
         state = candidate.update(user_input)
-        return TurnTxn(self, candidate, state, sink)
+        return TurnTxn(self, candidate, state, sink, base=base)
 
     # ── V16.1（M2）：引擎状态单源序列化 ─────────────────────────────
     # to_dict / from_dict / apply_dict 是存档的唯一入口。此前 GUI 逐字段手动
@@ -887,7 +904,15 @@ class HardStateEngine:
     # 有意不持久化：_companion_gains/_companion_cooldown（V13.1 设计：重启重置）。
 
     def to_dict(self) -> Dict[str, Any]:
-        """全字段快照（可直接 json 序列化，无枚举对象）。"""
+        """全字段快照（可直接 json 序列化，无枚举对象）。
+
+        SPEC-20260922-21（A10）：公开入口持锁后转发（读者不可能看到半套字段）。
+        """
+        with self._lock:
+            return self._to_dict_impl()
+
+    def _to_dict_impl(self) -> Dict[str, Any]:
+        """无锁实现——仅由 ``to_dict()`` 在持锁状态下调用（勿直接调用）。"""
         return {
             "schema_version": 2,
             "arc": self.arc.value,
@@ -931,7 +956,16 @@ class HardStateEngine:
         旧格式：顶层直接是 favor / ram_favor / independence / recovery /
         events / user_name / arc / locked（V16.0 及以前）——同样被接受，
         因此调用方可无条件传 `mem.get("engine") or mem`。
+
+        SPEC-20260922-21（A10）：公开入口**整段持锁**后转发——`apply_dict` 是
+        逐字段赋值的多字节码序列，不加锁时快照读者可能看到半数新半数旧的混合态；
+        本方法同时支持**部分字典**（delta 写回），故消费者必须遵守「缺键 → 保持当前值」。
         """
+        with self._lock:
+            self._apply_dict_impl(data)
+
+    def _apply_dict_impl(self, data: Optional[Dict[str, Any]]) -> None:
+        """无锁实现——仅由 ``apply_dict()`` 在持锁状态下调用（勿直接调用）。"""
         if not isinstance(data, dict) or not data:
             return
 
@@ -977,9 +1011,12 @@ class HardStateEngine:
             except KeyError:
                 pass
 
-        name = data.get("user_name", None)
-        self.user_name = str(name) if name else None
-        self.profile.name = self.user_name
+        # SPEC-20260922-21（A10）：**键存在性**语义——缺键保持当前值（delta 写回安全），
+        # 显式传 None / 空串仍置空。此前是「缺键 → None」，会让增量写回误清空用户名。
+        if "user_name" in data:
+            name = data.get("user_name")
+            self.user_name = str(name) if name else None
+            self.profile.name = self.user_name
 
         events = data.get("events")
         if isinstance(events, list):
@@ -1386,7 +1423,15 @@ class HardStateEngine:
 
         专供状态显示（status 指令 / GUI 状态栏）使用；
         真实用户输入的状态更新仍必须走 update()。
+
+        SPEC-20260922-21（A10）：公开入口持锁后转发——返回**按值构造**的新 TwinState
+        （F21-1 已核：标量逐字段赋值 ⇒ 加锁能真正消除撕裂）；`events` 亦断开为独立列表。
         """
+        with self._lock:
+            return self._snapshot_impl()
+
+    def _snapshot_impl(self) -> TwinState:
+        """无锁实现——仅由 ``snapshot()`` 在持锁状态下调用（勿直接调用）。"""
         summary = self._context_summary()
 
         favor_level = self._get_favor_level()
@@ -1411,7 +1456,7 @@ class HardStateEngine:
             wants_push=wants_push,
             is_reunion=self.is_reunion,
             breaker_triggered=self.breaker_triggered,
-            events=self.events,
+            events=list(self.events),  # SPEC-20260922-21：断开唯一共享容器引用（元素仍只读共享）
         )
 
     def set_arc(self, arc: StoryArc) -> None:
