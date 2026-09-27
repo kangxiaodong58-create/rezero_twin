@@ -1,19 +1,26 @@
-"""世界状态持久化（docx 方案兼容入口）。
+"""兼容 shim（SPEC-20260922-16 方案 B）：**仅外部/历史脚本兼容，新代码请用 `shared.state`。**
 
-v10.4 落地时选择沿用 memory.json 单持久化管线，避免独立的 world_state.json
-造成双文件同步问题。本模块作为《代码实现》docx 原文的 API 兼容层存在：
+背景：v10.4 落地时选择沿用 memory.json 单持久化管线（不引入独立 `world_state.json`），
+本模块是《代码实现》docx 原文的 API 兼容入口。方案 B 起本模块**自身不含任何状态逻辑**：
 
-- 暴露 docx 中同名的 WorldState 类与函数（load_world_state / save_world_state /
-  update_world_state_on_startup / mark_interaction）。
-- 底层委托给已验证的 shared.state.WorldState，字段名做映射，保证旧存档、
-  GUI、冒烟测试都不感知差异。
-- 不破坏现有架构，也不引入新的持久化路径。
+- `WorldState` = 核心 `shared.state.WorldState` 的**别名子类**（仅 docx 时代 4 个字段别名）；
+- 4 个模块函数**全部转调核心**（`load_or_create` / `save_dict` / `mark_interaction`）。
+
+迁移指引（重跑 `docs/evaluation/sessions/**` 历史探针时）：
+
+    # 旧（仍可导入，但不推荐）
+    from shared.world_state import WorldState, load_world_state, save_world_state
+    # 新（核心类单源）
+    from shared.state import WorldState
+    from shared.memory_store import MemoryStore
+    store = MemoryStore()
+    ws = WorldState.load_or_create(store.load().get("world_state"))
+    store.set("world_state", ws.save_dict())
 """
 
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Any, Dict, Optional
 
 from shared.state import WorldState as _CoreWorldState
 
@@ -26,83 +33,58 @@ __all__ = [
 ]
 
 
-class WorldState(_CoreWorldState):
-    """docx 风格的 WorldState 兼容类。
+def _hour_of(current_time: str) -> int:
+    try:
+        return int((current_time or "")[11:13])
+    except Exception:
+        return datetime.now().hour
 
-    继承内部已实现的核心状态机，仅额外提供 docx 原文使用的字段别名，
-    使按 docx 编写的调用代码可以直接使用。
+
+class WorldState(_CoreWorldState):
+    """docx 时代字段别名（**纯别名、零逻辑**）。
+
+    仅为「按 docx 编写的外部脚本不炸」而保留；新代码请直接用 `shared.state.WorldState`。
     """
 
-    @property
-    def last_real_timestamp(self) -> float:
-        return self.last_real_ts
+    last_real_timestamp = property(
+        lambda s: s.last_real_ts, lambda s, v: setattr(s, "last_real_ts", v))
+    last_interaction_real = property(
+        lambda s: s.last_interaction_ts, lambda s, v: setattr(s, "last_interaction_ts", v))
+    days_away = property(
+        lambda s: s.days_since_last, lambda s, v: setattr(s, "days_since_last", v))
+    system_date = property(lambda s: (s.current_time or "")[:10])
+    hour = property(lambda s: _hour_of(s.current_time))
 
-    @last_real_timestamp.setter
-    def last_real_timestamp(self, value: float) -> None:
-        self.last_real_ts = value
 
-    @property
-    def last_interaction_real(self) -> float:
-        return self.last_interaction_ts
+def _store():
+    """核心单持久化管线（memory.json）——与 GUI/CLI 完全同一路径。"""
+    from shared.memory_store import MemoryStore
 
-    @last_interaction_real.setter
-    def last_interaction_real(self, value: float) -> None:
-        self.last_interaction_ts = value
-
-    @property
-    def days_away(self) -> int:
-        return self.days_since_last
-
-    @days_away.setter
-    def days_away(self, value: int) -> None:
-        self.days_since_last = value
-
-    @property
-    def system_date(self) -> str:
-        return (self.current_time or "")[:10]
-
-    @property
-    def hour(self) -> int:
-        try:
-            return int((self.current_time or "")[11:13])
-        except Exception:
-            return datetime.now().hour
+    return MemoryStore()
 
 
 def load_world_state() -> WorldState:
-    """从 memory.json 恢复世界状态（docx 兼容入口）。"""
-    from shared.memory_store import MemoryStore
-
-    store = MemoryStore()
-    mem = store.load()
-    saved = mem.get("world_state")
-    return WorldState.load_or_create(saved)
+    """从 memory.json 恢复世界状态（转调核心 `load_or_create`）。"""
+    return WorldState.load_or_create(_store().load().get("world_state"))
 
 
 def save_world_state(ws: WorldState) -> None:
-    """保存世界状态到 memory.json（docx 兼容入口）。"""
-    from shared.memory_store import MemoryStore
-
-    store = MemoryStore()
-    mem = store.load()
-    mem["world_state"] = ws.save_dict()
-    store.save(mem)
+    """写回 memory.json（转调核心 `save_dict` + `MemoryStore.set`）。"""
+    _store().set("world_state", ws.save_dict())
 
 
 def update_world_state_on_startup(
     ws: WorldState, weather_change_hours: float = 8.0
 ) -> WorldState:
-    """启动时更新时段、离线天数与自然天气演变（docx 兼容入口）。
+    """启动更新（转调核心 `load_or_create`）。
 
-    当前 WorldState.load_or_create 已在内部完成时段、离线天数与 ≥8h 天气推演，
-    因此这里用当前存档值重新触发一次计算即可；weather_change_hours 参数保留以
-    兼容 docx 签名，但实际阈值由核心 WorldState.WEATHER_CHANGE_HOURS 控制。
+    时段、离线天数与 ≥8h 天气推演都在核心 `load_or_create` 内部完成；
+    `weather_change_hours` 参数保留**仅为 docx 签名兼容**，实际阈值由
+    `WorldState.WEATHER_CHANGE_HOURS` 控制。
     """
-    # 保留参数签名兼容性；重新 load_or_create 会基于当前时间重算。
-    saved = ws.save_dict()
-    return WorldState.load_or_create(saved)
+    return WorldState.load_or_create(ws.save_dict())
 
 
 def mark_interaction(ws: WorldState) -> None:
-    """用户产生有效对话时调用：刷新最后互动时间戳并清零离线天数。"""
+    """转调核心 `WorldState.mark_interaction()`。"""
     ws.mark_interaction()

@@ -870,15 +870,17 @@ def prepare_session_opening(
     independence: float = 0.5,
     ram_stage: str = "观察中",
 ) -> Tuple[WorldState, str]:
-    """应用启动标准单一入口（docx 兼容签名）。
+    """应用启动标准单一入口（docx 兼容签名；**未接线入口——当前全仓无调用者**）。
 
     加载/更新世界状态并生成开场引言；返回 (world_state, vignette)。
-    底层沿用 memory.json 单持久化管线，与现有 GUI 完全兼容。
+    底层沿用 memory.json 单持久化管线（SPEC-20260922-16 方案 B：改走核心类）。
+    保留原签名供历史/外部调用；新代码请直接用 `shared.state.WorldState` + `VignetteGenerator`。
     """
-    from shared.world_state import load_world_state, update_world_state_on_startup
+    from shared.memory_store import MemoryStore
 
-    ws = load_world_state()
-    ws = update_world_state_on_startup(ws)
+    # 核心 load_or_create 内部已完成时段/离线天数/≥8h 天气推演
+    # （原兼容层「load 后再 update」是同一输入的两次同构计算，等价合并为一次）
+    ws = WorldState.load_or_create(MemoryStore().load().get("world_state"))
     vignette = generate_opening_vignette(
         ws,
         rem_favor_level=rem_favor_level,

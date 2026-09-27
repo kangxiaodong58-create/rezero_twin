@@ -375,29 +375,37 @@ def test_vignette_v1040() -> None:
 
 
 def test_world_state_docx_compat() -> None:
-    """docx 兼容层：shared/world_state.py 字段别名与读写函数。"""
+    """兼容 shim（SPEC-20260922-16 方案 B）：可导入 + 纯别名等价 + 函数转调核心。"""
     import time as _time
     import shared.config as _config
+    import shared.state as _core
     import shared.world_state as WS
 
     with tempfile.TemporaryDirectory() as tmp:
         original_get_data_dir = _config.get_data_dir
         _config.get_data_dir = lambda: tmp
         try:
-            # 字段别名与当前核心字段一致
+            # 可导入性 + 子类关系（外部脚本不炸）
+            assert issubclass(WS.WorldState, _core.WorldState), "shim 必须仍可导入且是核心类子类"
+            # 字段别名与当前核心字段一致（纯别名、零逻辑）
             ws = WS.WorldState.now()
+            assert isinstance(ws, _core.WorldState)
             assert ws.last_real_timestamp == ws.last_real_ts
             assert ws.last_interaction_real == ws.last_interaction_ts
             assert ws.days_away == ws.days_since_last
             assert ws.system_date == ws.current_time[:10]
             assert isinstance(ws.hour, int)
 
-            # save/load 走 memory.json，不新建 world_state.json
+            # 转调核心：save/load 仍走 memory.json，不新建 world_state.json
             WS.save_world_state(ws)
+            assert not os.path.exists(os.path.join(tmp, "world_state.json")), "不得引入独立存档文件"
             ws2 = WS.load_world_state()
             assert ws2.period == ws.period
             assert ws2.weather_seed == ws.weather_seed
             assert isinstance(ws2, WS.WorldState)
+            # 核心单源：核心类直读同一管线得到等价结果
+            core_ws = _core.WorldState.load_or_create(ws.save_dict())
+            assert core_ws.period == ws2.period and core_ws.weather_seed == ws2.weather_seed
 
             # update_world_state_on_startup 返回 WorldState 并触发推演计算
             ws2.days_away = 5
@@ -414,17 +422,20 @@ def test_world_state_docx_compat() -> None:
 
 
 def test_prepare_session_opening() -> None:
-    """docx 兼容入口 prepare_session_opening 返回 (WorldState, str)。"""
+    """docx 兼容入口 prepare_session_opening 返回 (WorldState, str)。
+
+    方案 B 起该入口内部走**核心类**（不再经兼容层）→ 断言随动为核心类型。
+    """
     import shared.config as _config
+    import shared.state as _core
     from shared.vignette import prepare_session_opening
-    import shared.world_state as WS
 
     with tempfile.TemporaryDirectory() as tmp:
         original_get_data_dir = _config.get_data_dir
         _config.get_data_dir = lambda: tmp
         try:
             ws, vignette = prepare_session_opening(llm_callable=None)
-            assert isinstance(ws, WS.WorldState)
+            assert isinstance(ws, _core.WorldState), "入口应返回核心类实例"
             assert isinstance(vignette, str) and len(vignette) >= 10
             assert "蕾姆" in vignette or "拉姆" in vignette or "宅邸" in vignette
         finally:

@@ -45,7 +45,7 @@ SPEC-ID：SPEC-20260922-16
 
 ## 测试方式
 
-1. **机械判据**：`grep -rn "shared.world_state" --include=*.py` → 生产路径（`main.py` / `shared/*.py` / `llm/*.py` / `tests/*`）**仅剩 shim 自身**（`docs/` 归档探针不计）；
+1. **机械判据（实现期收紧）**：`grep -rn "shared.world_state" --include=*.py` → **生产代码**（`main.py` / `shared/*.py` / `llm/*.py` / `gui.py`）= **0 命中**；剩余命中 = shim 自身（文件头迁移指引）+ 显式消费兼容层的测试（`tests/smoke_test.py` 兼容用例；`tests/test_event_scene_optim.py:24` —— **实现期发现的第 3 个消费方**，方案 B 下无需改动，仅记录）。`docs/**` 归档探针不计（迁移指引见 devlog §7）。
 2. **shim 可导入性**：隔离环境下 `import shared.world_state as W; import shared.state as S; assert issubclass(W.WorldState, S.WorldState)` + `W.save_world_state(W.load_world_state())` 往返无异常；
 3. **CLI**：`python main.py --help` 退出码 0；`python -c "import main"` 无错；
 4. **世界状态往返**：新用例（save→load 后 `last_letter_ts/last_letter_date/active_event/days_since_last` 等价）；

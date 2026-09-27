@@ -15,9 +15,9 @@ from shared.config import load_env
 
 load_env()
 
-from shared.state import StoryArc
+from shared.state import StoryArc, WorldState          # SPEC-20260922-16：核心类单源
 from shared.conversation_store import ConversationStore
-from shared.world_state import WorldState, load_world_state, save_world_state, mark_interaction
+from shared.memory_store import MemoryStore            # SPEC-20260922-16：直接走单持久化管线
 
 
 def run_llm(world: WorldState) -> None:
@@ -106,11 +106,14 @@ def main() -> None:
         help="运行模式：llm 使用大模型桥接（需要 DEEPSEEK_API_KEY）。V14.4 起仅 LLM 模式。",
     )
     args = parser.parse_args()
-    world = load_world_state()
+    _store = MemoryStore()                              # SPEC-20260922-16 方案 B：核心类直连
+    world = WorldState.load_or_create(_store.load().get("world_state"))
     try:
         run_llm(world)
     finally:
-        save_world_state(world)
+        _mem = _store.load()
+        _mem["world_state"] = world.save_dict()         # 与 GUI 同一 memory.json 管线
+        _store.save(_mem)
 
 
 if __name__ == "__main__":
