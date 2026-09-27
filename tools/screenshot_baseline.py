@@ -67,6 +67,55 @@ def _demo_memory_book(tmp_life, tmp_album):
         album_dir=tmp_album, today=date(2026, 9, 23))
 
 
+def _demo_bubble_hit():
+    """V16.5.4/SPEC-20260922-20：聊天区气泡 + **light 档**命中高亮（浅底表面面）。
+
+    与真实路径一致：`highlight_hits` 也是把 `highlight_plain_text(...)` 的 HTML 塞回气泡。
+    """
+    from gui import BubbleWidget, highlight_plain_text
+
+    return BubbleWidget(
+        highlight_plain_text('客人大人，欢迎回来。蕾姆刚煮好了红茶，请趁热喝。', '红茶'), "rem"
+    )
+
+
+def _demo_history_item_hit():
+    """V16.5.4/SPEC-20260922-20：历史浮层条目 + **dark 档**命中高亮（深底卡片面）。
+
+    复刻浮层结构：host（壳色底 `bg_base`）→ `history_card`（token 驱动）→ 条目本身，
+    使叠色与真机一致（bg_surface_2 叠在宅邸夜色底上）。
+    """
+    from design_tokens import COLORS
+    from gui import HistoryItemWidget
+    from ui import theme
+    from PySide6.QtWidgets import QFrame
+
+    host = QWidget()
+    host.setStyleSheet(f"background-color: {COLORS['bg_base']};")
+    outer = QVBoxLayout(host)
+    outer.setContentsMargins(14, 14, 14, 14)
+
+    card = QFrame()
+    card.setObjectName("history_card")
+    card.setStyleSheet(theme.history_card())
+    inner = QVBoxLayout(card)
+    inner.setContentsMargins(10, 10, 10, 10)
+    inner.addWidget(
+        HistoryItemWidget(
+            {
+                "id": 1,
+                "role": "rem",
+                "sender": "蕾姆",
+                "content": "客人大人，欢迎回来。蕾姆刚煮好了红茶，请趁热喝。",
+                "created_at": "2026-09-20 10:00:00",
+            },
+            keyword="红茶",
+        )
+    )
+    outer.addWidget(card)
+    return host
+
+
 def build_surfaces(tmp_root: str):
     """确定性截图面（时钟无关）。返回 [(name, widget, size_hint)]。"""
     os.makedirs(tmp_root, exist_ok=True)
@@ -78,6 +127,9 @@ def build_surfaces(tmp_root: str):
         ("system_vignette", _demo_system_card()),
         ("memory_book", _demo_memory_book(
             os.path.join(tmp_root, "life.db"), os.path.join(tmp_root, "album"))),
+        # V16.5.4/SPEC-20260922-20：高亮两档的**回归基线**（非本次改动正确性判据，见 SPEC §F20-5）
+        ("bubble_search_hit", _demo_bubble_hit()),
+        ("history_item_search_hit", _demo_history_item_hit()),
     ]
     for name, w in surfaces:
         w.setStyleSheet(w.styleSheet())  # 触发样式解析

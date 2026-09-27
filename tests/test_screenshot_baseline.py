@@ -62,7 +62,7 @@ def test_screenshot_capture_and_compare(tmp_path):
 
     base = str(tmp_path / "base")
     saved = sb.capture(base)
-    assert len(saved) == 5
+    assert len(saved) == 7, "5 张基础面 + 2 张高亮回归面（SPEC-20260922-20）"
     for _name, path in saved:
         assert os.path.isfile(path) and os.path.getsize(path) > 500
     assert sb.compare(base) == 0, "同 token 同渲染应零差异"

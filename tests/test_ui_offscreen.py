@@ -205,6 +205,38 @@ def test_recall_delete_failed_v140() -> None:
     assert w4._status == "failed", "取消后 widget 应标记未送达"
 
 
+def test_search_highlight_surface_tiers_v1654() -> None:
+    """SPEC-20260922-20（高亮柔化）：两表面分档 + token 结构 + 未知值回退。"""
+    import design_tokens
+
+    h = gui.highlight_plain_text
+    C = design_tokens.COLORS
+
+    # ── token 结构：四键在位、旧单值键已删（SPEC-20 §结构选择）──
+    for k in ("search_hit_light_bg", "search_hit_light_fg", "search_hit_dark_bg", "search_hit_dark_fg"):
+        assert k in C, f"缺 token: {k}"
+    assert "search_hit" not in C, "旧单值 token `search_hit` 应已替换为四键"
+    assert C["search_hit_light_fg"] == "", "light 档空串 = 不覆盖文字色"
+
+    # ── light（默认与显式同值）──
+    for kwargs in ({}, {"surface": "light"}):
+        out = h("今天去野外散步，野外很美", "野外", **kwargs)
+        assert out.count("<span") == 2, f"多命中应全部高亮: {out}"
+        assert f"background-color: {C['search_hit_light_bg']}" in out, out
+        assert "text-decoration: underline" in out, "下划线是补充标识（可访问性）"
+        assert "color: #" not in out, "light 档不得覆盖文字色（生硬主因，见 SPEC §F20-3）"
+
+    # ── dark（浮层深底）：更弱暖黄底 + 提亮文字 ──
+    dark = h("今天去野外散步", "野外", surface="dark")
+    assert f"background-color: {C['search_hit_dark_bg']}" in dark, dark
+    assert f"color: {C['search_hit_dark_fg']}" in dark, dark
+    assert "text-decoration: underline" in dark
+
+    # ── 未知 surface → 回退 light；旧不透明黄 #FFEB3B 全仓不再出现 ──
+    assert h("野外", "野外", surface="weird") == h("野外", "野外", surface="light")
+    assert "#FFEB3B" not in h("野外", "野外") + dark
+
+
 def test_search_highlight_v141() -> None:
     """V14.1：命中词黄高亮——escape 防注入 / 多命中 / 空关键词 / clear 恢复。"""
     import tempfile
