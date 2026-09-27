@@ -95,14 +95,22 @@ def _load(name: str) -> Dict[str, Any]:
         return {}
 
 
+# A6（SPEC-20260922-15）：轮转游标兜底（**非**存档字段，进程内一次性语义）。
+# 注意：兜底是模块级共享，跨实例隔离**只由世界实例游标保证**——生产调用必须传 rotor/last。
+_INTERACTION_ROTOR_FALLBACK: Dict[str, int] = {}
+_LAST_INTERACTION_FALLBACK: Dict[str, Any] = {}
+
+
 class SceneManager:
     """宅邸空间场景系统（无状态查询 + 静态资产，线程安全）。"""
 
     _scene_db: Optional[Dict[str, Any]] = None
     _character_db: Optional[Dict[str, Any]] = None
     # V14.7 优化 O-4：场景互动轮转去重（{scene|slot: idx} + {scene|slot: 上次条目}）
-    _interaction_rotor: Dict[str, int] = {}
-    _last_interaction: Dict[str, Any] = {}
+    # A6（SPEC-20260922-15）：轮转游标**已从类上移除**——类级可变状态是跨实例污染源
+    # （两个窗口/两轮会话互相推进）。生产路径由调用方传入**世界实例持有**的游标
+    # （`WorldState.scene_rotor` / `WorldState.scene_last`，见 shared/state.py）；
+    # 不传时退回模块级兜底（`_INTERACTION_ROTOR_FALLBACK`），只服务一次性调用与历史测试。
     _milestone_db: Optional[Dict[str, Any]] = None
 
     @classmethod
@@ -180,8 +188,13 @@ class SceneManager:
 
     @classmethod
     def get_scene_interaction(cls, scene: str, period: str,
-                              arc: Optional[str] = None) -> Optional[Dict[str, str]]:
+                              arc: Optional[str] = None, *,
+                              rotor: Optional[Dict[str, int]] = None,
+                              last: Optional[Dict[str, Any]] = None) -> Optional[Dict[str, str]]:
         """场景互动引导（每轮注入）：轮转选一条 interaction（V14.7 优化 O-4 去重）。
+
+        A6（SPEC-20260922-15）：轮转游标由调用方注入（`rotor`/`last` 指向**世界实例**
+        持有的字典）→ 游标随世界实例隔离，不再跨实例互相推进；不传则退回模块级兜底。
 
         原实现 random.choice——长会话同一场景下互动文案可能轮转重复；
         改用实例级轮转游标（避开上次命中的条目），减少重复观感。
@@ -199,13 +212,15 @@ class SceneManager:
             return None
         # O-4 去重：轮转游标 + 避开上次（key 含 arc 防跨篇章串用）
         key = f"{arc or 'mansion'}|{scene}|{slot}"
-        idx = cls._interaction_rotor.get(key, -1)
-        candidates = [it for it in interactions if it != cls._last_interaction.get(key)]
+        rotor_db = rotor if rotor is not None else _INTERACTION_ROTOR_FALLBACK
+        last_db = last if last is not None else _LAST_INTERACTION_FALLBACK
+        idx = rotor_db.get(key, -1)
+        candidates = [it for it in interactions if it != last_db.get(key)]
         pool = candidates if candidates else interactions
         idx = (idx + 1) % len(pool)
-        cls._interaction_rotor[key] = idx
+        rotor_db[key] = idx
         chosen = pool[idx]
-        cls._last_interaction[key] = chosen
+        last_db[key] = chosen
         return {"rem_view": chosen.get("rem_view", ""), "ram_view": chosen.get("ram_view", "")}
 
     # ── E4 名场面状态联动 ──

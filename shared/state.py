@@ -377,6 +377,11 @@ class WorldState:
     scene_cooldowns: Dict[str, str] = field(default_factory=dict)  # V11.10.0: 情感场景冷却 {scene_id: ISO ts}
     milestone_cooldowns: Dict[str, str] = field(default_factory=dict)  # V14.11 O-5: 名场面语感冷却 {milestone: ISO ts}
     ambient_state: Dict[str, Any] = field(default_factory=dict)  # V14.11 Step5: 偶发一句状态 {last_event_id,last_ts,day,count}
+    # A6（SPEC-20260922-15）：场景互动轮转游标——**运行时状态，刻意不入存档**。
+    # 理由：① 它是「本进程内别连着重复」的观感游标，重启后从头轮转是既有观感；
+    #       ② 进存档会改变存档契约（save_dict 字段面 + 旧档迁移），收益为 0。
+    scene_rotor: Dict[str, int] = field(default_factory=dict)   # {arc|scene|slot: idx}
+    scene_last: Dict[str, Any] = field(default_factory=dict)    # {arc|scene|slot: 上次命中文案}
 
     # 天气连续多少小时不变后开始推演
     WEATHER_CHANGE_HOURS: float = 8.0

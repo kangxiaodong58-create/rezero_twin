@@ -146,6 +146,40 @@ def test_event_pool_stress() -> None:
     assert len(picked) >= 10, f"5000 次采样覆盖过少: {len(picked)}"
 
 
+# ── A6（SPEC-20260922-15）：类级可变状态收口 ────────────────────────
+
+def test_scene_rotor_per_world_instance() -> None:
+    """轮转游标随**世界实例**隔离（类级状态收口，F15-2 边界）。
+
+    ① 同实例连续两次同一 (scene, period) → 第二次必须与第一次不同（轮转语义不回归）；
+    ② 两个实例各取一次 → 结果**相同**（各自游标独立、互不推进）；
+    ③ 结构断言：`SceneManager` 类上不再挂游标。
+    """
+    w1, w2 = WorldState.now(), WorldState.now()
+    kw1 = dict(rotor=w1.scene_rotor, last=w1.scene_last)
+    kw2 = dict(rotor=w2.scene_rotor, last=w2.scene_last)
+
+    a1 = SceneManager.get_scene_interaction("KITCHEN", "上午", **kw1)
+    a2 = SceneManager.get_scene_interaction("KITCHEN", "上午", **kw1)
+    assert a1 and a2, "KITCHEN/上午 应有 interaction"
+    assert a1["rem_view"] != a2["rem_view"], "同实例连续两次必须换一条（轮转不回归）"
+
+    b1 = SceneManager.get_scene_interaction("KITCHEN", "上午", **kw2)
+    assert b1 == a1, "另一实例的首次选择必须与第一个实例的首次一致（互不推进）"
+
+    assert not hasattr(SceneManager, "_interaction_rotor"), "类级游标必须移除"
+    assert not hasattr(SceneManager, "_last_interaction"), "类级游标必须移除"
+
+
+def test_anniv_cache_per_instance() -> None:
+    """`_anniv_cache` 实例化：跨 bridge 实例不共享，类上无残留。"""
+    b1 = ReZeroLLMBridge(api_key="sk-test", conversation_store=None)
+    b2 = ReZeroLLMBridge(api_key="sk-test", conversation_store=None)
+    assert not hasattr(ReZeroLLMBridge, "_anniv_cache"), "类级缓存必须移除"
+    b1._anniv_cache["2026-09-27"] = ["x"]
+    assert "2026-09-27" not in b2._anniv_cache, "缓存不得跨实例共享"
+
+
 def main() -> int:
     tests = [
         ("历史截断（30 轮 messages ≤10）", test_history_bounded),
@@ -154,6 +188,8 @@ def main() -> int:
         ("场景切换累积（开场不重复）", test_scene_switch_accumulate),
         ("Validator 长文本稳定", test_validator_long_text),
         ("事件池 5000 次压力", test_event_pool_stress),
+        ("A6 轮转游标随世界实例隔离", test_scene_rotor_per_world_instance),
+        ("A6 纪念缓存实例化", test_anniv_cache_per_instance),
     ]
     failed = 0
     for name, fn in tests:

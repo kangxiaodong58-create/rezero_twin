@@ -166,7 +166,11 @@ class PromptBuilder:
         arc_value = getattr(state.arc, "value", None) if state else None
         scene_space_section = ""
         if world and world.scene:
-            inter = SceneManager.get_scene_interaction(world.scene, world.period, arc=arc_value)
+            # A6（SPEC-20260922-15）：游标取自世界实例（getattr 兼容鸭子类型/旧对象）
+            inter = SceneManager.get_scene_interaction(
+                world.scene, world.period, arc=arc_value,
+                rotor=getattr(world, "scene_rotor", None),
+                last=getattr(world, "scene_last", None))
             if inter:
                 scene_name = PromptBuilder.SCENE_CN.get(world.scene, world.scene)
                 scene_space_section = (

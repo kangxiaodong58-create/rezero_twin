@@ -70,6 +70,8 @@ class ReZeroLLMBridge:
         self.max_history = max_history
         self.world: Optional[WorldState] = world  # 可由 GUI 注入持久化世界状态（V14.7）
         self.conversation_store = conversation_store
+        # A6（SPEC-20260922-15）：实例级「今日纪念」缓存（原类级共享）
+        self._anniv_cache: Dict[str, List[Any]] = {}
         self.validator = ResponseValidator()
         self._first_round_atmosphere: Optional[str] = None  # v10.8.1：首轮氛围（View-Only）
         self._active_scene_id: Optional[str] = None  # V11.10.0：本轮情感场景 ID
@@ -246,12 +248,14 @@ class ReZeroLLMBridge:
 
     # ── V15.0-M2：今日纪念（关系事实）─────────────────────────────
     # 按日缓存：一天内至多计算/落账一次；跨进程重启后重算（幂等）。
-    _anniv_cache: Dict[str, List[Any]] = {}
+    # A6（SPEC-20260922-15）：**实例级**（原类级 → 多 bridge 实例共享 + 测试补丁串味）；
+    # 声明保留供类型检查，实值在 __init__ 里建立。
+    _anniv_cache: Dict[str, List[Any]]
 
     def _today_facts(self) -> List[Any]:
         from datetime import date as _date
         today = _date.today().isoformat()
-        cache = ReZeroLLMBridge._anniv_cache
+        cache = self._anniv_cache
         if today in cache:
             return cache[today]
         facts: List[Any] = []

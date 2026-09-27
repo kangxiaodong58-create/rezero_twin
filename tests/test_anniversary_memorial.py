@@ -167,7 +167,8 @@ def test_bridge_injects_facts_into_messages(monkeypatch):
     bridge = ReZeroLLMBridge(api_key="sk-test", conversation_store=None)
     fact = type("F", (), {"kind": "festival", "title": "今天是中秋节",
                           "key": "中秋节"})()
-    monkeypatch.setattr(ReZeroLLMBridge, "_anniv_cache",
+    # A6（SPEC-20260922-15）：缓存已实例化 → 必须补丁到**实例**（类级补丁会失效）
+    monkeypatch.setattr(bridge, "_anniv_cache",
                         {date.today().isoformat(): [fact]})
     msgs, _ = bridge._build_messages("你好")
     assert "今日纪念" in msgs[0]["content"] and "中秋节" in msgs[0]["content"]
