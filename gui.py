@@ -252,8 +252,13 @@ def _rgba_to_qcolor(rgba_str: str):
     return QColor(int(r), int(g), int(b), int(float(a) * 255))
 
 
-def highlight_plain_text(text: str, keyword: str) -> str:
-    """V14.1：HTML escape 后把命中词包装为黄底 span（多命中全部标黄）。
+def highlight_plain_text(text: str, keyword: str, surface: str = "light") -> str:
+    """V14.1：HTML escape 后把命中词包装为高亮 span（多命中全部高亮）。
+
+    V16.5.4 / SPEC-20260922-20（高亮柔化）：按**显示表面**分档——
+    - ``"light"``（默认）：聊天区浅底气泡 → 半透明暖黄底 + 下划线，不覆盖文字色（对比 9.28:1）；
+    - ``"dark"``：历史浮层深底卡片 → 更弱暖黄底 + 提亮文字（``#FFE6B0``，对比 6.52:1）；
+    - 未知 surface 值一律**回退 light**（不抛异常）。
 
     防注入：先 html.escape 全文，再在转义后的文本上精确匹配转义后的关键词
     （命中词的转义形态与原文一致，直接切片包裹）。空 keyword 或未命中时
@@ -265,7 +270,12 @@ def highlight_plain_text(text: str, keyword: str) -> str:
     kw = html.escape(keyword)
     if kw not in escaped:
         return escaped
-    hit_style = f"background-color: {COLORS['search_hit']}; color: #1a1a1a;"
+    if surface == "dark":
+        bg, fg = COLORS['search_hit_dark_bg'], COLORS['search_hit_dark_fg']
+    else:  # light 与一切未知值
+        bg, fg = COLORS['search_hit_light_bg'], COLORS['search_hit_light_fg']
+    # 下划线是补充标识（背景对比不足时仍可辨命中 —— 可访问性兜底，见 SPEC-20 §目标）
+    hit_style = f"background-color: {bg}; " + (f"color: {fg}; " if fg else "") + "text-decoration: underline;"
     parts: list = []
     pos = 0
     while True:
@@ -1354,8 +1364,9 @@ class HistoryItemWidget(QFrame):
         created = record.get("created_at", "")
         time_str = created[5:16] if len(created) >= 16 else created
         msg_id = record.get("id", 0)
-        # V14.1：搜索命中词黄高亮（同一 highlight_plain_text，仅构造期渲染）
-        content_display = highlight_plain_text(content, keyword)
+        # V14.1：搜索命中词高亮（同一 highlight_plain_text，仅构造期渲染）
+        # SPEC-20260922-20：浮层卡片是深底 → 走 dark 档（半透明暖黄底 + 提亮文字）
+        content_display = highlight_plain_text(content, keyword, surface="dark")
 
         sender_color = ROLE_COLORS.get(role, COLORS['text_muted'])  # V10.15a：引用全局 ROLE_COLORS
         content_color = COLORS['text_muted'] if role == "system" else COLORS['text_secondary']
@@ -1395,7 +1406,7 @@ class HistoryItemWidget(QFrame):
 
         # ── 第二行：正文摘要（最多约 2 行，可换行）──
         preview = content[:self.PREVIEW_WORDS] + ("…" if len(content) > self.PREVIEW_WORDS else "")
-        self._preview_label = QLabel(highlight_plain_text(preview, keyword) if keyword else preview)
+        self._preview_label = QLabel(highlight_plain_text(preview, keyword, surface="dark") if keyword else preview)
         self._preview_label.setFont(self.FONT_CONTENT)
         self._preview_label.setStyleSheet(theme.color_only(content_color))
         self._preview_label.setWordWrap(True)

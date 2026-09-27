@@ -50,7 +50,13 @@ COLORS = {
     "btn_disabled_bg":  "#4a4a4a",               # 按钮 disabled 背景
     "btn_disabled_fg":  "#888",                  # 按钮 disabled 文字
     "locate_highlight": "rgba(255,215,0,0.15)",   # 定位高亮金色半透明
-    "search_hit":       "#FFEB3B",                # V14.1：搜索命中词黄底
+    # SPEC-20260922-20（高亮柔化）：命中词高亮按**显示表面**分档（旧单值 `search_hit: #FFEB3B` 已替换）
+    #   · light = 聊天区浅底气泡：半透明暖黄底 + 下划线，**不覆盖文字色**（正文 #34374d 对比 9.28:1）
+    #   · dark  = 历史浮层深底卡片：更弱暖黄底 + 提亮文字（#FFE6B0，对比 6.52:1；不提亮仅 3.11:1 ✗）
+    "search_hit_light_bg": "rgba(255,205,96,0.42)",
+    "search_hit_light_fg": "",                       # 空串 = 不覆盖文字色（消费方按空值跳过 color 声明）
+    "search_hit_dark_bg":  "rgba(255,200,80,0.22)",
+    "search_hit_dark_fg":  "#FFE6B0",
     "overlay_mask":     "rgba(0,0,0,0.65)",       # 历史浮层遮罩
 
     # ── V16.5.2/SPEC-18（B6·A14）：QSS 出库新增（值等价迁移自 gui.py 内联字面量）──
