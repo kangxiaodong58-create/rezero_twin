@@ -7,6 +7,31 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 ---
 
 
+## [V16.5.1] - 2026-09-27 (步 5 界面批：B3 僵尸面板 + B5 导航单一真源 + A17 顶栏 tab + A21 设置死链)
+
+> SPEC-20260922-17（L1+L2，用户批准 + 2026-09-27 审计批准，附 4 项条件已全部落实）。**本批为观感批：真机确认通过后合入 master**（AGENTS §4）。施工记录：`docs/devlog/步5界面批_2026-09-27.md`。
+
+### ⚠ 用户可见交互变更（审计条件 C3，逐条明示）
+- **`/toggle` `/llm` `/local` 三个指令**：由「友好提示（本地模板模式已下线…）」变为 **`未知指令: /toggle`** —— `mode` 特性 V16.4.0 已彻底移除，保留分支只是空转死链；现为诚实行为。
+- **左导航入口 7 → 4**：删「设置」「关于」；`日程/任务/插件` 三条空壳（同指 `/status`，后两者代码零实现）合并为「状态」；原「关于」的动作（历史浮层）改名「历史」保留。
+- **底部图标坞 6 → 4**：删「主页」（与「对话」动作完全相同）；其余与左导航**同表一致**。
+- **快速动作区**：删「切换模式」按钮（同绑 `/toggle` 死链），现为 4 项（关系状态 / 宅邸篇 / 帝国篇 / 后期篇）。
+- **顶栏**：删两个角色 tab（蕾姆/拉姆，装饰性死 UI：局部变量、无接线）；「双子模式」标识保留。
+
+### 改动
+- **B3（审计 R1-a）侧边角色面板跳过开关**：`rem_panel`/`ram_panel` 默认**不构造**（原实现构造后无条件 `hide()`，却仍有 5 处 `update_state`/`set_speaking`/`set_sprite` 持续推送 = 台账 B3/D3「双写」债）→ 5 处推送改 `is not None` 守卫；`REZERO_SHOW_SIDE_PANELS=1` 一键回滚（面板类 + 2 个既有用例保留）；开关关闭时「拖入换立绘」给明确提示而非静默失败。**能力去留登记为台账 A23（另立 SPEC 决策）**。
+- **B5 导航单一真源**：模块级 `NAV_ENTRIES` **同时驱动左导航 + 底部图标坞**（审计 C1 要求扩大范围）；新增 `_nav_button()`（side/dock 两形态）与 `_nav_focus_input()` / `_nav_open_status()` 唯一化落点；回调**构建期** `getattr` 解析 ⇒ 表里写错方法名启动即炸。
+- **A17**：顶栏两个角色 tab 删除（审计 R3-①）。
+- **A21**：`_switch_mode()` + `/toggle` `/llm` `/local` 分支 + 「设置」入口 + 「切换模式」按钮**全链删除**（审计 R4-①）。
+- **A22 登记**（顶栏「回忆/回忆之书」与导航「历史/记忆」动作重复）：本批未动顶栏按钮（超出批准范围），登记待决策。
+
+### 验证（全部真跑留证）
+- 全量测试 **311 passed**（305 → 311，本批 +6 例）+ `scripts/verify_isolation.sh` 数据隔离校验通过；冒烟 **31/31**；截图基线 **5/5 diff 0.00%**（组件级，确认未误伤）。
+- 新增结构断言（`tests/test_command_router.py` 13 项全绿）：`test_nav_entries_single_source_is_sane`（id/label/handler 唯一 + 图标资产存在 + handler 在 `TwinChatApp` 上存在 + 表内无 `/toggle`）· `test_nav_surfaces_drive_from_single_source`（每 label 恰出现 **2** 次 = 左导航+底坞各一；已删入口不得再现）· `test_nav_status_entry_reaches_rich_panel` · `test_legacy_mode_commands_now_unknown` · `test_side_panels_not_constructed_by_default` · `test_side_panels_can_be_enabled_via_env`。
+- 33 条 `PytestUnhandledThreadExceptionWarning` 全部来自 `runtime/forensic/headless_runner.py:87` 的**故意注入**（既有设计，非本批引入；`L3远端首跑留证_2026-09-23.md` 已记录）。
+- 真机确认：EXE 重建后由用户按 SPEC-17 §真机确认清单 5 项过目（顶栏 / 左导航 / 底坞 / 敲 `/toggle` / 快速动作区）。
+
+---
 ## [V16.5.0] - 2026-09-27 (步 1–4 零观感批：债务 A5/A6/A18/B4 收口)
 
 > 四份 SPEC 均经 2026-09-27 审计批复（SPEC-13/15 附条件已闭环、SPEC-14 无条件、SPEC-16 改**方案 B**）。施工记录：`docs/devlog/步1-4零观感批_2026-09-27.md`；前置材料：`docs/devlog/步1-4前置材料_2026-09-27.md`。**本批无需真机观感确认**（全部为内部语义/结构改动，文案与视觉零变化）。

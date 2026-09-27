@@ -28,12 +28,12 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import pytest  # noqa: E402
-from PySide6.QtWidgets import QApplication, QLabel  # noqa: E402
+from PySide6.QtWidgets import QApplication, QLabel, QPushButton  # noqa: E402
 
 SKIP_DIRS = {"venv", ".git", "dist", "build", "Temp", "__pycache__"}
 # 唯一路由必须仍然认得的指令（含别名）；少一个即视为回归
-ALL_COMMANDS = {"/status", "/mansion", "/empire", "/late",
-                "/recover", "/toggle", "/llm", "/local"}
+# SPEC-20260922-17（步 5 / R4）：`/toggle` `/llm` `/local` 已随空转分支删除，不再列入。
+ALL_COMMANDS = {"/status", "/mansion", "/empire", "/late", "/recover"}
 
 
 # ── 结构守卫 ─────────────────────────────────────────────
@@ -117,6 +117,17 @@ def qtapp():
 @pytest.fixture()
 def win(qtapp, tmp_path, monkeypatch):
     """隔离主窗口：临时存储 / 临时会话库 / 临时账本 / 临时日志（绝不碰真实 data/）。"""
+    gui, window = _build_window(tmp_path, monkeypatch)
+    try:
+        yield window
+    finally:
+        window.close()
+        from shared import life_ledger
+        life_ledger.reset_default()
+
+
+def _build_window(tmp_path, monkeypatch):
+    """构造隔离主窗口（供 win 夹具与「侧面板开关」用例共用）。"""
     import gui
     from shared import life_ledger
     from shared.conversation_store import ConversationStore
@@ -129,13 +140,7 @@ def win(qtapp, tmp_path, monkeypatch):
     monkeypatch.setattr(gui, "ConversationStore",
                         lambda: ConversationStore(db_path=str(tmp_path / "conv.db")))
     monkeypatch.setattr(gui.QMessageBox, "warning", lambda *a, **k: None)
-
-    window = gui.TwinChatApp()
-    try:
-        yield window
-    finally:
-        window.close()
-        life_ledger.reset_default()
+    return gui, gui.TwinChatApp()
 
 
 def _bubbles(window) -> list:
@@ -192,3 +197,75 @@ def test_unknown_command_keeps_bounded_message(win):
     win._handle_command("/nope")
     texts = _bubbles(win)
     assert any("未知指令: /nope" in t for t in texts), texts
+
+
+# ── SPEC-20260922-17（步 5）：导航单一真源 / 侧面板默认跳过 / 空转命令下线 ──
+
+def test_nav_entries_single_source_is_sane():
+    """NAV_ENTRIES：id/label/handler 唯一、图标资产存在、handler 在 TwinChatApp 上存在。"""
+    from gui import NAV_ENTRIES, TwinChatApp
+
+    for key in ("id", "label", "handler", "icon"):
+        vals = [e[key] for e in NAV_ENTRIES]
+        assert len(set(vals)) == len(vals), f"NAV_ENTRIES.{key} 有重复：{vals}"
+
+    assets = {p.name for p in (PROJECT_ROOT / "assets").rglob("*") if p.is_file()}
+    assert assets, "assets/ 下没找到图标资产（路径变了？）"
+    missing = [e["icon"] for e in NAV_ENTRIES if e["icon"] not in assets]
+    assert not missing, f"导航图标资产缺失：{missing}"
+
+    missing_handlers = [e["handler"] for e in NAV_ENTRIES
+                        if not hasattr(TwinChatApp, e["handler"])]
+    assert not missing_handlers, f"NAV_ENTRIES 指向不存在的方法：{missing_handlers}"
+
+    src = (PROJECT_ROOT / "gui.py").read_text(encoding="utf-8-sig")
+    block = src.split("NAV_ENTRIES = (", 1)[1].split(")", 1)[0]
+    assert "/toggle" not in block, "导航表里又出现了空转命令 /toggle"
+
+
+def test_nav_surfaces_drive_from_single_source(win):
+    """左导航 + 底部图标坞必须由同一张表生成：每个 label 恰好在按钮文本里出现 2 次。"""
+    from gui import NAV_ENTRIES
+
+    texts = [b.text() for b in win.findChildren(QPushButton)]
+    for entry in NAV_ENTRIES:
+        n = texts.count(entry["label"])
+        assert n == 2, f"「{entry['label']}」出现 {n} 次（左导航 + 底坞应各一次）"
+    for gone in ("主页", "日程", "任务", "插件", "设置", "关于"):
+        assert gone not in texts, f"已删除的入口仍在按钮上：{gone}"
+
+
+def test_nav_status_entry_reaches_rich_panel(win):
+    """导航「状态」点下去必须走真实动作（富状态面板），不是死入口。"""
+    for btn in win.findChildren(QPushButton):
+        if btn.text() == "状态":
+            btn.click()
+    assert any("残香" in t for t in _bubbles(win)), "导航「状态」未触发富状态面板"
+
+
+def test_legacy_mode_commands_now_unknown(win):
+    """R4：/toggle /llm /local 空转分支已删 → 走「未知指令」兜底（诚实行为）。"""
+    for cmd in ("/toggle", "/llm", "/local"):
+        win._handle_command(cmd)
+        assert any(f"未知指令: {cmd}" in t for t in _bubbles(win)), f"{cmd} 未走未知指令兜底"
+    assert not hasattr(win, "_switch_mode"), "_switch_mode 空转方法仍存在"
+
+
+def test_side_panels_not_constructed_by_default(win):
+    """B3：默认不构造隐藏侧边面板（消灭双写），可见的 Character Dashboard 仍在。"""
+    assert win.rem_panel is None and win.ram_panel is None, "默认不应构造隐藏侧边面板"
+    assert getattr(win, "dashboard", None) is not None, "Character Dashboard 必须仍在（可见替代）"
+
+
+def test_side_panels_can_be_enabled_via_env(qtapp, tmp_path, monkeypatch):
+    """排障/回滚开关：REZERO_SHOW_SIDE_PANELS=1 恢复面板构造（含拖入换立绘接线）。"""
+    monkeypatch.setenv("REZERO_SHOW_SIDE_PANELS", "1")
+    gui, window = _build_window(tmp_path, monkeypatch)
+    try:
+        assert isinstance(window.rem_panel, gui.CharacterPanel)
+        assert isinstance(window.ram_panel, gui.CharacterPanel)
+        assert window.rem_panel.isVisible() is False, "开启开关后仍按 V16-M_F 语义保持隐藏"
+    finally:
+        window.close()
+        from shared import life_ledger
+        life_ledger.reset_default()

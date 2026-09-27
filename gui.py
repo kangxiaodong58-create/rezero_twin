@@ -1,12 +1,14 @@
 """Re:Zero 双子系统 —— PySide6(Qt) 图形界面聊天窗口。
 
-布局：左蕾姆面板 + 中间对话 + 右拉姆面板（宅邸×VN 融合）
+布局（V16.5+，SPEC-20260922-17 步 5 后）：左侧主题导航 + 中间对话 + 右侧 Character Dashboard
 - 蕾姆气泡：蓝色系（#5b9bd5 / #d6e4f0）
 - 拉姆气泡：粉色系（#e91e63 / #fce4ec）
 - 用户气泡：白色
 - 异步 LLM（QThread + Signal）
 - 流式输出支持
-- /status /empire /mansion /late /recover /llm /local 命令
+- /status /empire /mansion /late /recover 命令
+- 导航入口单一真源：NAV_ENTRIES（同时驱动左导航与底部图标坞）
+- 侧边角色面板默认不构造：REZERO_SHOW_SIDE_PANELS=1 可开启（含拖入换立绘）
 """
 
 from __future__ import annotations
@@ -146,6 +148,26 @@ _LOG_LOCK = threading.Lock()
 _LOG_FH = None
 _LOG_FH_PATH = None
 _LOG_FSYNC_ALL = os.environ.get("REZERO_LOG_DURABLE", "") not in ("", "0", "false", "False")
+
+# ── SPEC-20260922-17（步 5 / B5）：导航单一真源 ────────────────────────────
+# 左导航与底部图标坞**同表驱动**（禁止两处各写一份入口列表——V16 前两处各 7/6 项，
+# 其中「日程/任务/插件」三条同指 /status、「设置」绑空转命令、「主页」与「对话」同动作）。
+# 结构断言（tests/test_command_router.py）：id/label/handler 唯一、图标资产存在、不得出现空转命令。
+NAV_ENTRIES = (
+    {"id": "chat",    "label": "对话", "icon": "icon_chat.svg",     "handler": "_nav_focus_input"},
+    {"id": "memory",  "label": "记忆", "icon": "icon_memory.svg",   "handler": "_open_memory_book"},
+    {"id": "status",  "label": "状态", "icon": "icon_calendar.svg", "handler": "_nav_open_status"},
+    {"id": "history", "label": "历史", "icon": "icon_info.svg",     "handler": "_open_history"},
+)
+
+
+# ── SPEC-20260922-17（步 5 / B3）：侧边角色面板跳过开关 ─────────────────────
+# 默认**不构造**隐藏面板：原实现构造 rem/ram 两个 CharacterPanel 后无条件 hide()，
+# 却仍有 5 处 update_state/set_speaking/set_sprite 持续推送（台账 B3/D3「双写」债）。
+# 排障/回滚：`REZERO_SHOW_SIDE_PANELS=1` 启动即恢复旧行为（面板构造 + 拖入换立绘可达）。
+def _side_panels_enabled() -> bool:
+    """侧边角色面板显式开关（默认关：面板构造后即被隐藏，纯死重）。"""
+    return os.environ.get("REZERO_SHOW_SIDE_PANELS", "") not in ("", "0", "false", "False")
 
 
 def _log_open_locked():
@@ -1983,29 +2005,10 @@ class TwinChatApp(QMainWindow):
         title.setFont(QFont("Georgia", 18, QFont.Bold))
         title.setStyleSheet("color: #ffd1ea;")
         header_layout.addWidget(title)
-        # A17（SPEC-20260922-12 B0，**装饰性死 UI，勿当入口**）：
-        # 以下两个角色 tab 与「双子模式」标签全是局部变量（无 self. 引用、无交互接线）
-        # —— 视觉上呈现双子身份，但不承担点击/切换功能（真实篇章切换走命令路由
-        # `/mansion` `/empire` `/late`）。若要接成真实入口（点击聚焦/切换角色），
-        # 属**观感/交互变更**，须先过真机确认门禁再改（台账 A17 待真机批次）。
-        for name, en, avatar_asset, bg, fg in [
-            ("蕾姆", "Rem", "rem_avatar.svg", "rgba(222,241,255,0.94)", "#5b9bea"),
-            ("拉姆", "Ram", "ram_avatar.svg", "rgba(255,222,238,0.94)", "#e879ac"),
-        ]:
-            tab = QFrame()
-            tab.setFixedHeight(48)
-            tab.setStyleSheet(f"background: {bg}; border: 1px solid rgba(255,255,255,0.60); border-radius: 14px;")
-            tab_layout = QHBoxLayout(tab)
-            tab_layout.setContentsMargins(8, 4, 12, 4)
-            avatar_label = QLabel()
-            avatar_label.setPixmap(_svg_pixmap(avatar_asset, 38))
-            tab_layout.addWidget(avatar_label)
-            tab_title = QLabel(f"{name}  {en}")
-            tab_title.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body'], QFont.Bold))
-            tab_title.setStyleSheet(f"color: {fg};")
-            tab_layout.addWidget(tab_title)
-            header_layout.addWidget(tab)
-        # A17：静态装饰标签（无引用、无交互）——见上方注释
+        # A17 已收口（SPEC-20260922-17 步 5）：原两个角色 tab（蕾姆/拉姆）为**装饰性死 UI**
+        # ——局部变量、无接线、看着可点却没反应（SPEC-12 B0 已加警示注释）→ 本批**删除**。
+        # 双子身份由「双子模式」标识承担；真实篇章切换走命令路由 `/mansion` `/empire` `/late`。
+        # 真机确认项：删 tab 后顶栏是否偏空 / 高度是否抖动（审计建议：可给「双子模式」加小图标补空间）。
         twin_mode = QLabel("双子模式")
         twin_mode.setAlignment(Qt.AlignCenter)
         twin_mode.setStyleSheet("background: rgba(21,28,67,0.84); color: #f8e7f4; border: 1px solid rgba(211,193,238,0.42); border-radius: 13px; padding: 8px 14px; font-weight: bold;")
@@ -2140,27 +2143,10 @@ class TwinChatApp(QMainWindow):
         nav_sep.setStyleSheet(f"background: {COLORS['border_subtle']}; border: none;")
         nav_layout.addWidget(nav_sep)
 
-        def nav_button(label: str, icon: str, callback, active: bool = False) -> QPushButton:
-            btn = QPushButton(label)
-            btn.setIcon(_theme_icon(icon))
-            btn.setIconSize(QSize(21, 21))
-            btn.setFixedHeight(43)
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body'], QFont.Bold if active else QFont.Normal))
-            if active:
-                btn.setStyleSheet("QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(113,175,241,0.58),stop:1 rgba(241,142,192,0.58)); color: white; border: 1px solid rgba(255,224,247,0.75); border-radius: 12px; text-align: left; padding-left: 14px; } QPushButton:hover { background: rgba(203,158,221,0.80); }")
-            else:
-                btn.setStyleSheet("QPushButton { background: transparent; color: #eef1ff; border: none; border-radius: 12px; text-align: left; padding-left: 14px; } QPushButton:hover { background: rgba(255,255,255,0.12); color: white; }")
-            btn.clicked.connect(callback)
-            return btn
-
-        nav_layout.addWidget(nav_button("对话", "icon_chat.svg", lambda: self.input_box.setFocus(), True))
-        nav_layout.addWidget(nav_button("记忆", "icon_memory.svg", self._open_memory_book))
-        nav_layout.addWidget(nav_button("日程", "icon_calendar.svg", lambda: self._handle_command("/status")))
-        nav_layout.addWidget(nav_button("任务", "icon_task.svg", lambda: self._handle_command("/status")))
-        nav_layout.addWidget(nav_button("插件", "icon_plugin.svg", lambda: self._handle_command("/status")))
-        nav_layout.addWidget(nav_button("设置", "icon_settings.svg", lambda: self._handle_command("/toggle")))
-        nav_layout.addWidget(nav_button("关于", "icon_info.svg", self._open_history))
+        # 左导航：由 NAV_ENTRIES 单一真源生成（SPEC-20260922-17 / B5）——
+        # 原 7 项硬编码（日程/任务/插件三条同指 /status、「关于」实开历史、「设置」绑空转命令）已合并去重。
+        for _idx, _entry in enumerate(NAV_ENTRIES):
+            nav_layout.addWidget(self._nav_button(_entry, active=(_idx == 0), variant="side"))
         nav_layout.addStretch()
         # V16-M_F：系统状态块
         self._nav_sysstatus = QLabel("LLM · 记忆同步中")
@@ -2179,14 +2165,19 @@ class TwinChatApp(QMainWindow):
 
         # 左侧：蕾姆面板
         # V14.11：立绘解析优先级 用户自定义（data/sprites）> 内置 assets；拖入信号接线
-        self.rem_panel = CharacterPanel(
-            "蕾 姆", "🩵", COLORS["rem_accent"],
-            sprite_path=_resolve_sprite(get_data_dir(), "rem", _asset_path("rem_sprite.jpg")),
-            character_key="rem")
-        self.rem_panel.sprite_dropped.connect(
-            lambda p: self._on_sprite_dropped("rem", p))
-        body.addWidget(self.rem_panel)
-        self.rem_panel.hide()  # 左栏由主题导航替代；仍保留状态同步与拖入换立绘能力。
+        # SPEC-20260922-17（步 5 / B3）：默认**不构造**侧边角色面板——原实现构造后无条件 hide()，
+        # 却仍有 5 处 update_state/set_speaking/set_sprite 持续推送（台账 B3/D3「双写」债）。
+        # `REZERO_SHOW_SIDE_PANELS=1` 可恢复旧行为（含拖入换立绘）。
+        self.rem_panel = None
+        if _side_panels_enabled():
+            self.rem_panel = CharacterPanel(
+                "蕾 姆", "🩵", COLORS["rem_accent"],
+                sprite_path=_resolve_sprite(get_data_dir(), "rem", _asset_path("rem_sprite.jpg")),
+                character_key="rem")
+            self.rem_panel.sprite_dropped.connect(
+                lambda p: self._on_sprite_dropped("rem", p))
+            body.addWidget(self.rem_panel)
+            self.rem_panel.hide()  # 左栏由主题导航替代（开关开启时保留拖入换立绘能力）。
 
         # 中间：聊天区域
         chat_section = QVBoxLayout()
@@ -2259,7 +2250,6 @@ class TwinChatApp(QMainWindow):
             ("宅邸篇", "/mansion"),
             ("帝国篇", "/empire"),
             ("后期篇", "/late"),
-            ("切换模式", "/toggle"),
         ]):
             btn = QPushButton(label)
             btn.setFixedHeight(DIM['quick_btn_h'])
@@ -2312,25 +2302,26 @@ class TwinChatApp(QMainWindow):
 
         body.addLayout(chat_section, LAYOUT['center_stretch'])
 
-        # 右侧：拉姆面板
-        self.ram_panel = CharacterPanel(
-            "拉 姆", "💗", COLORS["ram_accent"],
-            sprite_path=_resolve_sprite(get_data_dir(), "ram", _asset_path("ram_sprite.jpg")),
-            character_key="ram")
-        self.ram_panel.sprite_dropped.connect(
-            lambda p: self._on_sprite_dropped("ram", p))
-        body.addWidget(self.ram_panel)
+        # 右侧：拉姆面板（同上：默认不构造；V16-M_F 起右栏由 Character Dashboard 承担）
+        self.ram_panel = None
+        if _side_panels_enabled():
+            self.ram_panel = CharacterPanel(
+                "拉 姆", "💗", COLORS["ram_accent"],
+                sprite_path=_resolve_sprite(get_data_dir(), "ram", _asset_path("ram_sprite.jpg")),
+                character_key="ram")
+            self.ram_panel.sprite_dropped.connect(
+                lambda p: self._on_sprite_dropped("ram", p))
+            body.addWidget(self.ram_panel)
+            self.ram_panel.hide()  # 右栏由 Character Dashboard 替代（V16-M_F）。
 
-        # V16-M_F：右侧 Character Dashboard（DESIGN 解析 §1.5——Persistent State 双卡；
-        # rem/ram CharacterPanel 转隐藏，状态同步/说话描边能力保留）
-        self.ram_panel.hide()  # 右栏由 Character Dashboard 替代（V16-M_F）。
+            # 右栏以双子画面取代单一立绘的留白，让状态面板更接近参考图。
+            self.ram_panel.avatar_image.setPixmap(
+                QPixmap(_asset_path("app_icon.png")).scaled(160, 230, Qt.KeepAspectRatio, Qt.SmoothTransformation))
+
+        # V16-M_F：右侧 Character Dashboard（DESIGN 解析 §1.5——Persistent State 双卡）
         from status_dashboard import CharacterDashboard
         self.dashboard = CharacterDashboard()
         body.addWidget(self.dashboard, LAYOUT['right_stretch'])
-
-        # 右栏以双子画面取代单一立绘的留白，让状态面板更接近参考图。
-        self.ram_panel.avatar_image.setPixmap(
-            QPixmap(_asset_path("app_icon.png")).scaled(160, 230, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
         main_layout.addLayout(body, 1)
 
@@ -2341,21 +2332,10 @@ class TwinChatApp(QMainWindow):
         dock_layout = QHBoxLayout(dock)
         dock_layout.setContentsMargins(20, 5, 20, 5)
         dock_layout.setSpacing(16)
-        for label, icon, callback in [
-            ("主页", "icon_chat.svg", lambda: self.input_box.setFocus()),
-            ("对话", "icon_chat.svg", lambda: self.input_box.setFocus()),
-            ("记忆", "icon_memory.svg", self._open_memory_book),
-            ("日程", "icon_calendar.svg", lambda: self._handle_command("/status")),
-            ("任务", "icon_task.svg", lambda: self._handle_command("/status")),
-            ("插件", "icon_plugin.svg", lambda: self._handle_command("/status")),
-        ]:
-            btn = QPushButton(label)
-            btn.setIcon(_theme_icon(icon))
-            btn.setIconSize(QSize(24, 24))
-            btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet("QPushButton { background: transparent; color: #f5eaf4; border: none; padding: 2px 9px; } QPushButton:hover { background: rgba(255,255,255,0.13); border-radius: 12px; }")
-            btn.clicked.connect(callback)
-            dock_layout.addWidget(btn)
+        # 底部图标坞：**同表驱动**（SPEC-20260922-17 / B5；原「主页」与「对话」同动作、
+        # 「日程/任务/插件」三条同指 /status → 已去重，现与左导航同为 NAV_ENTRIES 四项）。
+        for _entry in NAV_ENTRIES:
+            dock_layout.addWidget(self._nav_button(_entry, variant="dock"))
         dock_layout.addStretch()
         main_layout.addWidget(dock)
 
@@ -2421,12 +2401,49 @@ class TwinChatApp(QMainWindow):
             }}
         """)
 
+    # ── 导航（SPEC-20260922-17 / B5：单一真源 NAV_ENTRIES 驱动左导航 + 底部图标坞）──
+
+    def _nav_button(self, entry: dict, *, active: bool = False, variant: str = "side") -> QPushButton:
+        """由 NAV_ENTRIES 表项生成导航按钮（side = 左导航 / dock = 底部图标坞）。
+
+        回调在**构建期**解析（`getattr(self, handler)`）——表里写错方法名会在启动时立刻炸，
+        而不是等用户点了才发现（结构断言另有 AST 侧校验）。
+        """
+        btn = QPushButton(entry["label"])
+        btn.setIcon(_theme_icon(entry["icon"]))
+        btn.setCursor(Qt.PointingHandCursor)
+        btn.clicked.connect(getattr(self, entry["handler"]))
+        if variant == "dock":
+            btn.setIconSize(QSize(24, 24))
+            btn.setStyleSheet("QPushButton { background: transparent; color: #f5eaf4; border: none; padding: 2px 9px; } QPushButton:hover { background: rgba(255,255,255,0.13); border-radius: 12px; }")
+            return btn
+        btn.setIconSize(QSize(21, 21))
+        btn.setFixedHeight(43)
+        btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body'], QFont.Bold if active else QFont.Normal))
+        if active:
+            btn.setStyleSheet("QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(113,175,241,0.58),stop:1 rgba(241,142,192,0.58)); color: white; border: 1px solid rgba(255,224,247,0.75); border-radius: 12px; text-align: left; padding-left: 14px; } QPushButton:hover { background: rgba(203,158,221,0.80); }")
+        else:
+            btn.setStyleSheet("QPushButton { background: transparent; color: #eef1ff; border: none; border-radius: 12px; text-align: left; padding-left: 14px; } QPushButton:hover { background: rgba(255,255,255,0.12); color: white; }")
+        return btn
+
+    def _nav_focus_input(self) -> None:
+        """导航「对话」：聚焦输入框（原左导航/底坞两处 lambda 的唯一化落点）。"""
+        self.input_box.setFocus()
+
+    def _nav_open_status(self) -> None:
+        """导航「状态」：走唯一命令路由（原「日程/任务/插件」三条同动作入口的合并落点）。"""
+        self._handle_command("/status")
+
     # ── 命令处理 ────────────────────────────
 
     def _handle_command(self, cmd: str) -> None:
         """唯一命令路由（V16.2.1 合并）。
 
-        支持：/status · /mansion · /empire · /late · /recover [0~1] · /toggle · /llm · /local
+        支持：/status · /mansion · /empire · /late · /recover [0~1]
+
+        ⚠ SPEC-20260922-17（步 5 / R4）：原 `/toggle` `/llm` `/local` 分支已随「设置」入口一并删除
+        ——`mode` 特性 V16.4.0 已彻底移除，保留分支只会打印一条无意义提示（空转死链）。
+        现敲这些指令会得到「未知指令」（诚实行为，CHANGELOG 已明示）。
 
         ⚠ 历史坑（V16.0-mf 引入 → V16.2.1 修复）：本类此前在文件后部**再定义了一份**
         同名 `_handle_command`（V16-M_D 导航栏精简版）。类体后定义覆盖前定义 →
@@ -2468,9 +2485,6 @@ class TwinChatApp(QMainWindow):
                 self._save_state()      # V16.2：改走唯一保存入口（engine + 平铺键一并落盘）
                 self._append_parsed_message("系统", f"→ 记忆恢复进度设为 {p}", "system")
                 self._update_panels()
-            elif low in ("/toggle", "/llm", "/local"):
-                self._switch_mode()
-                self._update_panels()
             else:
                 self._append_parsed_message(
                     "系统", f"未知指令: {raw}", "system", save=False)
@@ -2485,16 +2499,6 @@ class TwinChatApp(QMainWindow):
         self._arc_label.setText(label)
         self._update_status_bar()
         self._update_panels()
-
-    def _switch_mode(self) -> None:
-        # V14.4（Phase C）：本地模板模式已移除——LLM 是唯一运行模式。
-        # 保留入口仅为提示（旧用户可能习惯 /toggle），不再有实际切换。
-        _log("_switch_mode: 本地模式已移除，LLM 为唯一模式")
-        self._append_parsed_message(
-            "系统",
-            "本地模板模式已下线，当前为 LLM 桥接模式（唯一运行模式）。",
-            "system",
-        )
 
     # ── 开场引言 ────────────────────────────
 
@@ -3167,14 +3171,15 @@ class TwinChatApp(QMainWindow):
         else:
             rem_emotion = "😊"       # P11 平静温和
 
-        self.rem_panel.update_state(
-            favor=state.favor,
-            stage=FAVOR_LEVEL_CN.get(state.favor_level.name, state.favor_level.name),
-            emotion=rem_emotion,
-            locked=state.locked,
-            independence=state.independence,
-            recovery=state.recovery,
-        )
+        if self.rem_panel is not None:
+            self.rem_panel.update_state(
+                favor=state.favor,
+                stage=FAVOR_LEVEL_CN.get(state.favor_level.name, state.favor_level.name),
+                emotion=rem_emotion,
+                locked=state.locked,
+                independence=state.independence,
+                recovery=state.recovery,
+            )
 
         # ── 拉姆表情（8 档：姐姐危险感知 + 自身阶段）──
         # D3（B2）：档位→表情查表已出库 design_tokens（唯一真源，改表情只改那里）
@@ -3186,11 +3191,12 @@ class TwinChatApp(QMainWindow):
             ram_emotion = RAM_EMOTION_BY_STAGE.get(
                 state.ram_stage.value, RAM_EMOTION_DEFAULT)
 
-        self.ram_panel.update_state(
-            favor=state.ram_favor,
-            stage=state.ram_stage.value,
-            emotion=ram_emotion,
-        )
+        if self.ram_panel is not None:
+            self.ram_panel.update_state(
+                favor=state.ram_favor,
+                stage=state.ram_stage.value,
+                emotion=ram_emotion,
+            )
 
         # V16-M_F：Character Dashboard 数据注入（Persistent State 映射）
         try:
@@ -3319,8 +3325,10 @@ class TwinChatApp(QMainWindow):
         if not _ui_motion_enabled():
             return
         try:
-            self.rem_panel.set_speaking(speaker == "rem")
-            self.ram_panel.set_speaking(speaker == "ram")
+            if self.rem_panel is not None:
+                self.rem_panel.set_speaking(speaker == "rem")
+            if self.ram_panel is not None:
+                self.ram_panel.set_speaking(speaker == "ram")
             dashboard = getattr(self, "dashboard", None)
             if dashboard is not None:
                 dashboard.set_speaking(speaker)
@@ -3770,6 +3778,12 @@ class TwinChatApp(QMainWindow):
                     "系统", "立绘替换失败：仅支持 PNG/JPG/WEBP 图片。", "system", save=False)
                 return
             panel = self.rem_panel if key == "rem" else self.ram_panel
+            if panel is None:
+                self._append_parsed_message(
+                    "系统",
+                    "立绘面板未启用（REZERO_SHOW_SIDE_PANELS=1 可开启侧边角色面板）。",
+                    "system", save=False)
+                return
             if not panel.set_sprite(dst):
                 self._append_parsed_message(
                     "系统", "立绘替换失败：图片无法解码。", "system", save=False)
