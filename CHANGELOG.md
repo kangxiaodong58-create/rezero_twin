@@ -7,6 +7,25 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 ---
 
 
+## [V16.5.2] - 2026-09-27 (步 6：QSS 收口到 `ui/theme.py` —— B6/A14，**视觉零变化**)
+
+> SPEC-20260922-18（L2；用户「D4：起草」指示 + 2026-09-27 审计批准，附 **F18-1/2/3** 三项执行前确认——均已落实，见 `docs/devlog/步6前置材料_2026-09-27.md`）。**判据为机器判据**：QSS golden 快照逐字节等价。真机确认后合入 master（AGENTS §4）。施工记录：`docs/devlog/步6样式收口_2026-09-27.md`。
+
+### ⚠ 用户可见变更
+- **无**。纯重构：全部 QSS 字符串**逐字节等价**（golden 判据 PASS），截图基线 5/5 diff 0.00%。
+
+### 改动
+- **新增 `ui/` 包**（`ui/__init__.py` + `ui/theme.py`，345 行）：**55 个 QSS 构造函数**，纯字符串构造、零 Qt 依赖、只消费 `design_tokens`；`gui.py` / `status_dashboard.py` 的 **77 处内联 QSS → 76 处走 `theme.*`**（余 1 处为 `setStyleSheet("")` 超时清空调用，非样式）。
+- **`design_tokens.py` 增补 29 个 token**（**值等价迁移**，命名分域 `shell_*` / `chip_*` / `nav_*` / `chat_*` / `accent_*`）；`ui/theme.py` 内**裸色值 0 处**。
+- **新增判据设施 `tests/test_theme_equivalence.py`**：golden 快照（**92 条** QSS，`tests/data/qss_golden_v16_5_1.json`）+ `--capture` / `--check` 直跑模式 + pytest 用例；环境元数据（平台/Python/PySide6）不一致 → **skip 而非 fail**（审计 F18-1）；归一化含**运行期容器路径**（`<TMP>` / `<DATA>`）与同键多控件三元组全序（审计 F18-2 的落地细化）。
+- 台账 **A14** 收口：旧记「71 处」复核为 **77 处**（`gui.py` 69 = SPEC-17 前 71 减去 2 处角色 tab 样式；`status_dashboard.py` 8），diff 证据见前置材料 §71→69。
+
+### 验证（全部真跑留证）
+- **QSS golden 逐字节等价 PASS（92/92）** · 截图基线 **5/5 diff 0.00%** · 冒烟 **31/31** · 全量 **312 passed** + 数据隔离校验通过。
+- 机械判据：`gui.py` 内联字面量 QSS 调用点 **1**（清空调用）· `status_dashboard.py` **0** · `ui/theme.py` 裸色值 **0**。
+
+---
+
 ## [V16.5.1] - 2026-09-27 (步 5 界面批：B3 僵尸面板 + B5 导航单一真源 + A17 顶栏 tab + A21 设置死链)
 
 > SPEC-20260922-17（L1+L2，用户批准 + 2026-09-27 审计批准，附 4 项条件已全部落实）。**本批为观感批：真机确认通过后合入 master**（AGENTS §4）。施工记录：`docs/devlog/步5界面批_2026-09-27.md`。

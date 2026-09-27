@@ -52,6 +52,32 @@ COLORS = {
     "locate_highlight": "rgba(255,215,0,0.15)",   # 定位高亮金色半透明
     "search_hit":       "#FFEB3B",                # V14.1：搜索命中词黄底
     "overlay_mask":     "rgba(0,0,0,0.65)",       # 历史浮层遮罩
+
+    # ── V16.5.2/SPEC-18（B6·A14）：QSS 出库新增（值等价迁移自 gui.py 内联字面量）──
+    #    命名分域：shell_* 壳底 / chip_* 胶囊 / nav_* 导航 / chat_* 聊天区 / accent_* 金色
+    "title_pink":       "#ffd1ea",                # 顶栏主标题
+    "twin_mode_fg":     "#f8e7f4",                # 「双子模式」胶囊文字
+    "nav_fg":           "#eef1ff",                # 左导航按钮文字
+    "dock_fg":          "#f5eaf4",                # 底部图标坞按钮文字
+    "input_fg_dark":    "#3c3850",                # 输入框文字（浅底上的深色）
+    "shell_header":     "rgba(8,12,35,0.82)",     # 顶栏壳底
+    "shell_footer":     "rgba(8,12,35,0.76)",     # 底部状态栏壳底
+    "shell_nav":        "rgba(8,12,34,0.76)",     # 左导航壳底
+    "shell_dock":       "rgba(15,20,55,0.76)",    # 底部图标坞壳底
+    "chip_bg":          "rgba(21,28,67,0.84)",    # 顶栏「双子模式」胶囊底
+    "chip_bg_soft":     "rgba(21,28,67,0.66)",    # 左导航天气胶囊底
+    "portrait_slot":    "rgba(50,45,94,0.42)",    # 左导航立绘占位底
+    "dock_border":      "rgba(255,255,255,0.16)", # 底部图标坞描边
+    "chip_border":      "rgba(211,193,238,0.42)", # 顶栏胶囊描边（淡紫）
+    "hairline_blue":    "rgba(179,211,239,0.14)", # 天气胶囊描边
+    "chat_border_pink": "rgba(240,163,207,0.42)", # 输入区容器描边（粉）
+    "input_border_pink": "rgba(225,140,190,0.70)",# 输入框描边（粉强）
+    "accent_border":    "rgba(201,169,110,0.8)",  # 引用条描边（金 80%）
+    "accent_veil":      "rgba(201,169,110,0.08)", # 引用条底（金 8%）
+    "nav_grad_from":    "rgba(113,175,241,0.58)", # 导航激活渐变起点（蓝）
+    "nav_grad_to":      "rgba(241,142,192,0.58)", # 导航激活渐变终点（粉）
+    "nav_active_border": "rgba(255,224,247,0.75)",# 导航激活态描边
+    "nav_active_hover": "rgba(203,158,221,0.80)", # 导航激活态 hover 底
 }
 
 RADIUS = {
@@ -167,6 +193,13 @@ SURFACE_TINT = {
     "hover":  "rgba(255,255,255,0.03)",  # 折叠态 hover 底色（弱叠加）
     "active": "rgba(255,255,255,0.04)",  # 展开态外框底色（中叠加）
     "input":  "rgba(255,255,255,0.06)",  # 搜索框底色 / 按钮强 hover
+    # ── V16.5.2/SPEC-18（B6·A14）：QSS 出库新增（值等价迁移）──
+    "input_light":         "rgba(255,255,255,0.74)",  # 输入框浅底
+    "chat_surface_strong": "rgba(255,249,255,0.92)",  # 输入区容器浅底（强）
+    "chat_surface":        "rgba(255,250,255,0.86)",  # 聊天滚动区浅底
+    "chat_border":         "rgba(255,255,255,0.78)",  # 聊天区描边
+    "hover_nav":           "rgba(255,255,255,0.12)",  # 导航按钮 hover 底
+    "hover_dock":          "rgba(255,255,255,0.13)",  # 图标坞按钮 hover 底
 }
 
 

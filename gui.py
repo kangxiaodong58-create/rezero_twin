@@ -240,6 +240,7 @@ from design_tokens import (  # noqa: E402
     RAM_EMOTION_WITCH, ROLE_BUBBLE_FALLBACK, ROLE_BUBBLE_STYLES,
     ROLE_COLORS, SPACING, SURFACE, SURFACE_TINT, TYPE,
 )
+from ui import theme  # noqa: E402  # SPEC-20260922-18：QSS 单一真源（B6·A14 收口）
 
 
 def _rgba_to_qcolor(rgba_str: str):
@@ -679,13 +680,7 @@ class AvatarLabel(QLabel):
         self.setFont(QFont(FONT_FAMILY['emoji'], FONT_SIZE['emoji_sm']))
         # V16-M_E：角色色描边环——高清头像 + 角色识别锚点（rem 冰蓝 / ram 蔷薇粉）
         ring = ROLE_COLORS.get(role, COLORS['text_muted'])
-        self.setStyleSheet(f"""
-            QLabel {{
-                background-color: {COLORS['bg_surface_2']};
-                border-radius: {self.SIZE // 2}px;
-                border: 2px solid {ring};
-            }}
-        """)
+        self.setStyleSheet(theme.avatar_label_base(self.SIZE // 2, ring))
         self._emoji_fallback = {"rem": "🩵", "ram": "💗", "user": "🙂", "system": "❄"}.get(role, "·")
         avatar_files = {
             "rem": ["rem_avatar.png", "rem_avatar.svg"],
@@ -756,8 +751,7 @@ class BubbleWidget(QFrame):
             tag.setObjectName("bubble_tag")
             tag.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['caption']))
             tag.setStyleSheet(
-                f"color: {ROLE_COLORS.get(role, COLORS['text_muted'])};"
-                f" background: transparent; border: none; padding: 0 16px;"
+                theme.bubble_tag_role(role)
             )
             layout.addWidget(tag)
 
@@ -767,8 +761,7 @@ class BubbleWidget(QFrame):
             tag.setObjectName("bubble_tag")
             tag.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['caption']))
             tag.setStyleSheet(
-                f"color: {COLORS['text_muted']};"
-                f" background: transparent; border: none; padding: 0 16px;"
+                theme.bubble_tag_muted()
             )
             layout.addWidget(tag)
 
@@ -793,16 +786,7 @@ class BubbleWidget(QFrame):
         label.setTextInteractionFlags(Qt.TextSelectableByMouse)
         label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg']))
         label.setContentsMargins(0, 0, 0, 0)  # V10.14：去除双重 padding，统一由 QSS 控制
-        label.setStyleSheet(f"""
-            QLabel {{
-                background-color: {bg};
-                color: {fg};
-                {border_css}
-                border-radius: 14px;
-                padding: 10px 14px;
-                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */
-            }}
-        """)
+        label.setStyleSheet(theme.bubble_body(bg, fg, border_css))
         layout.addWidget(label)
 
     def set_text(self, text: str) -> None:
@@ -871,15 +855,7 @@ class SystemLabelWidget(QWidget):
             bg = COLORS['system_label_bg']
             border_css = ""
             pad_v, pad_h = 6, SPACING['lg']
-        label.setStyleSheet(f"""
-            QLabel {{
-                color: {fg};
-                background-color: {bg};
-                {border_css}
-                border-radius: {radius}px;
-                padding: {pad_v}px {pad_h}px;
-            }}
-        """)
+        label.setStyleSheet(theme.system_label(fg, bg, border_css, radius, pad_v, pad_h))
 
         layout.addStretch()
         layout.addWidget(label)
@@ -959,7 +935,7 @@ class ChatMessageWidget(QWidget):
         name_label = QLabel(sender)
         name_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))  # V10.14：去 Bold，弱化角色名层级
         # V10.15a：角色色统一走 ROLE_COLORS 字典
-        name_label.setStyleSheet(f"color: {ROLE_COLORS.get(role, COLORS['text_muted'])};")
+        name_label.setStyleSheet(theme.color_only(ROLE_COLORS.get(role, COLORS['text_muted'])))
         self._name_label = name_label  # V14.0：failed 时追加「（未送达）」标记
 
         # 气泡
@@ -1052,12 +1028,7 @@ class CharacterPanel(QFrame):
         self.setAcceptDrops(True)  # V14.11：立绘拖入
         self.setObjectName("character_panel")
         self.setFixedWidth(DIM['panel_w'])
-        self.setStyleSheet(f"""
-            QFrame#character_panel {{
-                background-color: {COLORS['bg_surface']};
-                border-left: 1px solid {COLORS['border_subtle']};
-            }}
-        """)
+        self.setStyleSheet(theme.character_panel_frame())
 
         layout = QVBoxLayout(self)
         layout.setContentsMargins(10, 16, 10, 16)
@@ -1066,13 +1037,7 @@ class CharacterPanel(QFrame):
         # ── 立绘区域（不动）──
         self.avatar_frame = QFrame()
         self.avatar_frame.setFixedHeight(DIM['avatar_frame_h'])
-        self.avatar_frame.setStyleSheet(f"""
-            QFrame {{
-                background-color: {COLORS['bg_surface_2']};
-                border: 1px solid {COLORS['border_subtle']};
-                border-radius: {RADIUS['large']}px;
-            }}
-        """)
+        self.avatar_frame.setStyleSheet(theme.character_avatar_frame())
         avatar_inner = QVBoxLayout(self.avatar_frame)
         avatar_inner.setContentsMargins(4, 4, 4, 4)
 
@@ -1089,7 +1054,7 @@ class CharacterPanel(QFrame):
             self._placeholder_label = QLabel("立绘区域\n拖入 PNG 图片")
             self._placeholder_label.setAlignment(Qt.AlignCenter)
             self._placeholder_label.setStyleSheet(
-                f"color: {COLORS['text_muted']}; font-size: 10px;")
+                theme.character_placeholder())
             avatar_inner.addWidget(self._placeholder_label)
 
         avatar_inner.addWidget(self.avatar_image)
@@ -1099,7 +1064,7 @@ class CharacterPanel(QFrame):
         name_label = QLabel(name)
         name_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['title_lg'], QFont.Bold))
         name_label.setAlignment(Qt.AlignCenter)
-        name_label.setStyleSheet(f"color: {color};")
+        name_label.setStyleSheet(theme.color_only(color))
         layout.addWidget(name_label)
 
         # ── ② 主信息：角色状态（用文本而非系统 emoji）──
@@ -1107,46 +1072,35 @@ class CharacterPanel(QFrame):
         self.emotion_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small'], QFont.Bold))
         self.emotion_label.setAlignment(Qt.AlignCenter)
         self.emotion_label.setStyleSheet(
-            f"color: {color}; background-color: {COLORS['bg_surface_2']};"
-            f"border: 1px solid {color}; border-radius: {RADIUS['pill']}px; padding: 3px 8px;")
+            theme.emotion_pill(color))
         layout.addWidget(self.emotion_label)
 
         # ── ③ 主信息：好感数字 + 简条 ──
         self.favor_label = QLabel("好感 --/100")
         self.favor_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
         self.favor_label.setAlignment(Qt.AlignCenter)
-        self.favor_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.favor_label.setStyleSheet(theme.color_only(COLORS['text_secondary']))
         layout.addWidget(self.favor_label)
 
         self.favor_bar = QProgressBar()
         self.favor_bar.setRange(0, 100)
         self.favor_bar.setTextVisible(False)
         self.favor_bar.setFixedHeight(4)
-        self.favor_bar.setStyleSheet(f"""
-            QProgressBar {{
-                background-color: {COLORS['bg_surface_2']};
-                border: none;
-                border-radius: {RADIUS['xs']}px;
-            }}
-            QProgressBar::chunk {{
-                background-color: {color};
-                border-radius: {RADIUS['xs']}px;
-            }}
-        """)
+        self.favor_bar.setStyleSheet(theme.favor_bar(color))
         layout.addWidget(self.favor_bar)
 
         # ── ④ 次信息：阶段引号弱化 ──
         self.stage_label = QLabel("「--」")
         self.stage_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
         self.stage_label.setAlignment(Qt.AlignCenter)
-        self.stage_label.setStyleSheet(f"color: {COLORS['text_muted']};")
+        self.stage_label.setStyleSheet(theme.color_only(COLORS['text_muted']))
         layout.addWidget(self.stage_label)
 
         # ── ⑤ 条件标记：互斥（记忆模糊 > 锁定 > 独立）──
         self.mark_label = QLabel("")
         self.mark_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small'], QFont.Bold))
         self.mark_label.setAlignment(Qt.AlignCenter)
-        self.mark_label.setStyleSheet(f"color: {COLORS['accent']};")
+        self.mark_label.setStyleSheet(theme.color_only(COLORS['accent']))
         layout.addWidget(self.mark_label)
 
         layout.addStretch()
@@ -1232,13 +1186,13 @@ class CharacterPanel(QFrame):
         # 互斥标记
         if recovery < 0.5:
             self.mark_label.setText("记忆模糊")
-            self.mark_label.setStyleSheet(f"color: {COLORS['text_muted']};")
+            self.mark_label.setStyleSheet(theme.color_only(COLORS['text_muted']))
         elif locked:
             self.mark_label.setText("忠诚锁定")
-            self.mark_label.setStyleSheet(f"color: {COLORS['accent']};")
+            self.mark_label.setStyleSheet(theme.color_only(COLORS['accent']))
         elif independence >= 0.6:
             self.mark_label.setText("独立人格")
-            self.mark_label.setStyleSheet(f"color: {COLORS['accent']};")
+            self.mark_label.setStyleSheet(theme.color_only(COLORS['accent']))
         else:
             self.mark_label.setText("")
 
@@ -1253,13 +1207,7 @@ class CharacterPanel(QFrame):
         self._speaking = speaking
         try:
             border = f"2px solid {self._color}" if speaking else f"1px solid {COLORS['border_subtle']}"
-            self.avatar_frame.setStyleSheet(f"""
-                QFrame {{
-                    background-color: {COLORS['bg_surface_2']};
-                    border: {border};
-                    border-radius: {RADIUS['large']}px;
-                }}
-            """)
+            self.avatar_frame.setStyleSheet(theme.avatar_frame_border(border))
         except Exception as e:
             _log(f"set_speaking 异常: {e}", durable=True)
 
@@ -1423,14 +1371,14 @@ class HistoryItemWidget(QFrame):
 
         self._role_label = QLabel(sender)
         self._role_label.setFont(self.FONT_ROLE)
-        self._role_label.setStyleSheet(f"color: {sender_color};")
+        self._role_label.setStyleSheet(theme.color_only(sender_color))
         header_row.addWidget(self._role_label)
 
         header_row.addStretch()
 
         self._time_label = QLabel(time_str)
         self._time_label.setFont(self.FONT_TIME)
-        self._time_label.setStyleSheet(f"color: {COLORS['text_muted']};")
+        self._time_label.setStyleSheet(theme.color_only(COLORS['text_muted']))
         header_row.addWidget(self._time_label)
 
         # 📍 定位按钮（保留 V10.12 功能）
@@ -1438,18 +1386,7 @@ class HistoryItemWidget(QFrame):
         self._locate_btn.setFixedSize(DIM['locate_btn'], DIM['locate_btn'])
         self._locate_btn.setCursor(Qt.PointingHandCursor)
         self._locate_btn.setToolTip("回到现场")
-        self._locate_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {COLORS['text_muted']};
-                border: none;
-                font-size: 12px;
-                padding: 0px;
-            }}
-            QPushButton:hover {{
-                color: {COLORS['accent']};
-            }}
-        """)
+        self._locate_btn.setStyleSheet(theme.history_locate_btn())
         self._locate_btn.clicked.connect(lambda: self.locate_clicked.emit(msg_id))
         header_row.addWidget(self._locate_btn)
 
@@ -1459,7 +1396,7 @@ class HistoryItemWidget(QFrame):
         preview = content[:self.PREVIEW_WORDS] + ("…" if len(content) > self.PREVIEW_WORDS else "")
         self._preview_label = QLabel(highlight_plain_text(preview, keyword) if keyword else preview)
         self._preview_label.setFont(self.FONT_CONTENT)
-        self._preview_label.setStyleSheet(f"color: {content_color};")
+        self._preview_label.setStyleSheet(theme.color_only(content_color))
         self._preview_label.setWordWrap(True)
         self._layout.addWidget(self._preview_label)
 
@@ -1468,16 +1405,7 @@ class HistoryItemWidget(QFrame):
         self._detail_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
         self._detail_label.setWordWrap(True)
         self._detail_label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        self._detail_label.setStyleSheet(f"""
-            QLabel {{
-                color: {COLORS['text_secondary']};
-                background-color: {SURFACE_TINT['detail']};
-                border-left: 2px solid {sender_color};
-                border-radius: {RADIUS['xs']}px;
-                padding: 8px 10px;
-                margin-top: 4px;
-            }}
-        """)
+        self._detail_label.setStyleSheet(theme.history_detail(sender_color))
         self._detail_label.hide()
         self._layout.addWidget(self._detail_label)
 
@@ -1485,24 +1413,9 @@ class HistoryItemWidget(QFrame):
 
     def _update_style(self) -> None:
         if self._expanded:
-            self.setStyleSheet(f"""
-                QFrame#history_item {{
-                    background-color: {SURFACE_TINT['active']};
-                    border-left: 2px solid {self._sender_color};
-                    border-radius: {RADIUS['sm2']}px;
-                }}
-            """)
+            self.setStyleSheet(theme.history_item_expanded(self._sender_color))
         else:
-            self.setStyleSheet(f"""
-                QFrame#history_item {{
-                    background-color: transparent;
-                    border-left: 2px solid {self._sender_color};
-                    border-radius: {RADIUS['sm2']}px;
-                }}
-                QFrame#history_item:hover {{
-                    background-color: {SURFACE_TINT['hover']};
-                }}
-            """)
+            self.setStyleSheet(theme.history_item_collapsed(self._sender_color))
 
     def mousePressEvent(self, event) -> None:
         self._expanded = not self._expanded
@@ -1543,14 +1456,7 @@ class HistoryOverlay(QWidget):
         self._card = QFrame()
         self._card.setObjectName("history_card")
         self._card.setFixedWidth(DIM['history_card_w'])
-        self._card.setStyleSheet(f"""
-            QFrame#history_card {{
-                background-color: {COLORS['bg_surface_2']};
-                border: 1px solid {ELEVATION['card_border']};
-                border-top: 1px solid {ELEVATION['glow_top']};
-                border-radius: {RADIUS['large']}px;
-            }}
-        """)
+        self._card.setStyleSheet(theme.history_card())
         card_layout = QVBoxLayout(self._card)
         card_layout.setContentsMargins(0, 0, 0, 0)
         card_layout.setSpacing(0)
@@ -1559,31 +1465,21 @@ class HistoryOverlay(QWidget):
         header_frame = QFrame()
         header_frame.setFixedHeight(DIM['history_header_h'])
         header_frame.setStyleSheet(
-            f"border-bottom: 1px solid {COLORS['border_subtle']};"
+            theme.history_header_sep()
         )
         header_layout = QHBoxLayout(header_frame)
         header_layout.setContentsMargins(20, 0, 16, 0)
 
         title = QLabel("📖 宅邸日志")
         title.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['title'], QFont.Bold))
-        title.setStyleSheet(f"color: {COLORS['text_primary']};")
+        title.setStyleSheet(theme.color_only(COLORS['text_primary']))
         header_layout.addWidget(title)
         header_layout.addStretch()
 
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(DIM['icon_btn'], DIM['icon_btn'])
         close_btn.setCursor(Qt.PointingHandCursor)
-        close_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {COLORS['text_muted']};
-                border: none;
-                font-size: 14px;
-            }}
-            QPushButton:hover {{
-                color: {COLORS['text_primary']};
-            }}
-        """)
+        close_btn.setStyleSheet(theme.history_close_btn())
         close_btn.clicked.connect(self._do_close)
         header_layout.addWidget(close_btn)
         card_layout.addWidget(header_frame)
@@ -1597,18 +1493,7 @@ class HistoryOverlay(QWidget):
         self._search_box = QLineEdit()
         self._search_box.setPlaceholderText("搜索过往对话…")
         self._search_box.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
-        self._search_box.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {SURFACE_TINT['input']};
-                color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border_subtle']};
-                border-radius: {RADIUS['medium']}px;
-                padding: 4px 10px;
-            }}
-            QLineEdit:focus {{
-                border-color: {COLORS['border_focus']};
-            }}
-        """)
+        self._search_box.setStyleSheet(theme.history_search_box())
         self._search_box.textChanged.connect(self._on_search_changed)
         search_layout.addWidget(self._search_box)
         card_layout.addWidget(search_frame)
@@ -1618,7 +1503,7 @@ class HistoryOverlay(QWidget):
         self._list_scroll.setWidgetResizable(True)
         self._list_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self._list_scroll.setFrameShape(QFrame.NoFrame)
-        self._list_scroll.setStyleSheet("background-color: transparent;")
+        self._list_scroll.setStyleSheet(theme.transparent_bg_color())
 
         self._list_container = QWidget()
         self._list_layout = QVBoxLayout(self._list_container)
@@ -1655,7 +1540,7 @@ class HistoryOverlay(QWidget):
             empty = QLabel("宅邸的走廊还十分安静，尚未留下对话的足迹。")
             empty.setAlignment(Qt.AlignCenter)
             empty.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
-            empty.setStyleSheet(f"color: {COLORS['text_muted']}; padding: 40px;")
+            empty.setStyleSheet(theme.empty_hint())
             self._list_layout.insertWidget(0, empty)
             return
 
@@ -1710,7 +1595,7 @@ class HistoryOverlay(QWidget):
         label = QLabel(f"没有找到与「{keyword}」相关的回忆。")
         label.setAlignment(Qt.AlignCenter)
         label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
-        label.setStyleSheet(f"color: {COLORS['text_muted']}; padding: 40px;")
+        label.setStyleSheet(theme.empty_hint())
         self._list_layout.insertWidget(0, label)
 
     # ── 关闭逻辑 ──
@@ -1994,7 +1879,7 @@ class TwinChatApp(QMainWindow):
         # ── 顶部标题栏 ──
         header = QFrame()
         header.setFixedHeight(LAYOUT["header_h"])
-        header.setStyleSheet(f"background-color: rgba(8,12,35,0.82); border: 1px solid {COLORS['border_subtle']}; border-radius: 18px;")
+        header.setStyleSheet(theme.header_shell())
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 0, 18, 0)
 
@@ -2003,7 +1888,7 @@ class TwinChatApp(QMainWindow):
         header_layout.addWidget(title_mark)
         title = QLabel("Re:zero Twin\n双子系统")
         title.setFont(QFont("Georgia", 18, QFont.Bold))
-        title.setStyleSheet("color: #ffd1ea;")
+        title.setStyleSheet(theme.color_only(COLORS['title_pink']))
         header_layout.addWidget(title)
         # A17 已收口（SPEC-20260922-17 步 5）：原两个角色 tab（蕾姆/拉姆）为**装饰性死 UI**
         # ——局部变量、无接线、看着可点却没反应（SPEC-12 B0 已加警示注释）→ 本批**删除**。
@@ -2011,7 +1896,7 @@ class TwinChatApp(QMainWindow):
         # 真机确认项：删 tab 后顶栏是否偏空 / 高度是否抖动（审计建议：可给「双子模式」加小图标补空间）。
         twin_mode = QLabel("双子模式")
         twin_mode.setAlignment(Qt.AlignCenter)
-        twin_mode.setStyleSheet("background: rgba(21,28,67,0.84); color: #f8e7f4; border: 1px solid rgba(211,193,238,0.42); border-radius: 13px; padding: 8px 14px; font-weight: bold;")
+        twin_mode.setStyleSheet(theme.twin_mode_chip())
         header_layout.addWidget(twin_mode)
         header_layout.addStretch()
 
@@ -2019,7 +1904,7 @@ class TwinChatApp(QMainWindow):
         self._ambient_label = QLabel("")
         self._ambient_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
         self._ambient_label.setStyleSheet(
-            f"color: {COLORS['text_secondary']}; padding-right: 6px;")
+            theme.ambient_label())
         header_layout.addWidget(self._ambient_label)
 
         # 历史搜索
@@ -2028,18 +1913,7 @@ class TwinChatApp(QMainWindow):
         self.search_box.setFixedWidth(DIM['search_box_w'])
         self.search_box.setFixedHeight(DIM['search_box_h'])
         self.search_box.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
-        self.search_box.setStyleSheet(f"""
-            QLineEdit {{
-                background-color: {SURFACE_TINT['input']};
-                color: {COLORS['text_primary']};
-                border: 1px solid {COLORS['border_subtle']};
-                border-radius: {RADIUS['small']}px;
-                padding: 2px 8px;
-            }}
-            QLineEdit:focus {{
-                border-color: {COLORS['border_focus']};
-            }}
-        """)
+        self.search_box.setStyleSheet(theme.search_box())
         self.search_box.returnPressed.connect(self._do_search)
         # V14.1：清空搜索框 → 清除全部黄高亮
         self.search_box.textChanged.connect(self._on_top_search_changed)
@@ -2052,23 +1926,13 @@ class TwinChatApp(QMainWindow):
         search_btn.setToolTip("搜索对话")
         search_btn.setFixedSize(DIM['icon_btn'], DIM['icon_btn'])
         search_btn.setCursor(Qt.PointingHandCursor)
-        search_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {COLORS['text_secondary']};
-                border: none;
-                font-size: 14px;
-            }}
-            QPushButton:hover {{
-                color: {COLORS['accent']};
-            }}
-        """)
+        search_btn.setStyleSheet(theme.search_btn())
         search_btn.clicked.connect(self._do_search)
         header_layout.addWidget(search_btn)
 
         arc_label = QLabel("Arc I · 罗兹瓦尔宅邸")
         arc_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body']))
-        arc_label.setStyleSheet(f"color: {COLORS['accent']};")
+        arc_label.setStyleSheet(theme.color_only(COLORS['accent']))
         self._arc_label = arc_label
         header_layout.addWidget(arc_label)
 
@@ -2079,17 +1943,7 @@ class TwinChatApp(QMainWindow):
         history_btn.setFixedHeight(DIM['history_btn_h'])
         history_btn.setCursor(Qt.PointingHandCursor)
         history_btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
-        history_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {COLORS['text_secondary']};
-                border: none;
-                padding: 0 6px;
-            }}
-            QPushButton:hover {{
-                color: {COLORS['accent']};
-            }}
-        """)
+        history_btn.setStyleSheet(theme.history_btn())
         history_btn.clicked.connect(self._open_history)
         header_layout.addWidget(history_btn)
 
@@ -2100,17 +1954,7 @@ class TwinChatApp(QMainWindow):
         book_btn.setFixedHeight(DIM['history_btn_h'])
         book_btn.setCursor(Qt.PointingHandCursor)
         book_btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
-        book_btn.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent;
-                color: {COLORS['text_secondary']};
-                border: none;
-                padding: 0 6px;
-            }}
-            QPushButton:hover {{
-                color: {COLORS['accent']};
-            }}
-        """)
+        book_btn.setStyleSheet(theme.book_btn())
         book_btn.clicked.connect(self._open_memory_book)
         header_layout.addWidget(book_btn)
 
@@ -2124,7 +1968,7 @@ class TwinChatApp(QMainWindow):
         nav = QFrame()
         nav.setObjectName("side_nav")
         nav.setFixedWidth(182)
-        nav.setStyleSheet(f"QFrame#side_nav {{ background: rgba(8,12,34,0.76); border: 1px solid {COLORS['border_subtle']}; border-radius: 18px; }}")
+        nav.setStyleSheet(theme.side_nav_shell())
         nav_layout = QVBoxLayout(nav)
         nav_layout.setContentsMargins(12, 15, 12, 15)
         nav_layout.setSpacing(7)
@@ -2134,13 +1978,11 @@ class TwinChatApp(QMainWindow):
         self._nav_weather.setAlignment(Qt.AlignCenter)
         self._nav_weather.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
         self._nav_weather.setStyleSheet(
-            f"background: rgba(21,28,67,0.66); color: {COLORS['text_secondary']};"
-            "border: 1px solid rgba(179,211,239,0.14); border-radius: 12px;"
-            "padding: 8px 6px;")
+            theme.nav_weather_chip())
         nav_layout.addWidget(self._nav_weather)
         nav_sep = QFrame()
         nav_sep.setFixedHeight(1)
-        nav_sep.setStyleSheet(f"background: {COLORS['border_subtle']}; border: none;")
+        nav_sep.setStyleSheet(theme.nav_sep())
         nav_layout.addWidget(nav_sep)
 
         # 左导航：由 NAV_ENTRIES 单一真源生成（SPEC-20260922-17 / B5）——
@@ -2153,13 +1995,13 @@ class TwinChatApp(QMainWindow):
         self._nav_sysstatus.setAlignment(Qt.AlignCenter)
         self._nav_sysstatus.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['caption']))
         self._nav_sysstatus.setStyleSheet(
-            f"color: {COLORS['text_muted']}; padding: 2px 0 6px 0;")
+            theme.nav_section_hint())
         nav_layout.addWidget(self._nav_sysstatus)
         nav_twins = QLabel()
         nav_twins.setAlignment(Qt.AlignCenter)
         nav_twins.setPixmap(QPixmap(_asset_path("app_icon.png")).scaled(140, 140, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
         nav_twins.setFixedHeight(108)
-        nav_twins.setStyleSheet("background: rgba(50,45,94,0.42); border-radius: 14px;")
+        nav_twins.setStyleSheet(theme.nav_twins_slot())
         nav_layout.addWidget(nav_twins)
         body.addWidget(nav)
 
@@ -2187,10 +2029,10 @@ class TwinChatApp(QMainWindow):
         self.scroll.setWidgetResizable(True)
         self.scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.scroll.setFrameShape(QFrame.NoFrame)
-        self.scroll.setStyleSheet("QScrollArea { background: rgba(255,250,255,0.86); border: 2px solid rgba(255,255,255,0.78); border-radius: 22px; }")
+        self.scroll.setStyleSheet(theme.chat_scroll_area())
 
         self.chat_container = QWidget()
-        self.chat_container.setStyleSheet("background: transparent;")
+        self.chat_container.setStyleSheet(theme.transparent_bg())
         self.chat_layout = QVBoxLayout(self.chat_container)
         self.chat_layout.setAlignment(Qt.AlignTop)
         self.chat_layout.setSpacing(SPACING['xs'])  # V12.1：回合间距 — 基线降到 xs，关系由本条 top margin 表达
@@ -2207,7 +2049,7 @@ class TwinChatApp(QMainWindow):
         # 输入区域
         input_frame = QFrame()
         input_frame.setFixedHeight(DIM['input_frame_h'])
-        input_frame.setStyleSheet("background: rgba(255,249,255,0.92); border: 1px solid rgba(240,163,207,0.42); border-radius: 18px;")
+        input_frame.setStyleSheet(theme.input_frame())
         input_layout = QVBoxLayout(input_frame)
         input_layout.setContentsMargins(14, 10, 14, 10)
         input_layout.setSpacing(6)
@@ -2216,27 +2058,20 @@ class TwinChatApp(QMainWindow):
         self._quote_bar = QFrame()
         self._quote_bar.setObjectName("quote_bar")
         self._quote_bar.setStyleSheet(
-            "background-color: rgba(201,169,110,0.08);"
-            " border-left: 3px solid rgba(201,169,110,0.8); border-radius: 4px;"
+            theme.quote_bar()
         )
         quote_layout = QHBoxLayout(self._quote_bar)
         quote_layout.setContentsMargins(10, 3, 6, 3)
         quote_layout.setSpacing(6)
         self._quote_label = QLabel("")
         self._quote_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
-        self._quote_label.setStyleSheet(f"color: {COLORS['text_secondary']}; background: transparent;")
+        self._quote_label.setStyleSheet(theme.quote_label())
         quote_layout.addWidget(self._quote_label, 1)
         self._quote_close = QPushButton("×")
         self._quote_close.setFixedSize(20, 20)
         self._quote_close.setCursor(Qt.PointingHandCursor)
         self._quote_close.setToolTip("取消引用")
-        self._quote_close.setStyleSheet(f"""
-            QPushButton {{
-                background-color: transparent; color: {COLORS['text_muted']};
-                border: none; font-size: 14px; border-radius: 10px;
-            }}
-            QPushButton:hover {{ color: {COLORS['accent']}; background-color: rgba(255,255,255,0.06); }}
-        """)
+        self._quote_close.setStyleSheet(theme.quote_close_btn())
         self._quote_close.clicked.connect(self._clear_quote)
         quote_layout.addWidget(self._quote_close)
         self._quote_bar.hide()
@@ -2255,19 +2090,7 @@ class TwinChatApp(QMainWindow):
             btn.setFixedHeight(DIM['quick_btn_h'])
             btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
             btn.setCursor(Qt.PointingHandCursor)
-            btn.setStyleSheet(f"""
-                QPushButton {{
-                    background-color: {COLORS['bg_surface_2']};
-                    color: {COLORS['text_secondary']};
-                    border: 1px solid {COLORS['border_subtle']};
-                    border-radius: {RADIUS['small']}px;
-                    padding: 2px 10px;
-                }}
-                QPushButton:hover {{
-                    background-color: {SURFACE_TINT['input']};
-                    color: {COLORS['text_primary']};
-                }}
-            """)
+            btn.setStyleSheet(theme.quick_action_btn())
             btn.clicked.connect(lambda checked, c=cmd: self._handle_command(c))
             quick_row.addWidget(btn)
         quick_row.addStretch()
@@ -2281,7 +2104,7 @@ class TwinChatApp(QMainWindow):
         self.input_box.setPlaceholderText("和蕾姆、拉姆说点什么吧… (Enter 发送)")
         self.input_box.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg']))
         self.input_box.setFixedHeight(DIM['input_box_h'])
-        self.input_box.setStyleSheet("QTextEdit { background: rgba(255,255,255,0.74); color: #3c3850; border: none; border-radius: 12px; padding: 7px 10px; } QTextEdit:focus { border: 1px solid rgba(225,140,190,0.70); }")
+        self.input_box.setStyleSheet(theme.input_box())
         self.input_box.installEventFilter(self)
         input_row.addWidget(self.input_box, 1)
 
@@ -2289,8 +2112,7 @@ class TwinChatApp(QMainWindow):
         # _send_message 信号都挂在 self.send_btn 上，必须保持同一实例）
         self.send_btn = QPushButton("发 送")
         self.send_btn.setStyleSheet(
-            "QPushButton { border-radius: 12px; }"
-            "QPushButton:pressed { padding-top: 1px; }")
+            theme.send_btn_base())
         self.send_btn.setFixedSize(DIM['send_btn_w'], DIM['send_btn_h'])
         self.send_btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body_lg'], QFont.Bold))
         self.send_btn.setCursor(Qt.PointingHandCursor)
@@ -2328,7 +2150,7 @@ class TwinChatApp(QMainWindow):
         # ── 底部图标坞 ──
         dock = QFrame()
         dock.setFixedHeight(58)
-        dock.setStyleSheet("background: rgba(15,20,55,0.76); border: 1px solid rgba(255,255,255,0.16); border-radius: 17px;")
+        dock.setStyleSheet(theme.dock())
         dock_layout = QHBoxLayout(dock)
         dock_layout.setContentsMargins(20, 5, 20, 5)
         dock_layout.setSpacing(16)
@@ -2342,64 +2164,27 @@ class TwinChatApp(QMainWindow):
         # ── 底部状态栏 ──
         footer = QFrame()
         footer.setFixedHeight(DIM['footer_h'])
-        footer.setStyleSheet("background: rgba(8,12,35,0.76); border-radius: 10px;")
+        footer.setStyleSheet(theme.footer())
         footer_layout = QHBoxLayout(footer)
         footer_layout.setContentsMargins(14, 0, 14, 0)
 
         self.footer_label = QLabel("就绪")
         self.footer_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
-        self.footer_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        self.footer_label.setStyleSheet(theme.color_only(COLORS['text_secondary']))
         footer_layout.addWidget(self.footer_label)
         footer_layout.addStretch()
 
         mode_label = QLabel("LLM 桥接")
         mode_label.setTextFormat(Qt.RichText)  # V10.14：启用 RichText 主次分层
         mode_label.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['small']))
-        mode_label.setStyleSheet(f"color: {COLORS['text_secondary']};")
+        mode_label.setStyleSheet(theme.color_only(COLORS['text_secondary']))
         self._mode_label = mode_label
         footer_layout.addWidget(mode_label)
 
         main_layout.addWidget(footer)
 
     def _apply_theme(self) -> None:
-        self.setStyleSheet(f"""
-            QWidget#app_shell {{
-                border-image: url({_backdrop_image_url()}) 0 0 0 0 stretch stretch;
-            }}
-            QMainWindow {{
-                background-color: {COLORS['bg_base']};
-            }}
-            QScrollArea {{
-                border: none;
-                background-color: transparent;
-            }}
-            QTextEdit {{
-                border: 1px solid {COLORS['border_subtle']};
-                border-radius: {RADIUS['medium']}px;
-                padding: 8px 10px;
-                background-color: {COLORS['input']};
-                color: {COLORS['text_primary']};
-            }}
-            QTextEdit:focus {{
-                border-color: {COLORS['border_focus']};
-            }}
-            QPushButton {{
-                background-color: {COLORS['accent']};
-                color: white;
-                border: none;
-                border-radius: {RADIUS['small']}px;
-            }}
-            QPushButton:hover {{
-                background-color: {COLORS['accent_hover']};
-            }}
-            QPushButton:pressed {{
-                background-color: {COLORS['accent_press']};
-            }}
-            QPushButton:disabled {{
-                background-color: {COLORS['btn_disabled_bg']};
-                color: {COLORS['btn_disabled_fg']};
-            }}
-        """)
+        self.setStyleSheet(theme.app_shell(_backdrop_image_url()))
 
     # ── 导航（SPEC-20260922-17 / B5：单一真源 NAV_ENTRIES 驱动左导航 + 底部图标坞）──
 
@@ -2415,15 +2200,15 @@ class TwinChatApp(QMainWindow):
         btn.clicked.connect(getattr(self, entry["handler"]))
         if variant == "dock":
             btn.setIconSize(QSize(24, 24))
-            btn.setStyleSheet("QPushButton { background: transparent; color: #f5eaf4; border: none; padding: 2px 9px; } QPushButton:hover { background: rgba(255,255,255,0.13); border-radius: 12px; }")
+            btn.setStyleSheet(theme.nav_btn_dock())
             return btn
         btn.setIconSize(QSize(21, 21))
         btn.setFixedHeight(43)
         btn.setFont(QFont(FONT_FAMILY['ui'], FONT_SIZE['body'], QFont.Bold if active else QFont.Normal))
         if active:
-            btn.setStyleSheet("QPushButton { background: qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 rgba(113,175,241,0.58),stop:1 rgba(241,142,192,0.58)); color: white; border: 1px solid rgba(255,224,247,0.75); border-radius: 12px; text-align: left; padding-left: 14px; } QPushButton:hover { background: rgba(203,158,221,0.80); }")
+            btn.setStyleSheet(theme.nav_btn_dock_active())
         else:
-            btn.setStyleSheet("QPushButton { background: transparent; color: #eef1ff; border: none; border-radius: 12px; text-align: left; padding-left: 14px; } QPushButton:hover { background: rgba(255,255,255,0.12); color: white; }")
+            btn.setStyleSheet(theme.nav_btn_side())
         return btn
 
     def _nav_focus_input(self) -> None:
@@ -3475,12 +3260,10 @@ class TwinChatApp(QMainWindow):
         # V14.4（Trial #1 B-02）：输入框聚焦高亮——小白首启区分输入框与搜索框
         if source is self.input_box and event.type() == QEvent.FocusIn:
             self.input_box.setStyleSheet(
-                f"QTextEdit {{ border: 2px solid {COLORS['accent']}; border-radius: 10px;"
-                f" background-color: {COLORS['input']}; padding: 6px 10px; }}")
+                theme.input_box_highlight())
         if source is self.input_box and event.type() == QEvent.FocusOut:
             self.input_box.setStyleSheet(
-                f"QTextEdit {{ border: 1px solid {COLORS['border_subtle']}; border-radius: 10px;"
-                f" background-color: {COLORS['input']}; padding: 6px 10px; }}")
+                theme.input_box_normal())
         # 樱花层跟随 viewport 大小变化
         if source is self.scroll.viewport() and event.type() == QEvent.Resize:
             self.sakura.setGeometry(self.scroll.viewport().rect())
@@ -3593,7 +3376,7 @@ class TwinChatApp(QMainWindow):
         """
         try:
             widget.setStyleSheet(
-                f"background-color: {COLORS['locate_highlight']}; border-radius: {RADIUS['small']}px;"
+                theme.locate_highlight()
             )
             QTimer.singleShot(2000, lambda: widget.setStyleSheet(""))
         except Exception as e:
