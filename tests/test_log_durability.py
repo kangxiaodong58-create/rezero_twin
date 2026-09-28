@@ -116,10 +116,15 @@ def test_thread_safety_no_lost_or_torn_lines(logfile):
 
 
 def test_durable_site_count_matches_manifest():
-    """清单契约：durable=True 精确 53 处（增删须同步 devlog §1 与 SPEC-13）。"""
-    src = (PROJECT_ROOT / "gui.py").read_text(encoding="utf-8")
-    # 只数真实关键字调用（`, durable=True)`），不数注释/文档字符串里的同名字样
-    cnt = len(re.findall(r"durable\s*=\s*True\s*\)", src))
+    """清单契约：durable=True 精确 53 处（跨 `gui.py` + `ui/**`，增删须同步 devlog §1 与 SPEC-13）。
+
+    SPEC-20260922-22（S1a/S1b）起关键日志随代码归位到 `ui/` 子模块——计数口径从
+    「只数 gui.py」改为「gui.py + ui/**/*.py 全量」，**总数不变**（53）。
+    当前分布：gui.py 51 + ui/panels.py 1 + ui/worker.py 1。
+    """
+    files = [PROJECT_ROOT / "gui.py"] + sorted((PROJECT_ROOT / "ui").rglob("*.py"))
+    cnt = sum(len(re.findall(r"durable\s*=\s*True\s*\)", p.read_text(encoding="utf-8")))
+              for p in files)
     assert cnt == DURABLE_SITE_COUNT, (
         f"关键档数量漂移：期望 {DURABLE_SITE_COUNT}，实得 {cnt}。"
         f"请同步 docs/devlog/步1-4前置材料_2026-09-27.md §1 清单与 SPEC-20260922-13。")
