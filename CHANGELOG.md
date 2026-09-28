@@ -7,6 +7,19 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 ---
 
 
+## [V16.5.8] - 2026-09-28（B8 `ui/` 拆包 S1+S2 —— SPEC-20260922-22，零观感）
+
+### 重构（行为/观感零变化：截图基线 8/8 diff 0.00% + 全量 361 passed + 冒烟 31/31 + 隔离 ✓）
+- **S1**：5 个叶子模块（`ui/logging_util/text/assets/flags/app_data/ui/widgets/w…`）+ 9 个控件类 + `status_dashboard.py → ui/dashboard.py`；`gui.py` **3731 → 2289**
+- **S2**：类体 **52 方法 → 8 个 mixin 模块**（`ui/mixins/`：search 4 / message_ops 7 / history 6 / chat 16 / panels 8 / daily 10 / commands 5 / shell_setup 9）；`gui.py` **2289 → 286**
+- 逐字搬移（AST 切片 + 字节校验）+ 每步语法门禁；`gui.py` 保留 re-export 快照（外部接口零变化）
+
+### 修复（顺带发现，见 SPEC-20260922-25 B1）
+- `ui/dashboard.py` 的资产路径在搬移后失效（`_avatar_pixmap` 恒空 → 真机头像回退「蕾/拉」文字圈），已立 SPEC-25 修复项
+
+### 施工记录
+- `docs/devlog/B8拆包_2026-09-28.md`（S1a/S1b/S1c + S2 三坑：AST 行号被 `
+` 撑开 / `git add` autocrlf 按 blob 口径 / 类基按本步产出加）
 ## [V16.5.7] - 2026-09-28 (氛围行修复 —— SPEC-20260922-24，「与为客人大人哦同行」语病 + 显示不全)
 
 > SPEC-20260922-24（L2；审计 31031e 批准，**F24-1..7 全闭环**；**真机门禁=是**——文案观感）。步 11。
