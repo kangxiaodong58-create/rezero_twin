@@ -33,7 +33,7 @@ from PySide6.QtWidgets import QApplication, QLabel, QPushButton  # noqa: E402
 SKIP_DIRS = {"venv", ".git", "dist", "build", "Temp", "__pycache__"}
 # 唯一路由必须仍然认得的指令（含别名）；少一个即视为回归
 # SPEC-20260922-17（步 5 / R4）：`/toggle` `/llm` `/local` 已随空转分支删除，不再列入。
-ALL_COMMANDS = {"/status", "/mansion", "/empire", "/late", "/recover"}
+ALL_COMMANDS = {"/status", "/mansion", "/empire", "/late", "/recover", "/称呼", "/name"}
 
 
 # ── 结构守卫 ─────────────────────────────────────────────
@@ -269,3 +269,46 @@ def test_side_panels_can_be_enabled_via_env(qtapp, tmp_path, monkeypatch):
         window.close()
         from shared import life_ledger
         life_ledger.reset_default()
+
+
+# ── SPEC-20260922-24：/称呼 路由 + 氛围行降级 ────────────────────────────────
+
+def test_name_command_sets_and_refreshes_ambient(win):
+    win._handle_command("/称呼 小东")
+    assert win.engine.snapshot().user_name == "小东"
+    assert "与小东同行" in win._ambient_label.text()
+
+
+def test_name_command_space_optional_and_alias(win):
+    win._handle_command("/name小东")                        # 无空格 + 英文别名
+    assert win.engine.snapshot().user_name == "小东"
+
+
+def test_name_command_rejects_dirty_without_echo(win):
+    win._handle_command("/称呼 为客人大人哦")
+    assert win.engine.snapshot().user_name is None           # 判脏 → 不写入
+
+
+def test_ambient_adapts_to_label_width(win):
+    """SPEC-20260922-24 修订：顶栏放不下整行 → 事件先让位、只留称呼。"""
+    win._handle_command("/称呼 小东")
+    win.world.active_event = "一只野猫从庭院围墙跳了进来"   # 中性事件（不与天气/时段冲突）
+    win._ambient_label.setFixedWidth(120)          # 逼窄 → 只留称呼
+    win._refresh_ambient()
+    narrow = win._ambient_label.text()
+    assert "与小东同行" in narrow
+    assert "野猫" not in narrow                    # 事件让位
+    win._ambient_label.setFixedWidth(800)          # 放宽 → 整行回来
+    win._refresh_ambient()
+    assert "野猫" in win._ambient_label.text()
+
+
+def test_ambient_degrades_dirty_name(win, monkeypatch):
+    """脏存档（dist/data 实况）→ 氛围行降级为「与你同行」，且**不回显脏值**。"""
+    import ui.flags
+    monkeypatch.setattr(ui.flags, "_name_hint_shown", False)
+    win.engine.apply_dict({"user_name": "为客人大人哦"})       # 模拟脏存档
+    win._refresh_ambient()
+    text = win._ambient_label.text()
+    assert "与你同行" in text
+    assert "为客人大人哦" not in text

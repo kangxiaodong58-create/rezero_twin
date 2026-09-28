@@ -41,6 +41,30 @@ def _life_ledger_mod():
     return life_ledger
 
 
+# ── 称呼质量闸（SPEC-20260922-24）────────────────────────────────────────────
+# 自动提取的实际脏值样本：「为客人大人哦」（介词「为」开头 + 语气助词「哦」）。
+_NAME_BAD_LEAD = "为和与在把被让对向从到"
+_NAME_BAD_PARTICLE = "的了呢吧哦啊嘛呀"
+
+
+def is_valid_user_name(name: Optional[str]) -> bool:
+    """称呼合法性判据（SPEC-20260922-24）。
+
+    拦两类高频脏值：① 以介词/连词开头；② 含语气助词。长度 1–8（与提取正则一致）。
+    合法示例：小东 / 张 / 买买提·艾力；非法示例：为客人大人哦 / 李明的 / 的哥 / 空串。
+    """
+    if not isinstance(name, str):
+        return False
+    s = name.strip()
+    if not (1 <= len(s) <= 8):
+        return False
+    if s[0] in _NAME_BAD_LEAD:
+        return False
+    if any(ch in s for ch in _NAME_BAD_PARTICLE):
+        return False
+    return True
+
+
 def _life_mirror(fn, *, sink: Optional[Dict[str, List[Any]]] = None) -> None:
     """人生账本镜像入口——任何失败静默，绝不影响状态机主流程。
 
@@ -1107,7 +1131,8 @@ class HardStateEngine:
                 name = m.group(1).strip()
                 # 排除角色自称（用户说「我是蕾姆」是角色扮演，非告知名字）
                 if name not in ("蕾姆", "拉姆", "女仆", "客人"):
-                    return name
+                    # SPEC-20260922-24：质量闸——判脏视同「未提取到」（None = 从未设置语义）
+                    return name if is_valid_user_name(name) else None
         return None
 
     def _is_negated(self, text: str, keyword: str, window: int = 6) -> bool:
@@ -1253,6 +1278,26 @@ class HardStateEngine:
         if len(text) < 10:
             return Intent.QUICK
         return Intent.NORMAL
+
+    def set_user_name(self, name: str) -> bool:
+        """用户显式设定称呼（SPEC-20260922-24：`/称呼` / `/name` 命令唯一入口）。
+
+        - 判据与自动提取闸同源（``is_valid_user_name``）；不合法返回 False（不写入）；
+        - 写入走**唯一写路径** ``apply_dict``（SPEC-20260922-21 锁纪律）；
+        - 首设补 ``name_first`` 事件 + 人生账本镜像（``dedup_key="first_name"`` 幂等：
+          重复调用不产生第二条）。
+        """
+        s = (name or "").strip()
+        if not is_valid_user_name(s):
+            return False
+        # 「首设」= 当前名**缺失或判脏**（脏值不配记入人生账本；设完即为有效 ⇒ 天然幂等）
+        first_time = not is_valid_user_name(self.user_name)
+        self.apply_dict({"user_name": s})
+        if first_time:
+            self._add_event("name_first", f"用户设定称呼「{s}」", "/称呼")
+            _life_mirror(lambda: _life_ledger_mod().mirror_first_name(
+                s, engine=self), sink=self._sink)
+        return True
 
     def update(self, user_input: str) -> TwinState:
         text = user_input.strip()

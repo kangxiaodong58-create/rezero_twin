@@ -79,7 +79,7 @@ from PySide6.QtWidgets import (
     QMenu,
 )
 
-from shared.state import StoryArc, OniStage, FAVOR_LEVEL_CN
+from shared.state import StoryArc, OniStage, FAVOR_LEVEL_CN, is_valid_user_name
 from shared.memory_store import MemoryStore
 from shared.conversation_store import ConversationStore
 from shared.search_service import SearchService, format_preview  # SPEC-20260922-19：搜索单一入口（B7）
@@ -92,7 +92,7 @@ from runtime.forensic import record, shutdown_forensic, init_forensic
 from ui.logging_util import _LOG_FH, _LOG_FH_PATH, _LOG_LOCK, _LOG_FSYNC_ALL, _log_path, _log_open_locked, _log_close, _log_write_locked, _log  # noqa: F401
 from ui.text import PERIOD_KEYWORDS, WEATHER_EVENT_CONFLICT, highlight_plain_text, event_compatible, format_world_line, match_speaker_tag, _streaming_segments, parse_twin_segments, _rgba_to_qcolor  # noqa: F401
 from ui.assets import QSvgRenderer, _SVG_OK, _SPRITE_EXTS, _asset_path, _svg_pixmap, _backdrop_image_url, _theme_icon, _user_sprite_path, _copy_user_sprite, _resolve_sprite  # noqa: F401
-from ui.flags import _VIGNETTE_DISABLED, _HISTORY_DISABLED, _ui_motion_enabled, _side_panels_enabled, _get_ambient_registry  # noqa: F401
+from ui.flags import _VIGNETTE_DISABLED, _HISTORY_DISABLED, _ui_motion_enabled, _side_panels_enabled, _get_ambient_registry, name_hint_once  # noqa: F401
 from ui.app_data import ARC_CN, GREETING_TEMPLATES, NAV_ENTRIES, ONI_STAGE_CN, WEATHER_CLAUSES, WORLD_FEEDBACK  # noqa: F401
 from ui.widgets_message import AvatarLabel, BubbleWidget, SystemLabelWidget, ChatMessageWidget  # noqa: F401
 from ui.history import HistoryItemWidget, HistoryOverlay  # noqa: F401
@@ -723,7 +723,7 @@ class TwinChatApp(QMainWindow):
     def _handle_command(self, cmd: str) -> None:
         """唯一命令路由（V16.2.1 合并）。
 
-        支持：/status · /mansion · /empire · /late · /recover [0~1]
+        支持：/status · /mansion · /empire · /late · /recover [0~1] · /称呼|/name <名字>（SPEC-20260922-24）
 
         ⚠ SPEC-20260922-17（步 5 / R4）：原 `/toggle` `/llm` `/local` 分支已随「设置」入口一并删除
         ——`mode` 特性 V16.4.0 已彻底移除，保留分支只会打印一条无意义提示（空转死链）。
@@ -769,6 +769,23 @@ class TwinChatApp(QMainWindow):
                 self._save_state()      # V16.2：改走唯一保存入口（engine + 平铺键一并落盘）
                 self._append_parsed_message("系统", f"→ 记忆恢复进度设为 {p}", "system")
                 self._update_panels()
+            elif raw.startswith("/称呼") or raw.startswith("/name"):
+                # SPEC-20260922-24：称呼纠正入口（空格可省；/name 为英文别名）
+                _pref = "/称呼" if raw.startswith("/称呼") else "/name"
+                arg = raw[len(_pref):].strip()
+                if not arg:
+                    self._append_parsed_message(
+                        "系统", "用法：/称呼 小东（我怎么称呼你；/name 同）",
+                        "system", save=False, transient=True)
+                elif self.engine.set_user_name(arg):
+                    self._save_state()              # 唯一保存入口
+                    self._append_parsed_message(
+                        "系统", f"好，以后就叫我「{arg}」。", "system", save=False, transient=True)
+                    self._update_status_bar()       # 氛围行立即刷新
+                else:
+                    self._append_parsed_message(
+                        "系统", "这个称呼我不敢用（1–8 字，别以「为/与/在」开头，别带「的/哦/呢」）。",
+                        "system", save=False, transient=True)
             else:
                 self._append_parsed_message(
                     "系统", f"未知指令: {raw}", "system", save=False)
@@ -1508,11 +1525,25 @@ class TwinChatApp(QMainWindow):
         try:
             state = self.engine.snapshot()
             ev = self.world.active_event or ""
-            # A15（B2）：世界行统一实现——max_event=14 与 " · " 分隔为本站现值（文案零变化）
-            ambient = format_world_line(self.world.period, self.world.weather, ev,
-                                        max_event=14, prefix="🌙 ")
-            if state.user_name:
-                ambient += f"  ·  与{state.user_name}同行"
+            # SPEC-20260922-24：max_event 14→16（与状态栏统一）+ 子句感知截断
+            head_full = format_world_line(self.world.period, self.world.weather, ev,
+                                          max_event=16, prefix="🌙 ")
+            head_bare = format_world_line(self.world.period, self.world.weather, "",
+                                          prefix="🌙 ")
+            suffix = ""
+            if is_valid_user_name(state.user_name):
+                suffix = f"  ·  与{state.user_name}同行"
+            elif state.user_name:
+                # 脏称呼降级：**不回显脏值**（「与为客人大人哦同行」语病），每进程只提示一次纠正入口
+                suffix = "  ·  与你同行"
+                if name_hint_once():
+                    self._append_parsed_message(
+                        "系统", "称呼还没定下来——输入 /称呼 小东（或 /name 小东）告诉我你的名字",
+                        "system", save=False, transient=True)
+            # 真机反馈修订：顶栏宽度自适应——整行放不下时**事件先让位、只留称呼**
+            ambient = head_full + suffix
+            if suffix and not self._ambient_fits(ambient):
+                ambient = head_bare + suffix
             self._ambient_label.setText(ambient)
             self._nav_weather.setText(f"{self.world.period}\n{self.world.weather}")
             try:
@@ -1523,6 +1554,19 @@ class TwinChatApp(QMainWindow):
                 self._nav_sysstatus.setText("LLM · 记忆同步正常")
         except Exception as e:
             _log(f"ambient 刷新异常: {e}", durable=True)
+
+    def _ambient_fits(self, text: str) -> bool:
+        """顶栏氛围行宽度判定（SPEC-20260922-24 真机反馈修订）。
+
+        标签尚未布局（宽度 ≤ 24px，启动首帧）时按「放得下」处理，避免误降级。
+        """
+        try:
+            w = self._ambient_label.width()
+            if w <= 24:
+                return True
+            return QFontMetrics(self._ambient_label.font()).horizontalAdvance(text) <= max(0, w - 8)
+        except Exception:
+            return True
 
     def _update_status_bar(self) -> None:
         try:
@@ -1966,6 +2010,12 @@ class TwinChatApp(QMainWindow):
         super().resizeEvent(event)
         if self._history_overlay and self._history_overlay.isVisible():
             self._history_overlay.setGeometry(self.rect())
+        # SPEC-20260922-24 修订：宽度变化后重算氛围行（整行 ↔ 只留称呼）
+        try:
+            if getattr(self, "_ambient_label", None) is not None:
+                self._refresh_ambient()
+        except Exception:
+            pass
 
     # ── V11.6.5: session 摘要（规则生成，不调 LLM）──
 

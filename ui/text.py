@@ -90,8 +90,22 @@ def event_compatible(period: str, weather: str, event: str) -> bool:
     return True
 
 
+def _shorten_event(ev: str, limit: int) -> str:
+    """SPEC-20260922-24：**子句感知**截断——硬切前先退到第一个子句，绝不产出「，…」。
+
+    规则：总长 ≤ limit 原样返回；否则取第一个子句（按「，」「,」切）——
+    子句 ≤ limit → 「子句…」；子句本身仍超长 → 硬切 limit + 「…」。
+    """
+    if not ev or len(ev) <= limit:
+        return ev
+    head = re.split(r"[，,]", ev, maxsplit=1)[0].strip()
+    if head and len(head) <= limit:
+        return head + "…"
+    return ev[:limit] + "…"
+
+
 def format_world_line(period: str, weather: str, event: str, *,
-                      max_event: int = 14, prefix: str = "",
+                      max_event: int = 16, prefix: str = "",
                       head: bool = True, suffix_sep: str = " · ") -> str:
     """A15（SPEC-20260922-12 B2）：世界行**唯一**格式化实现。
 
@@ -101,11 +115,14 @@ def format_world_line(period: str, weather: str, event: str, *,
     **调用点现值原样保留 ⇒ 文案零变化**（是否统一长度属观感决策，留待真机批次）。
 
     head=False 时只返回事件后缀（供状态栏拼接用）。
+
+    SPEC-20260922-24：截断改 ``_shorten_event``（子句感知，不吊「，」）；两调用点统一 16。
     """
     ev = event or ""
     head_txt = f"{prefix}{period} · {weather}" if head else ""
     if ev and event_compatible(period, weather, ev):
-        ev_short = ev[:max_event] + "…" if len(ev) > max_event else ev
+        # SPEC-20260922-24：子句感知截断（原硬切会把「，」吊在结尾）
+        ev_short = _shorten_event(ev, max_event)
         return f"{head_txt}{suffix_sep}{ev_short}"
     return head_txt
 

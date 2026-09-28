@@ -279,3 +279,53 @@ def test_letter_cooldown_persisted_after_dispatch(gui_env) -> None:
 
     win.close()
     win2.close()
+
+
+# ── SPEC-20260922-24：称呼质量闸 / 纠正入口 ────────────────────────────────────
+
+def test_is_valid_user_name_table() -> None:
+    """判据正反例表（审计 F24-5 逐例复核：少数民族名/单字名/含「的」）。"""
+    from shared.state import is_valid_user_name
+    for good in ("小东", "张", "买买提·艾力", "Alice"):
+        assert is_valid_user_name(good), good
+    for bad in ("为客人大人哦", "李明的", "的哥", "", "   ",
+                "一二三四五六七八九", None, 123, "在座各位"):
+        assert not is_valid_user_name(bad), bad
+
+
+def test_extract_name_quality_gate() -> None:
+    """提取闸：判脏视同「未提取到」（None = 从未设置语义）。"""
+    e = HardStateEngine()
+    assert e._extract_name("我叫为客人大人哦") is None      # 介词开头 + 语气助词 → 判脏
+    assert e._extract_name("我叫小东") == "小东"             # 合法照常提取
+    assert e._extract_name("我是蕾姆") is None               # 角色自称既有排除仍生效
+
+
+def test_set_user_name_records_first_valid_after_dirty() -> None:
+    """脏值（判脏）→ 首设有效名：补记 name_first 事件 + 账本镜像；再设不重复。"""
+    from shared import life_ledger
+    e = HardStateEngine()
+    e.apply_dict({"user_name": "为客人大人哦"})          # 模拟脏存档
+    assert e.set_user_name("小东") is True
+    assert e.snapshot().user_name == "小东"
+    assert any(ev["type"] == "name_first" for ev in e.events)
+    n_events, n_ledger = len(e.events), life_ledger.get_default_ledger().count()
+    assert e.set_user_name("小东") is True
+    assert len(e.events) == n_events and life_ledger.get_default_ledger().count() == n_ledger
+
+
+def test_set_user_name_validates_and_is_idempotent() -> None:
+    """显式设名：非法不写入；首设补事件 + 账本镜像一次（重复调用幂等）。"""
+    from shared import life_ledger
+    e = HardStateEngine()
+    assert e.set_user_name("为客人大人哦") is False
+    assert e.snapshot().user_name is None                    # 非法 → 不写入
+    assert e.set_user_name("小东") is True
+    assert e.snapshot().user_name == "小东"
+    assert e.profile.name == "小东"
+    n_events = len(e.events)
+    assert any(ev["type"] == "name_first" for ev in e.events)
+    n_ledger = life_ledger.get_default_ledger().count()
+    assert e.set_user_name("小东") is True                   # 重复设名：不补事件、不补账本
+    assert len(e.events) == n_events
+    assert life_ledger.get_default_ledger().count() == n_ledger

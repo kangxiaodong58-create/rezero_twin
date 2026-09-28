@@ -31,6 +31,20 @@ def _side_panels_enabled() -> bool:
     return os.environ.get("REZERO_SHOW_SIDE_PANELS", "") not in ("", "0", "false", "False")
 
 
+# 称呼提示开关（SPEC-20260922-24）：氛围行因脏名降级时只提示**一次**（每进程），
+# 避免每次刷新刷屏；进程重启后允许再提示一次。
+_name_hint_shown = False
+
+
+def name_hint_once() -> bool:
+    """一次性提示闸：仅首次调用返回 True（供「建议用 /称呼 设名」提示用）。"""
+    global _name_hint_shown
+    if _name_hint_shown:
+        return False
+    _name_hint_shown = True
+    return True
+
+
 def _get_ambient_registry() -> dict:
     global _AMBIENT_REGISTRY
     if _AMBIENT_REGISTRY is None:
