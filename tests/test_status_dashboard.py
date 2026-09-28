@@ -23,8 +23,8 @@ from datetime import date  # noqa: E402
 
 import pytest  # noqa: E402
 
-import status_dashboard  # noqa: E402
-from status_dashboard import CharacterCard, CharacterDashboard  # noqa: E402
+import ui.dashboard as status_dashboard  # noqa: E402  # SPEC-22 S1c：status_dashboard.py → ui/dashboard.py（逐字搬移）
+from ui.dashboard import CharacterCard, CharacterDashboard  # noqa: E402
 
 
 @pytest.fixture

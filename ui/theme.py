@@ -2,7 +2,7 @@
 
 - 只消费 `design_tokens`（**禁止裸色值/裸尺寸**——本批为值等价迁移，视觉零变化）；
 - **零 Qt 依赖**（纯字符串构造 + f-string），可直接单测；
-- 单一真源：`gui.py` / `status_dashboard.py` 的全部内联 QSS 都出自本模块；
+- 单一真源：`gui.py` / `ui/dashboard.py`（原 `status_dashboard.py`，SPEC-22 S1c 归位）的全部内联 QSS 都出自本模块；
 - 等价性判据见 `tests/test_theme_equivalence.py`（golden 快照逐字节比对）。
 """
 from __future__ import annotations

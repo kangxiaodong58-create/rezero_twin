@@ -640,7 +640,7 @@ class TwinChatApp(QMainWindow):
                 QPixmap(_asset_path("app_icon.png")).scaled(160, 230, Qt.KeepAspectRatio, Qt.SmoothTransformation))
 
         # V16-M_F：右侧 Character Dashboard（DESIGN 解析 §1.5——Persistent State 双卡）
-        from status_dashboard import CharacterDashboard
+        from ui.dashboard import CharacterDashboard  # SPEC-22 S1c：status_dashboard.py → ui/dashboard.py
         self.dashboard = CharacterDashboard()
         body.addWidget(self.dashboard, LAYOUT['right_stretch'])
 

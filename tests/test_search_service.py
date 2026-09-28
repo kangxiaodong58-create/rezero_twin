@@ -25,7 +25,6 @@ ROOT = pathlib.Path(__file__).resolve().parents[1]
 # 结构守卫扫描范围（审计 F19-1：只扫 UI 层文件清单，不做全项目扫描）
 UI_LAYER_FILES = [
     "gui.py",
-    "status_dashboard.py",
     "memory_book.py",
     "motion.py",
 ]
