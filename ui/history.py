@@ -15,6 +15,11 @@ from ui import theme
 from ui.text import highlight_plain_text, _rgba_to_qcolor
 
 
+# SPEC-20260922-23：定位闪光的净观察窗口（感知链 ≈0.4s：浮层关闭 + 滚动动画），2.0s 偏紧 ⇒ 2.4s
+# SPEC-20260922-22 S2：自 gui.py 下沉（gui.py 保留 re-export：`gui.LOCATE_FLASH_MS` 契约不变）
+LOCATE_FLASH_MS = 2400
+
+
 class HistoryItemWidget(QFrame):
     """单条历史记录：折叠摘要 / 点击展开全文。
 

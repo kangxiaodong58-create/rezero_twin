@@ -81,13 +81,14 @@ def test_no_duplicate_method_definitions():
 
 
 def _router_node() -> ast.FunctionDef:
-    tree = _parse(PROJECT_ROOT / "gui.py")
+    """SPEC-22 S2c：命令路由已搬进 ``ui/mixins/commands.py``（原 gui.py；含重复定义检查）。"""
+    tree = _parse(PROJECT_ROOT / "ui" / "mixins" / "commands.py")
     router = None
     for node in ast.walk(tree):
         if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.name == "_handle_command":
-            assert router is None, "gui.py 里又出现了第二份 _handle_command"
+            assert router is None, "commands.py 里又出现了第二份 _handle_command"
             router = node
-    assert router is not None, "gui.py 里找不到 _handle_command"
+    assert router is not None, "ui/mixins/commands.py 里找不到 _handle_command"
     return router
 
 

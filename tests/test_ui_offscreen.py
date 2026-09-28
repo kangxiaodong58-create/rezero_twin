@@ -56,15 +56,18 @@ def _make_window() -> gui.TwinChatApp:
 
     app = QApplication.instance() or QApplication([])
     tmp_dir = tempfile.mkdtemp(prefix="hermes-test-store-")
-    orig_store = gui.MemoryStore
-    gui.MemoryStore = lambda: orig_store(root_dir=tmp_dir)
-    orig_conv = gui.ConversationStore
-    gui.ConversationStore = lambda: orig_conv(db_path=os.path.join(tmp_dir, "conv.db"))
+    # SPEC-22 S2c：`__init__` 已搬进 ui/mixins/shell_setup.py——补丁必须打在**实现模块**
+    # （打 `gui.MemoryStore` 是重绑 re-export 快照，mixin 内部读自己的引用，不生效）。
+    import ui.mixins.shell_setup as shell_setup
+    orig_store = shell_setup.MemoryStore
+    shell_setup.MemoryStore = lambda: orig_store(root_dir=tmp_dir)
+    orig_conv = shell_setup.ConversationStore
+    shell_setup.ConversationStore = lambda: orig_conv(db_path=os.path.join(tmp_dir, "conv.db"))
     try:
         win = gui.TwinChatApp()
     finally:
-        gui.MemoryStore = orig_store
-        gui.ConversationStore = orig_conv
+        shell_setup.MemoryStore = orig_store
+        shell_setup.ConversationStore = orig_conv
     win.show()
     while win.chat_layout.count() > 0:
         item = win.chat_layout.takeAt(0)
