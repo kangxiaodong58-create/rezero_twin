@@ -20,6 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
 import gui  # noqa: E402
+from ui import logging_util  # noqa: E402  # SPEC-22 S1a：_LOG_FSYNC_ALL/_log 已归位（patch 必须打在归属模块上）
 
 DURABLE_SITE_COUNT = 53
 
@@ -29,7 +30,7 @@ def logfile(tmp_path, monkeypatch):
     """每个用例一条独立日志；隔离 REZERO_GUI_LOG 并把「全 fsync」关掉。"""
     path = tmp_path / "gui.log"
     monkeypatch.setenv("REZERO_GUI_LOG", str(path))
-    monkeypatch.setattr(gui, "_LOG_FSYNC_ALL", False)
+    monkeypatch.setattr(logging_util, "_LOG_FSYNC_ALL", False)
     gui._log_close()                 # 强制按新路径重开
     yield path
     gui._log_close()
@@ -66,7 +67,7 @@ def test_durable_tier_fsyncs_once(logfile, monkeypatch):
 def test_env_switch_forces_all_fsync(logfile, monkeypatch):
     """REZERO_LOG_DURABLE=1 回退：常规调用也走 fsync（排障/取证期）。"""
     calls = _spy_fsync(monkeypatch)
-    monkeypatch.setattr(gui, "_LOG_FSYNC_ALL", True)
+    monkeypatch.setattr(logging_util, "_LOG_FSYNC_ALL", True)
     gui._log("回退-全档")
     assert calls["n"] == 1
 
@@ -85,7 +86,7 @@ def test_switch_log_path_takes_effect(tmp_path, monkeypatch):
     """路径感知：REZERO_GUI_LOG 变更后写入新文件（不写错档）。"""
     p1, p2 = tmp_path / "a.log", tmp_path / "b.log"
     monkeypatch.setenv("REZERO_GUI_LOG", str(p1))
-    monkeypatch.setattr(gui, "_LOG_FSYNC_ALL", False)
+    monkeypatch.setattr(logging_util, "_LOG_FSYNC_ALL", False)
     gui._log_close()
     gui._log("写入-a")
     monkeypatch.setenv("REZERO_GUI_LOG", str(p2))

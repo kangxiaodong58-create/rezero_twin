@@ -218,7 +218,7 @@ def test_nav_entries_single_source_is_sane():
                         if not hasattr(TwinChatApp, e["handler"])]
     assert not missing_handlers, f"NAV_ENTRIES 指向不存在的方法：{missing_handlers}"
 
-    src = (PROJECT_ROOT / "gui.py").read_text(encoding="utf-8-sig")
+    src = (PROJECT_ROOT / "ui" / "app_data.py").read_text(encoding="utf-8-sig")
     block = src.split("NAV_ENTRIES = (", 1)[1].split(")", 1)[0]
     assert "/toggle" not in block, "导航表里又出现了空转命令 /toggle"
 

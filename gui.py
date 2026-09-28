@@ -52,55 +52,26 @@ import traceback
 from datetime import date, datetime
 from typing import Optional
 
-_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 
 # V14.11 Step5：偶发一句注册表（懒加载单例；加载失败 = 空 dict，选型返回 None）
 _AMBIENT_REGISTRY: Optional[dict] = None
 
 
-def _get_ambient_registry() -> dict:
-    global _AMBIENT_REGISTRY
-    if _AMBIENT_REGISTRY is None:
-        try:
-            from shared.template_registry import load_registry
-            from shared.vignette import ContentLoader
-            _AMBIENT_REGISTRY = load_registry(os.path.join(
-                ContentLoader()._get_content_dir(), "templates", "registry.json"))
-        except Exception:
-            _AMBIENT_REGISTRY = {"schema_version": "0", "items": [], "skipped": 0}
-    return _AMBIENT_REGISTRY
+# SPEC-20260922-22 S1a：路径引导不能再借 `_PROJECT_ROOT`（已归位 ui/assets.py，
+# 而 import ui.* 又需要 sys.path 就绪——先有鸡还是先有蛋）⇒ 引导就地自算（与 ui/assets 同式，值恒等）。
+_PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
 if _PROJECT_ROOT not in sys.path:
     sys.path.insert(0, _PROJECT_ROOT)
 
 from shared.config import load_env, get_data_dir
 load_env()
 
-# 历史浮层开关（V10.10.2）：环境变量 REZERO_DISABLE_HISTORY=1 可禁用浮层做二分排查
-_HISTORY_DISABLED = os.environ.get("REZERO_DISABLE_HISTORY", "") == "1"
 
-# 开场引言开关（V10.10.3）：环境变量 REZERO_DISABLE_VIGNETTE=1 可禁用引言做二分排查
-_VIGNETTE_DISABLED = os.environ.get("REZERO_DISABLE_VIGNETTE", "") == "1"
 # SPEC-20260922-23：定位闪光的净观察窗口（感知链 ≈0.4s：浮层关闭 + 滚动动画），2.0s 偏紧 ⇒ 2.4s
 LOCATE_FLASH_MS = 2400
 
-# UI 动效开关（V12.0）：环境变量 REZERO_DISABLE_UI_MOTION=1 可整体关闭动效（验收对比/回滚）
-# V16-M_F：状态反馈的世界内表达（DESIGN 解析 §2.5）——
-# 不用"生成中/AI 思考中"等系统术语，让反馈留在宅邸世界观里。
-WORLD_FEEDBACK = {
-    "rem": "蕾姆正在斟酌话语…",
-    "ram": "拉姆正在挑选用词…",
-    "user": "双子正在准备回应…",
-}
 
 
-def _ui_motion_enabled() -> bool:
-    """V16-M_B：动效统一门——收敛到 motion.enabled()（offscreen 恒禁用 /
-    REZERO_DISABLE_UI_MOTION 旧开关兼容 / token 总开关）。"""
-    try:
-        import motion
-        return motion.enabled()
-    except Exception:
-        return False
 
 from PySide6.QtCore import (
     Qt, QTimer, Signal, QObject, QThread, QSize,
@@ -114,13 +85,6 @@ from PySide6.QtWidgets import (
     QMenu,
 )
 
-try:  # V16 素材：SVG 显式渲染（EXE 内不赌 qsvg 图片插件）
-    from PySide6.QtSvg import QSvgRenderer
-    _SVG_OK = True
-except Exception:  # pragma: no cover
-    QSvgRenderer = None
-    _SVG_OK = False
-
 from shared.state import StoryArc, OniStage, FAVOR_LEVEL_CN
 from shared.memory_store import MemoryStore
 from shared.conversation_store import ConversationStore
@@ -130,102 +94,22 @@ from shared.letter_manager import LetterManager  # V14.3：主动来信
 # 安全 no-op，init_forensic 只在 main() 调用（测试构造 TwinChatApp 不触发）
 from runtime.forensic import record, shutdown_forensic, init_forensic
 
-# 日志与持久化统一走 get_data_dir()：
-# frozen 时指向 EXE 同级 data/，源码时指向项目根 data/。
-# 切勿用 _PROJECT_ROOT（frozen 下是 _MEIPASS 临时目录，退出即丢）。
-# V16.1：支持 REZERO_GUI_LOG 覆盖——测试/CI 不得追加写真实 data/gui.log。
-def _log_path() -> str:
-    return os.environ.get("REZERO_GUI_LOG") or os.path.join(get_data_dir(), "gui.log")
-
+# ── SPEC-20260922-22 S1a：叶子模块归位（re-export 保持 gui.X 可导入）──
+from ui.logging_util import _LOG_FH, _LOG_FH_PATH, _LOG_LOCK, _LOG_FSYNC_ALL, _log_path, _log_open_locked, _log_close, _log_write_locked, _log  # noqa: F401
+from ui.text import PERIOD_KEYWORDS, WEATHER_EVENT_CONFLICT, highlight_plain_text, event_compatible, format_world_line, match_speaker_tag, _streaming_segments, parse_twin_segments, _rgba_to_qcolor  # noqa: F401
+from ui.assets import QSvgRenderer, _SVG_OK, _SPRITE_EXTS, _asset_path, _svg_pixmap, _backdrop_image_url, _theme_icon, _user_sprite_path, _copy_user_sprite, _resolve_sprite  # noqa: F401
+from ui.flags import _VIGNETTE_DISABLED, _HISTORY_DISABLED, _ui_motion_enabled, _side_panels_enabled, _get_ambient_registry  # noqa: F401
+from ui.app_data import ARC_CN, GREETING_TEMPLATES, NAV_ENTRIES, ONI_STAGE_CN, WEATHER_CLAUSES, WORLD_FEEDBACK  # noqa: F401
 
 _LOG_PATH = _log_path()
 
-# ═══ A18（SPEC-20260922-13）：日志双档 ═══════════════════════════
-# 常规档：**常开句柄 + flush**（不 fsync）——实测 729 µs/条 → ≈8 µs/条（94×）。
-# 关键档 `durable=True`：flush + fsync，用于崩溃/异常/存档/生命周期/轮次中止等
-#   必须留证的事件（精确 53 处，清单见 docs/devlog/步1-4前置材料_2026-09-27.md §1）。
-# 线程安全：`VignetteWorker.run` 在 QThread 内调用 `_log`（gui.py:2509-2549 接线 +
-#   :2516/2531/2534 调用点）⇒ 必须加锁；崩溃路径不阻塞（acquire timeout 0.5s）。
-# 回退开关：`REZERO_LOG_DURABLE=1` → 全部走 fsync（取证/排障期一键回退，无需改码）。
-_LOG_LOCK = threading.Lock()
-_LOG_FH = None
-_LOG_FH_PATH = None
-_LOG_FSYNC_ALL = os.environ.get("REZERO_LOG_DURABLE", "") not in ("", "0", "false", "False")
-
-# ── SPEC-20260922-17（步 5 / B5）：导航单一真源 ────────────────────────────
-# 左导航与底部图标坞**同表驱动**（禁止两处各写一份入口列表——V16 前两处各 7/6 项，
-# 其中「日程/任务/插件」三条同指 /status、「设置」绑空转命令、「主页」与「对话」同动作）。
-# 结构断言（tests/test_command_router.py）：id/label/handler 唯一、图标资产存在、不得出现空转命令。
-NAV_ENTRIES = (
-    {"id": "chat",    "label": "对话", "icon": "icon_chat.svg",     "handler": "_nav_focus_input"},
-    {"id": "memory",  "label": "记忆", "icon": "icon_memory.svg",   "handler": "_open_memory_book"},
-    {"id": "status",  "label": "状态", "icon": "icon_calendar.svg", "handler": "_nav_open_status"},
-    {"id": "history", "label": "历史", "icon": "icon_info.svg",     "handler": "_open_history"},
-)
 
 
-# ── SPEC-20260922-17（步 5 / B3）：侧边角色面板跳过开关 ─────────────────────
-# 默认**不构造**隐藏面板：原实现构造 rem/ram 两个 CharacterPanel 后无条件 hide()，
-# 却仍有 5 处 update_state/set_speaking/set_sprite 持续推送（台账 B3/D3「双写」债）。
-# 排障/回滚：`REZERO_SHOW_SIDE_PANELS=1` 启动即恢复旧行为（面板构造 + 拖入换立绘可达）。
-def _side_panels_enabled() -> bool:
-    """侧边角色面板显式开关（默认关：面板构造后即被隐藏，纯死重）。"""
-    return os.environ.get("REZERO_SHOW_SIDE_PANELS", "") not in ("", "0", "false", "False")
 
 
-def _log_open_locked():
-    """（调用方须持锁）打开/重开日志句柄。"""
-    global _LOG_FH, _LOG_FH_PATH
-    path = _log_path()
-    try:
-        os.makedirs(os.path.dirname(path), exist_ok=True)
-    except Exception:
-        pass
-    _LOG_FH = open(path, "a", encoding="utf-8")
-    _LOG_FH_PATH = path
-    return _LOG_FH
 
 
-def _log_close() -> None:
-    """atexit（F13-3：模块导入期注册）：flush + close，置空句柄。"""
-    global _LOG_FH, _LOG_FH_PATH
-    with _LOG_LOCK:
-        try:
-            if _LOG_FH is not None:
-                _LOG_FH.flush()
-                _LOG_FH.close()
-        except Exception:
-            pass
-        _LOG_FH = None
-        _LOG_FH_PATH = None
 
-
-def _log_write_locked(msg: str, durable: bool) -> None:
-    global _LOG_FH
-    try:
-        f = _LOG_FH
-        # 重开条件：未打开 / 已被 atexit 关闭（F13-3）/ 目标路径已变（REZERO_GUI_LOG 或 get_data_dir）
-        if f is None or getattr(f, "closed", True) or _LOG_FH_PATH != _log_path():
-            f = _log_open_locked()
-        f.write(f"[{datetime.now().isoformat()}] {msg}\n")
-        f.flush()
-        if durable or _LOG_FSYNC_ALL:
-            os.fsync(f.fileno())
-    except Exception:
-        _LOG_FH = None    # 句柄异常（被清理/盘满）→ 丢弃本条并在下次重开
-
-
-def _log(msg: str, durable: bool = False) -> None:
-    """A18 双档日志：常规档缓冲写；`durable=True` 关键档强制 fsync。
-
-    绝不抛异常（日志不得影响主流程）；崩溃路径 acquire 超时即放弃本条。
-    """
-    if not _LOG_LOCK.acquire(timeout=0.5):
-        return
-    try:
-        _log_write_locked(msg, durable)
-    finally:
-        _LOG_LOCK.release()
 
 
 atexit.register(_log_close)   # F13-3：注册在模块导入期（最早时机）
@@ -246,279 +130,27 @@ from design_tokens import (  # noqa: E402
 from ui import theme  # noqa: E402  # SPEC-20260922-18：QSS 单一真源（B6·A14 收口）
 
 
-def _rgba_to_qcolor(rgba_str: str):
-    """解析 'rgba(r,g,b,a)' 字符串为 QColor（供 QPainter 使用）。"""
-    s = rgba_str.strip()[5:-1]  # 去掉 "rgba(" 和 ")"
-    r, g, b, a = s.split(",")
-    from PySide6.QtGui import QColor
-    return QColor(int(r), int(g), int(b), int(float(a) * 255))
 
 
-def highlight_plain_text(text: str, keyword: str, surface: str = "light") -> str:
-    """V14.1：HTML escape 后把命中词包装为高亮 span（多命中全部高亮）。
-
-    V16.5.4 / SPEC-20260922-20（高亮柔化）：按**显示表面**分档——
-    - ``"light"``（默认）：聊天区浅底气泡 → 半透明暖黄底 + 下划线，不覆盖文字色（对比 9.28:1）；
-    - ``"dark"``：历史浮层深底卡片 → 更弱暖黄底 + 提亮文字（``#FFE6B0``，对比 6.52:1）；
-    - 未知 surface 值一律**回退 light**（不抛异常）。
-
-    防注入：先 html.escape 全文，再在转义后的文本上精确匹配转义后的关键词
-    （命中词的转义形态与原文一致，直接切片包裹）。空 keyword 或未命中时
-    返回 escape 后的文本（QLabel PlainText 渲染与原文一致）。
-    """
-    escaped = html.escape(text)
-    if not keyword:
-        return escaped
-    kw = html.escape(keyword)
-    if kw not in escaped:
-        return escaped
-    if surface == "dark":
-        bg, fg = COLORS['search_hit_dark_bg'], COLORS['search_hit_dark_fg']
-    else:  # light 与一切未知值
-        bg, fg = COLORS['search_hit_light_bg'], COLORS['search_hit_light_fg']
-    # 下划线是补充标识（背景对比不足时仍可辨命中 —— 可访问性兜底，见 SPEC-20 §目标）
-    hit_style = f"background-color: {bg}; " + (f"color: {fg}; " if fg else "") + "text-decoration: underline;"
-    parts: list = []
-    pos = 0
-    while True:
-        idx = escaped.find(kw, pos)
-        if idx < 0:
-            parts.append(escaped[pos:])
-            break
-        parts.append(escaped[pos:idx])
-        parts.append(f'<span style="{hit_style}">{escaped[idx:idx + len(kw)]}</span>')
-        pos = idx + len(kw)
-    return "".join(parts)
 
 
-# ═══════════════════════════════════════════════
-#  显示层中文映射（V10.9.1）
-#  V11.7：FAVOR_LEVEL_CN 已迁移至 shared.state（唯一真源）
-#  ONI_STAGE_CN / ARC_CN 仅 GUI 使用，保留本地
-# ═══════════════════════════════════════════════
-ONI_STAGE_CN = {
-    "NONE": "无",
-    "EMERGING": "显现",
-    "FULL": "完全解放",
-    "BRINK": "失控边缘",
-}
 
-ARC_CN = {
-    "mansion_era": "宅邸篇",
-    "empire_era": "帝国篇（失忆）",
-    "late_arc": "后期篇",
-}
+
 
 # ── V11.9.1：日更问候模板表驱动 ──────────────────────
-# 骨架不含天气/其它时段词，天气由 WEATHER_CLAUSES 白名单注入。
-GREETING_TEMPLATES = {
-    "清晨": "早安。蕾姆已经备好了早餐。{weather_clause}{event_clause}",
-    "上午": "上午好。宅邸的走廊已经亮起来了。{weather_clause}{event_clause}",
-    "午后": "午安。刚泡好的红茶还冒着热气。{weather_clause}{event_clause}",
-    "下午": "下午好。宅邸很安静。{weather_clause}{event_clause}",
-    "傍晚": "傍晚了。天色渐暗，蕾姆点了灯。{weather_clause}{event_clause}",
-    "夜晚": "晚上好。夜风有些凉。{weather_clause}{event_clause}",
-    "深夜": "这么晚了还没休息吗。{weather_clause}{event_clause}",
-}
-
-# 天气从句白名单：覆盖 WorldState.WEATHERS 全部 5 种，未知天气中性兜底。
-WEATHER_CLAUSES = {
-    "晴朗": "窗外天气晴朗。",
-    "多云": "云层遮住了部分天空。",
-    "小雨": "窗外飘着小雨。",
-    "大雨": "雨下得很大，宅邸的屋檐传来急促的滴水声。",
-    "阴沉": "天空阴沉沉的。",
-}
-
-# 天气 ↔ active_event 语义冲突关键词：命中则跳过 event 拼接并打日志。
-WEATHER_EVENT_CONFLICT = {
-    "大雨": ["花园", "盛开", "晒", "阳光", "晾晒", "白布", "温暖"],
-    "阴沉": ["阳光", "晒", "晴朗", "盛开", "晾晒", "白布", "温暖"],
-    "小雨": ["晒", "阳光", "晾晒"],
-}
-
-# 时段关键词：event 含这些词且与当前 period 不一致 → 语义冲突。
-# "入夜" 视为 "夜晚"/"深夜" 的别名，不与这两个时段冲突。
-PERIOD_KEYWORDS = ["清晨", "上午", "午后", "下午", "傍晚", "夜晚", "深夜", "入夜"]
 
 
-def event_compatible(period: str, weather: str, event: str) -> bool:
-    """V11.9.2：检查 active_event 是否与当前 period/weather 语义相容。
-
-    统一冲突检测，供 _show_daily_greeting / _show_ambient_line / _update_status_bar 共用。
-    返回 True 表示可拼接；False 表示应跳过 event 段。
-    """
-    if not event:
-        return False
-
-    # 天气冲突：event 含当前天气的冲突关键词
-    conflict_kws = WEATHER_EVENT_CONFLICT.get(weather, [])
-    if any(kw in event for kw in conflict_kws):
-        return False
-
-    # 时段冲突：event 含其它时段词
-    for kw in PERIOD_KEYWORDS:
-        if kw in event:
-            # "入夜" 是 "夜晚"/"深夜" 的别名
-            if kw == "入夜" and period in ("夜晚", "深夜"):
-                continue
-            # 时段词与当前 period 一致则不冲突
-            if kw == period:
-                continue
-            return False
-
-    return True
 
 
-def format_world_line(period: str, weather: str, event: str, *,
-                      max_event: int = 14, prefix: str = "",
-                      head: bool = True, suffix_sep: str = " · ") -> str:
-    """A15（SPEC-20260922-12 B2）：世界行**唯一**格式化实现。
-
-    此前 `_refresh_ambient` 与 `_update_status_bar` 各自内联「事件相容判定 + 截断」，
-    两处截断长度还不一致（14 / 16 字）。本函数收口为单一实现，
-    截断长度、分隔符、是否带 `period · weather` 行首全部参数化——
-    **调用点现值原样保留 ⇒ 文案零变化**（是否统一长度属观感决策，留待真机批次）。
-
-    head=False 时只返回事件后缀（供状态栏拼接用）。
-    """
-    ev = event or ""
-    head_txt = f"{prefix}{period} · {weather}" if head else ""
-    if ev and event_compatible(period, weather, ev):
-        ev_short = ev[:max_event] + "…" if len(ev) > max_event else ev
-        return f"{head_txt}{suffix_sep}{ev_short}"
-    return head_txt
 
 
-def match_speaker_tag(line: str) -> tuple:
-    """V11.11：行首说话人标签匹配（parse_twin_segments 与 _streaming_segments 共用）。
-
-    Returns: (tag_type, content)
-    - tag_type: "rem" | "ram" | "system" | "unknown" | None
-    - content: 标签后提取的文本（strip 引号）；无标签时返回原 line
-    """
-    if line.startswith("【蕾姆】") or line.startswith("【蕾姆】:"):
-        content = line.split(":", 1)[1].strip().strip('"') if ":" in line else line[4:].strip()
-        return "rem", content
-    elif line.startswith("【拉姆】") or line.startswith("【拉姆】:"):
-        content = line.split(":", 1)[1].strip().strip('"') if ":" in line else line[4:].strip()
-        return "ram", content
-    elif line.startswith("【系统】") or line.startswith("【系统】:"):
-        content = line.split(":", 1)[1].strip().strip('"') if ":" in line else line[4:].strip()
-        return "system", content
-    elif line.startswith("【"):
-        return "unknown", ""
-    else:
-        return None, line
 
 
-def _streaming_segments(buffer: str) -> list:
-    """V11.11：流式分段，与 parse_twin_segments 语义一致，处理不完整末行。
-
-    末行规则：
-    - 以【开头且未出现】→ 标签不完整，跳过该行（等后续 token 补全）
-    - 其他 → 正常处理（标签可能完整，或无标签）
-
-    返回的段是 parse_twin_segments(buffer) 的子集（最多缺少末行）。
-    流式过程中可能暂时为空，不做兜底（与 parse_twin_segments 的兜底不同）。
-    """
-    segments = []
-    current_speaker = None
-    current_buffer = []
-
-    def _flush():
-        nonlocal current_speaker, current_buffer
-        if current_buffer:
-            text = "\n".join(current_buffer).strip()
-            if text:
-                segments.append((current_speaker or "rem", text))
-            current_buffer = []
-
-    lines = buffer.split("\n")
-    for i, line in enumerate(lines):
-        line = line.strip()
-        if not line:
-            continue
-        is_last = (i == len(lines) - 1)
-        # 末行标签不完整：跳过，等后续 token 补全
-        if is_last and line.startswith("【") and "】" not in line:
-            break
-
-        tag_type, content = match_speaker_tag(line)
-        if tag_type in ("rem", "ram"):
-            _flush()
-            current_speaker = tag_type
-            if content:
-                current_buffer.append(content)
-        elif tag_type == "system":
-            # LLM 来源的【系统】不落 system，提取内容按无前缀行处理
-            if content:
-                if current_speaker is None:
-                    current_speaker = "rem"
-                current_buffer.append(content)
-        elif tag_type == "unknown":
-            # 未知【XX】标签，跳过
-            continue
-        else:  # None
-            # 无前缀行：继承当前 speaker（默认 rem）
-            if current_speaker is None:
-                current_speaker = "rem"
-            current_buffer.append(content)
-
-    _flush()
-    return segments
 
 
-def parse_twin_segments(reply: str) -> list:
-    """V11.10.0：解析双子回复为段列表 [(speaker, text), ...]。
 
-    缓冲+flush 模型，speaker 继承，禁止 LLM 台词降级 system。
-    V11.11：标签匹配抽至 match_speaker_tag，与 _streaming_segments 共用，行为不变。
-    """
-    segments = []
-    current_speaker = None
-    current_buffer = []
 
-    def _flush():
-        nonlocal current_speaker, current_buffer
-        if current_buffer:
-            text = "\n".join(current_buffer).strip()
-            if text:
-                segments.append((current_speaker or "rem", text))
-            current_buffer = []
 
-    for line in reply.strip().split("\n"):
-        line = line.strip()
-        if not line:
-            continue
-
-        tag_type, content = match_speaker_tag(line)
-        if tag_type in ("rem", "ram"):
-            _flush()
-            current_speaker = tag_type
-            if content:
-                current_buffer.append(content)
-        elif tag_type == "system":
-            # LLM 来源的【系统】不落 system，提取内容按无前缀行处理
-            if content:
-                if current_speaker is None:
-                    current_speaker = "rem"
-                current_buffer.append(content)
-        elif tag_type == "unknown":
-            # 未知【XX】标签，跳过
-            continue
-        else:  # None
-            # 无前缀行：继承当前 speaker（默认 rem）
-            if current_speaker is None:
-                current_speaker = "rem"
-            current_buffer.append(content)
-
-    _flush()
-
-    if not segments:
-        segments.append(("rem", reply.strip() or "……"))
-
-    return segments
 
 
 class LLMWorker(QObject):
@@ -559,120 +191,22 @@ class LLMWorker(QObject):
             self.error.emit(str(e))
 
 
-def _asset_path(filename: str) -> str:
-    """返回资产文件的绝对路径，兼容 frozen 与源码运行。"""
-    if getattr(sys, "frozen", False):
-        base = getattr(sys, "_MEIPASS", _PROJECT_ROOT)
-    else:
-        base = _PROJECT_ROOT
-    return os.path.join(base, "assets", filename)
 
 
-def _svg_pixmap(filename: str, size: int, *, size_h: int = 0) -> QPixmap:
-    """SVG → QPixmap（QSvgRenderer 显式渲染，不依赖 qsvg 图片插件——EXE 稳健）。
-
-    2x 超采样抗锯齿；文件缺失/渲染失败返回空 QPixmap（调用端回退文字）。
-    """
-    if not _SVG_OK:
-        return QPixmap()
-    path = filename if os.path.isabs(filename) else _asset_path(filename)
-    if not os.path.isfile(path):
-        return QPixmap()
-    try:
-        renderer = QSvgRenderer(path)
-        if not renderer.isValid():
-            return QPixmap()
-        w = size * 2
-        h = (size_h or size) * 2
-        pm = QPixmap(w, h)
-        pm.fill(Qt.transparent)
-        painter = QPainter(pm)
-        renderer.render(painter)
-        painter.end()
-        return pm
-    except Exception:
-        return QPixmap()
 
 
-def _backdrop_image_url() -> str:
-    """宅邸背景的 QSS 可用 URL。
-
-    优先预渲染 PNG 缓存（data/backdrop_cache.png，随 SVG 更新再生）——
-    QSS border-image 走图片插件，EXE 内插件缺失时 SVG 直引会静默空白；
-    PNG 预渲染只依赖 QSvgRenderer（hiddenimports 显式收集），稳健。
-    """
-    svg = _asset_path("mansion_backdrop.svg")
-    fallback = svg.replace(os.sep, "/")
-    if not _SVG_OK or not os.path.isfile(svg):
-        return fallback
-    try:
-        out = os.path.join(get_data_dir(), "backdrop_cache.png")
-        if (not os.path.isfile(out)
-                or os.path.getmtime(out) < os.path.getmtime(svg)):
-            renderer = QSvgRenderer(svg)
-            if not renderer.isValid():
-                return fallback
-            pm = QPixmap(1600, 1000)
-            pm.fill(Qt.transparent)
-            painter = QPainter(pm)
-            renderer.render(painter)
-            painter.end()
-            pm.save(out, "PNG")
-        if os.path.isfile(out):
-            return out.replace(os.sep, "/")
-    except Exception:
-        pass
-    return fallback
 
 
-def _theme_icon(filename: str) -> QIcon:
-    """加载主题 SVG 图标（QSvgRenderer 显式渲染）；缺失时返回空图标，调用端仍保持文字可用。"""
-    pm = _svg_pixmap(filename, 32)
-    return QIcon(pm) if not pm.isNull() else QIcon()
 
 
 # ── V14.11：立绘自定义（用户拖入 > 内置 assets > 占位）──────────────
 
-_SPRITE_EXTS = ("png", "jpg", "jpeg", "webp")
 
 
-def _user_sprite_path(data_dir: str, key: str) -> str:
-    """用户自定义立绘路径：data/sprites/{key}.{ext}，存在即返回（文件即持久化）。"""
-    sprite_dir = os.path.join(data_dir, "sprites")
-    for ext in _SPRITE_EXTS:
-        p = os.path.join(sprite_dir, f"{key}.{ext}")
-        if os.path.isfile(p):
-            return p
-    return ""
 
 
-def _copy_user_sprite(src: str, data_dir: str, key: str) -> str:
-    """把拖入图片复制为 data/sprites/{key}.{ext}（清理旧扩展名），返回新路径。
-
-    非图片扩展名返回空串；复制失败抛异常由调用方兜底。
-    """
-    import shutil
-    ext = os.path.splitext(src)[1].lower().lstrip(".")
-    if ext not in _SPRITE_EXTS:
-        return ""
-    sprite_dir = os.path.join(data_dir, "sprites")
-    os.makedirs(sprite_dir, exist_ok=True)
-    dst = os.path.join(sprite_dir, f"{key}.{ext}")
-    for old_ext in _SPRITE_EXTS:
-        old = os.path.join(sprite_dir, f"{key}.{old_ext}")
-        if old != dst and os.path.isfile(old):
-            try:
-                os.remove(old)
-            except Exception:
-                pass
-    shutil.copyfile(src, dst)
-    return dst
 
 
-def _resolve_sprite(data_dir: str, key: str, asset_path: str) -> str:
-    """立绘解析优先级：用户自定义（data/sprites，持久化）> 内置 assets > 空（占位）。"""
-    user = _user_sprite_path(data_dir, key)
-    return user or asset_path
 
 
 # ═══════════════════════════════════════════════
