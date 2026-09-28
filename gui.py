@@ -80,6 +80,8 @@ _HISTORY_DISABLED = os.environ.get("REZERO_DISABLE_HISTORY", "") == "1"
 
 # 开场引言开关（V10.10.3）：环境变量 REZERO_DISABLE_VIGNETTE=1 可禁用引言做二分排查
 _VIGNETTE_DISABLED = os.environ.get("REZERO_DISABLE_VIGNETTE", "") == "1"
+# SPEC-20260922-23：定位闪光的净观察窗口（感知链 ≈0.4s：浮层关闭 + 滚动动画），2.0s 偏紧 ⇒ 2.4s
+LOCATE_FLASH_MS = 2400
 
 # UI 动效开关（V12.0）：环境变量 REZERO_DISABLE_UI_MOTION=1 可整体关闭动效（验收对比/回滚）
 # V16-M_F：状态反馈的世界内表达（DESIGN 解析 §2.5）——
@@ -1445,7 +1447,7 @@ class HistoryOverlay(QWidget):
     """
 
     closed = Signal()
-    locate_requested = Signal(int)  # V10.12：定位请求透传 message_id 给主窗口
+    locate_requested = Signal(int, str)  # SPEC-23：定位请求透传 (message_id, keyword) 给主窗口
 
     def __init__(self, conv_store, parent=None):
         super().__init__(parent)
@@ -1542,6 +1544,7 @@ class HistoryOverlay(QWidget):
 
     def _load_data(self, records: list, keyword: str = "") -> None:
         """清空列表并填充记录（倒序：最新在上）。keyword 非空时摘要高亮命中词。"""
+        self._keyword = keyword or ""  # SPEC-23 F23-1：本次结果集的关键词（📍 relay 时携带）
         # 清空旧 widget
         while self._list_layout.count() > 1:
             item = self._list_layout.takeAt(0)
@@ -1561,7 +1564,7 @@ class HistoryOverlay(QWidget):
         # records 来自 get_recent 已是正序，倒序插入实现最新在上
         for record in reversed(records):
             item_widget = HistoryItemWidget(record, keyword=keyword)  # V14.1：keyword 透传高亮
-            item_widget.locate_clicked.connect(self.locate_requested)  # V10.12
+            item_widget.locate_clicked.connect(lambda mid: self.locate_requested.emit(mid, self._keyword))  # SPEC-23：带关键词
             self._list_layout.insertWidget(self._list_layout.count() - 1, item_widget)
 
     def load_recent(self) -> None:
@@ -3336,11 +3339,12 @@ class TwinChatApp(QMainWindow):
 
     # ── V10.12：历史条目定位 ───────────────────
 
-    def _locate_message(self, message_id: int) -> None:
+    def _locate_message(self, message_id: int, keyword: str = "") -> None:
         """根据 message_id 定位主聊天中的消息 widget。
 
-        成功：关闭浮层 → 滚动到目标 → 短暂高亮 2 秒
+        成功：关闭浮层 → 滚动到目标 → 短暂高亮（底色 + 可选句级命中标记）→ 恢复
         失败：关闭浮层 → transient 提示（不污染主聊天流）
+        keyword：当前搜索词（SPEC-20260922-23 F23-1，浮层 relay 携带；空则只闪光不标句）
         """
         # 1. 关闭浮层
         if self._history_overlay:
@@ -3364,10 +3368,10 @@ class TwinChatApp(QMainWindow):
                 target = w
                 break
 
-        # 3. 成功：滚动 + 高亮
+        # 3. 成功：滚动 + 高亮（色彩定档见 design_tokens.locate_highlight）
         if target is not None:
-            self.scroll.ensureWidgetVisible(target)
-            self._highlight_widget(target)
+            self._scroll_to_widget(target)
+            self._highlight_widget(target, keyword=keyword)
             self.input_box.setFocus()
             return
 
@@ -3386,18 +3390,94 @@ class TwinChatApp(QMainWindow):
             tip += f"内容摘要：{summary}"
         self._append_parsed_message("系统", tip, "system", save=False, transient=True)
 
-    def _highlight_widget(self, widget) -> None:
-        """短暂高亮目标 widget（金色半透明背景，2 秒后恢复）。
+    def _scroll_to_widget(self, target) -> None:
+        """滚动到目标消息：动效开=平滑滚动（220ms/OutCubic）；关=瞬跳（REZERO_DISABLE_UI_MOTION=1）。"""
+        try:
+            if not _ui_motion_enabled():
+                self.scroll.ensureWidgetVisible(target)
+                return
+            bar = self.scroll.verticalScrollBar()
+            current = bar.value()
+            self.scroll.ensureWidgetVisible(target)   # 先借原生实现算出目标位置
+            dest = bar.value()
+            bar.setValue(current)                      # 回到原位，再动画滚过去
+            anim = QPropertyAnimation(bar, b"value", self)
+            anim.setDuration(220)
+            anim.setStartValue(current)
+            anim.setEndValue(dest)
+            anim.setEasingCurve(QEasingCurve.OutCubic)
+            anim.start(QPropertyAnimation.DeleteWhenStopped)
+        except Exception as e:  # 动画不可用则降级瞬跳——定位本身不能失败
+            _log(f"滚动动画降级为瞬跳: {e}")
+            self.scroll.ensureWidgetVisible(target)
 
-        不动 BubbleWidget 内部样式，仅设置 ChatMessageWidget 外层背景。
+    def _highlight_widget(self, widget, keyword: str = "") -> None:
+        """短暂高亮目标消息**气泡本体**（暖黄底色 + 可选句级命中标记），LOCATE_FLASH_MS 后恢复。
+
+        SPEC-23 修订（用户真机反馈：只标气泡，角色名/头像不动）：
+        把闪光规则**追加**到气泡 label 自己的样式表末尾（同表同优先级 ⇒ 后写的赢），
+        原样式存 `widget._locate_orig_style` 供恢复；拿不到气泡时退回容器级。
         """
         try:
-            widget.setStyleSheet(
-                theme.locate_highlight()
-            )
-            QTimer.singleShot(2000, lambda: widget.setStyleSheet(""))
+            label = self._bubble_text_label(widget)
+            target = label if label is not None else widget
+            if not hasattr(widget, "_locate_orig_style"):
+                widget._locate_orig_style = target.styleSheet()
+            target.setStyleSheet(target.styleSheet() + "\n" + theme.locate_highlight())
+            self._mark_locate_hit(widget, keyword)
+            QTimer.singleShot(LOCATE_FLASH_MS, lambda: self._clear_locate_marks(widget))
         except Exception as e:
             _log(f"高亮异常: {e}", durable=True)
+
+    @staticmethod
+    def _bubble_text_label(widget):
+        """取气泡文本 label（`QLabel#bubble_text`）——闪光与句级标记的共同落点。"""
+        bubble = getattr(widget, "_bubble", None)
+        if bubble is None:
+            return None
+        return bubble.findChild(QLabel, "bubble_text")
+
+    def _mark_locate_hit(self, widget, keyword: str) -> None:
+        """把命中词标进目标气泡（DB 原文 → highlight_plain_text 浅档）；无命中则不动。"""
+        if not keyword:
+            return
+        try:
+            record = self.conv_store.get_by_id(getattr(widget, "message_id", 0))
+            content = (record or {}).get("content", "")
+            if not content or keyword not in content:
+                return
+            label = self._bubble_text_label(widget)
+            if label is None:
+                return
+            widget._locate_hit_text = content          # 原文留存，供 _clear_locate_marks 恢复
+            label.setText(highlight_plain_text(content, keyword))
+        except Exception as e:
+            _log(f"句级定位标记异常: {e}")
+
+    def _clear_locate_marks(self, widget) -> None:
+        """恢复定位标记（气泡底色 + 句级标记）。幂等；widget 已销毁时静默返回。"""
+        try:
+            label = self._bubble_text_label(widget)
+        except RuntimeError:
+            return  # C++ 对象已销毁（消息在闪光窗口内被删除）
+        try:
+            orig_style = getattr(widget, "_locate_orig_style", None)
+            if label is not None and orig_style is not None:
+                label.setStyleSheet(orig_style)
+            if hasattr(widget, "_locate_orig_style"):
+                del widget._locate_orig_style
+        except RuntimeError:
+            return
+        except Exception as e:
+            _log(f"定位底色恢复异常: {e}")
+        try:
+            orig = getattr(widget, "_locate_hit_text", None)
+            if orig is not None:
+                if label is not None:
+                    label.setText(orig)
+                del widget._locate_hit_text
+        except Exception as e:
+            _log(f"句级标记恢复异常: {e}")
 
     def resizeEvent(self, event) -> None:
         """窗口 resize 时同步浮层遮罩尺寸。"""

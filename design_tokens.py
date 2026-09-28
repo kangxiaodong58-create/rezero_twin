@@ -49,7 +49,7 @@ COLORS = {
     # ── STATE（V10.15b：状态色，消除 disabled/高亮/遮罩硬编码）──
     "btn_disabled_bg":  "#4a4a4a",               # 按钮 disabled 背景
     "btn_disabled_fg":  "#888",                  # 按钮 disabled 文字
-    "locate_highlight": "rgba(255,215,0,0.15)",   # 定位高亮金色半透明
+    "locate_highlight": "rgba(255,205,96,0.55)",   # 定位闪光底色（SPEC-23：离屏实测 ΔB=−74，达描边方案 73%；描边会挤布局已否决）
     # SPEC-20260922-20（高亮柔化）：命中词高亮按**显示表面**分档（旧单值 `search_hit: #FFEB3B` 已替换）
     #   · light = 聊天区浅底气泡：半透明暖黄底 + 下划线，**不覆盖文字色**（正文 #34374d 对比 9.28:1）
     #   · dark  = 历史浮层深底卡片：更弱暖黄底 + 提亮文字（#FFE6B0，对比 6.52:1；不提亮仅 3.11:1 ✗）

@@ -79,6 +79,32 @@ def _demo_bubble_hit():
     )
 
 
+def _demo_locate_flash():
+    """SPEC-20260922-23（步 10）：定位闪光**终态**（暖黄底色 + 句级命中标记）。
+
+    复刻真机叠色：`ChatMessageWidget` 放在聊天区底色容器上（#DDDCE8 取自 2026-09-28 真机取样，
+    聊天区是背景图渐变、无单一 token）。F23-3：基线只捕**终态**，不含滚动动画中间帧。
+    """
+    from gui import ChatMessageWidget, highlight_plain_text
+    from ui import theme
+
+    content = "客人大人，欢迎回来。蕾姆刚煮好了红茶，请趁热喝。"
+    host = QWidget()
+    host.setObjectName("chat_canvas")
+    host.setStyleSheet("#chat_canvas { background-color: #DDDCE8; }")  # 真机取样值
+    outer = QVBoxLayout(host)
+    outer.setContentsMargins(0, 0, 0, 0)
+
+    w = ChatMessageWidget("蕾姆", content, "rem", message_id=1)
+    label = w._bubble.findChild(QLabel, "bubble_text")
+    if label is not None:
+        # 与真机路径同款：闪光规则**追加**到气泡 label 自己的样式表（只标气泡，名字/整行不动）
+        label.setStyleSheet(label.styleSheet() + "\n" + theme.locate_highlight())
+        label.setText(highlight_plain_text(content, "红茶"))  # 句级命中标记（浅档 + 下划线）
+    outer.addWidget(w)
+    return host
+
+
 def _demo_history_item_hit():
     """V16.5.4/SPEC-20260922-20：历史浮层条目 + **dark 档**命中高亮（深底卡片面）。
 
@@ -130,6 +156,8 @@ def build_surfaces(tmp_root: str):
         # V16.5.4/SPEC-20260922-20：高亮两档的**回归基线**（非本次改动正确性判据，见 SPEC §F20-5）
         ("bubble_search_hit", _demo_bubble_hit()),
         ("history_item_search_hit", _demo_history_item_hit()),
+        # V16.5.6/SPEC-20260922-23：定位闪光终态（底色 + 句级命中标记）
+        ("locate_flash", _demo_locate_flash()),
     ]
     for name, w in surfaces:
         w.setStyleSheet(w.styleSheet())  # 触发样式解析

@@ -463,3 +463,64 @@ def test_panel_favor_format_v148() -> None:
     # 满好感无距提示
     panel.update_state(favor=100, stage="深爱", emotion="😊")
     assert "距" not in panel.stage_label.text(), "满好感不应显示距提示"
+
+
+def test_locate_flash_and_hit_marker_v1656() -> None:
+    """SPEC-23（步 10）：定位打磨——底色定档 + 句级命中标记 + 幂等恢复 + 无关键词只闪不标。"""
+    import tempfile
+
+    win = _make_window()
+    fd, db_path = tempfile.mkstemp(suffix=".db")
+    os.close(fd)
+    os.remove(db_path)
+    win.conv_store = gui.ConversationStore(db_path=db_path)
+
+    # 定档：token 单源（色值变即基线变，防静默回退）
+    assert gui.COLORS["locate_highlight"] == "rgba(255,205,96,0.55)", \
+        f"定位底色定档应 0.55: {gui.COLORS['locate_highlight']}"
+    assert gui.LOCATE_FLASH_MS == 2400, "闪光时长定档应 2400ms"
+
+    w = win._append_parsed_message("蕾 姆", "今天去野外散步，野外很美", "rem")
+    mid = w.message_id
+    assert mid, "消息应拿到 DB id（定位依赖它）"
+    label = w._bubble.findChild(QLabel, "bubble_text")
+    assert label is not None
+    name_label = w._name_label
+    orig_bubble_style = label.styleSheet()
+    orig_name_style = name_label.styleSheet()
+
+    # 1) 带关键词：气泡上底色 + 句级标记同时上；**角色名不受影响**（用户真机要求）
+    win._locate_message(mid, keyword="野外")
+    assert "rgba(255,205,96,0.55)" in label.styleSheet(), f"气泡应上闪光底色: {label.styleSheet()!r}"
+    assert label.styleSheet() != orig_bubble_style
+    assert name_label.styleSheet() == orig_name_style, "角色名不得被闪光染色（只标气泡）"
+    assert "<span" in label.text(), f"应标出命中句: {label.text()}"
+    assert getattr(w, "_locate_hit_text", None) == "今天去野外散步，野外很美", \
+        "原文应留存供恢复"
+
+    # 2) 恢复：气泡底色 + 句级一起还原（回到闪光前的原文样式）；幂等
+    win._clear_locate_marks(w)
+    assert label.styleSheet() == orig_bubble_style, "恢复应还原气泡原样式（而非置空）"
+    assert "<span" not in label.text() and "野外" in label.text(), f"恢复应还原原文: {label.text()}"
+    assert not hasattr(w, "_locate_hit_text"), "恢复后应删除原文留存"
+    assert not hasattr(w, "_locate_orig_style"), "恢复后应删除样式留存"
+    win._clear_locate_marks(w)  # 二次调用无副作用（幂等）
+
+    # 3) 无关键词：只闪光、不标句
+    w2 = win._append_parsed_message("你", "没有关键词也要闪一下", "user")
+    win._locate_message(w2.message_id)
+    label2 = w2._bubble.findChild(QLabel, "bubble_text")
+    assert "rgba(255,205,96,0.55)" in label2.styleSheet(), "无关键词也应上底色"
+    assert not hasattr(w2, "_locate_hit_text"), "无关键词不应标句"
+    win._clear_locate_marks(w2)
+
+    # 4) 关键词不在该条：不标句（只闪）
+    win._locate_message(mid, keyword="不存在的词")
+    assert "rgba(255,205,96,0.55)" in label.styleSheet(), "未命中也应上底色"
+    assert not hasattr(w, "_locate_hit_text"), "未命中不应标句"
+    win._clear_locate_marks(w)
+
+    # 5) 无效 message_id：走失败路径，不抛、不污染（transient 系统提示）
+    before = win.chat_layout.count()
+    win._locate_message(0)
+    assert win.chat_layout.count() == before + 1, "无效 id 应追加一条 transient 提示"

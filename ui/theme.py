@@ -266,10 +266,15 @@ def input_box_normal() -> str:
         f"QTextEdit {{ border: 1px solid {COLORS['border_subtle']}; border-radius: 10px; background-color: {COLORS['input']}; padding: 6px 10px; }}"
     )
 
-def locate_highlight() -> str:
-    return (
-        f"background-color: {COLORS['locate_highlight']}; border-radius: {RADIUS['small']}px;"
-    )
+def locate_highlight(selector: str = "QLabel") -> str:
+    """SPEC-23 修订（用户真机反馈）：定位闪光只作用于**气泡本体**。
+
+    关键点：必须带**选择器**。气泡 label 的样式表来自 `bubble_body()`（含 `QLabel { … }` 规则），
+    无选择器的裸声明会被那条按优先级压住 ⇒ 渲染上「什么都没发生」（截图基线抓到的坑）。
+    这里默认用 `QLabel {}` 与之同优先级、靠**后写**取胜；调用方把它**追加**到
+    气泡 label 自己的样式表末尾即可 —— 天然只作用于气泡，不染角色名/整行。
+    """
+    return f"{selector} {{ background-color: {COLORS['locate_highlight']}; }}"
 
 def card_avatar(accent) -> str:
     return (
