@@ -13,7 +13,8 @@
 # ============================================================
 
 param(
-    [switch]$SkipClean
+    [switch]$SkipClean,
+    [switch]$TestRestore   # SPEC-30 F30-5: dry-run only the restore logic
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,6 +27,93 @@ $DistData = Join-Path $DistDir "data"
 $VenvPython = Join-Path $ProjectRoot "venv\Scripts\python.exe"
 
 Write-Host "=== ReZeroTwin Build Script ===" -ForegroundColor Cyan
+
+# ------------------------------------------------------------------
+# SPEC-30: single restore implementation shared by success/failure paths.
+#  F30-1 abort = throw (top-level $ErrorActionPreference="Stop"); on abort the
+#         backup directory is KEPT so the user can still restore manually.
+#  F30-2 content-semantics copy (never delete files the backup does not have).
+#  F30-3 one code path -> the failure branch can no longer drift from this one.
+# ------------------------------------------------------------------
+function Restore-DistData {
+    param(
+        [Parameter(Mandatory = $true)][string]$BackupPath,
+        [Parameter(Mandatory = $true)][string]$TargetPath
+    )
+    if (-not (Test-Path $BackupPath)) {
+        throw "[RESTORE] backup dir not found: $BackupPath (kept on purpose, do not delete)"
+    }
+    New-Item -ItemType Directory -Force -Path $TargetPath | Out-Null
+    # F30-2: copy the CONTENTS; files that exist only in the target are preserved.
+    Copy-Item -Path (Join-Path $BackupPath "*") -Destination $TargetPath -Recurse -Force
+    # F30-1: post-restore self check; failure -> throw -> script aborts loudly.
+    foreach ($f in @("conversations.db", "memory.json")) {
+        if (-not (Test-Path (Join-Path $TargetPath $f))) {
+            throw "[RESTORE] self-check FAILED: missing $TargetPath\$f (backup kept: $BackupPath)"
+        }
+    }
+    Write-Host "[RESTORE] dist/data/ restored + self-check OK: $TargetPath" -ForegroundColor Green
+    # Consume the backup ONLY after the self check passed.
+    if (Test-Path $BackupPath) { Remove-Item $BackupPath -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+function Remove-StaleDataBackups {
+    # F30-4: keep timestamped backups for 3 days; failure-path backups are never
+    # removed here because this is only called from the success path.
+    Get-ChildItem -Path $env:TEMP -Directory -Filter "rezero_data_backup_*" -ErrorAction SilentlyContinue |
+        Where-Object { $_.LastWriteTime -lt (Get-Date).AddDays(-3) } |
+        ForEach-Object { Remove-Item $_.FullName -Recurse -Force -ErrorAction SilentlyContinue }
+}
+
+# ------------------------------------------------------------------
+# SPEC-30 F30-5: dry-run self test (two scenarios). No build, no dist touch.
+# ------------------------------------------------------------------
+if ($TestRestore) {
+    $fail = 0
+    # Scenario A: normal restore -> in place, no nesting, target-only file kept,
+    #             backup consumed.
+    $sb  = Join-Path $env:TEMP "rezero_restore_selftest_$(Get-Date -Format 'HHmmss')_a"
+    $bk  = Join-Path $sb "backup"
+    $tg  = Join-Path $sb "dist\data"
+    New-Item -ItemType Directory -Force -Path $bk, $tg | Out-Null
+    Set-Content -Path (Join-Path $bk "conversations.db") -Value "dummy"
+    Set-Content -Path (Join-Path $bk "memory.json") -Value '{"user_name":"selftest"}'
+    Set-Content -Path (Join-Path $tg "keepme.txt") -Value "target-only file"
+    try {
+        Restore-DistData -BackupPath $bk -TargetPath $tg
+        $a = Test-Path (Join-Path $tg "conversations.db")
+        $b = -not (Test-Path (Join-Path $tg "rezero_data_backup_20261010163949"))
+        $c = Test-Path (Join-Path $tg "keepme.txt")
+        $d = -not (Test-Path $bk)
+        if ($a -and $b -and $c -and $d) {
+            Write-Host "[SELFTEST-A] PASS in-place/no-nesting/target-file-kept/backup-consumed" -ForegroundColor Green
+        } else {
+            Write-Host "[SELFTEST-A] FAIL a=$a b=$b c=$c d=$d" -ForegroundColor Red
+            $fail++
+        }
+    } catch {
+        Write-Host "[SELFTEST-A] FAIL (exception): $_" -ForegroundColor Red
+        $fail++
+    }
+    # Scenario B: backup missing memory.json -> must throw AND keep the backup.
+    $sb2 = Join-Path $env:TEMP "rezero_restore_selftest_$(Get-Date -Format 'HHmmss')_b"
+    $bk2 = Join-Path $sb2 "backup"
+    $tg2 = Join-Path $sb2 "dist\data"
+    New-Item -ItemType Directory -Force -Path $bk2, $tg2 | Out-Null
+    Set-Content -Path (Join-Path $bk2 "conversations.db") -Value "dummy"
+    $threw = $false
+    try { Restore-DistData -BackupPath $bk2 -TargetPath $tg2 } catch { $threw = $true }
+    if ($threw -and (Test-Path $bk2)) {
+        Write-Host "[SELFTEST-B] PASS abort-on-selfcheck-failure/backup-kept" -ForegroundColor Green
+    } else {
+        Write-Host "[SELFTEST-B] FAIL threw=$threw backupKept=$(Test-Path $bk2)" -ForegroundColor Red
+        $fail++
+    }
+    Remove-Item $sb  -Recurse -Force -ErrorAction SilentlyContinue
+    Remove-Item $sb2 -Recurse -Force -ErrorAction SilentlyContinue
+    if ($fail -eq 0) { Write-Host "[SELFTEST] ALL PASS" -ForegroundColor Green; exit 0 }
+    else { Write-Host "[SELFTEST] $fail scenario(s) failed" -ForegroundColor Red; exit 1 }
+}
 
 # ── Step 1: Backup dist/.env + dist/data/ before clean ──
 $TempBackup = $null
@@ -60,11 +148,10 @@ Write-Host "[BUILD] Starting PyInstaller..." -ForegroundColor Yellow
 & $VenvPython -m PyInstaller ReZeroTwin.spec --noconfirm
 if ($LASTEXITCODE -ne 0) {
     Write-Host "[ERROR] PyInstaller build failed" -ForegroundColor Red
-    # Restore data even if build fails
+    # Restore data even if build fails (SPEC-30: same implementation as success path)
     if ($TempBackup -and (Test-Path $TempBackup)) {
         Write-Host "[RESTORE] Restoring dist/data/ after build failure..." -ForegroundColor Yellow
-        Copy-Item $TempBackup $DistData -Recurse -Force
-        Remove-Item $TempBackup -Recurse -Force -ErrorAction SilentlyContinue
+        Restore-DistData -BackupPath $TempBackup -TargetPath $DistData
     }
     exit 1
 }
@@ -73,13 +160,8 @@ Write-Host "[BUILD] PyInstaller completed" -ForegroundColor Green
 # ── Step 4: Restore dist/data/ from backup (V11.6.5) ──
 if ($TempBackup -and (Test-Path $TempBackup)) {
     Write-Host "[RESTORE] Restoring dist/data/ from backup..." -ForegroundColor Yellow
-    # If dist/data exists (e.g. PyInstaller created it), overwrite with backup (old data wins)
-    if (Test-Path $DistData) {
-        Remove-Item $DistData -Recurse -Force
-    }
-    Copy-Item $TempBackup $DistData -Recurse -Force
-    Remove-Item $TempBackup -Recurse -Force -ErrorAction SilentlyContinue
-    Write-Host "[RESTORE] dist/data/ restored" -ForegroundColor Green
+    Restore-DistData -BackupPath $TempBackup -TargetPath $DistData
+    Remove-StaleDataBackups
 }
 
 # ── Step 5: Copy .env to dist/ ──
