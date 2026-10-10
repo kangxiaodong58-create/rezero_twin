@@ -9,17 +9,17 @@
   [
    "AvatarLabel",
    "",
-   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 21px;\n                border: 2px solid #56CCF2;\n            }"
+   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 32px;\n                border: 2px solid #56CCF2;\n            }"
   ],
   [
    "AvatarLabel",
    "",
-   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 21px;\n                border: 2px solid #E2E8F0;\n            }"
+   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 32px;\n                border: 2px solid #E2E8F0;\n            }"
   ],
   [
    "AvatarLabel",
    "",
-   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 21px;\n                border: 2px solid #FF7EB3;\n            }"
+   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 32px;\n                border: 2px solid #FF7EB3;\n            }"
   ],
   [
    "CharacterCard",
@@ -120,16 +120,6 @@
    "QLabel",
    "",
    "background: rgba(50,45,94,0.42); border-radius: 14px;"
-  ],
-  [
-   "QLabel",
-   "",
-   "border-radius: 23px; border: 2px solid #56CCF2;"
-  ],
-  [
-   "QLabel",
-   "",
-   "border-radius: 23px; border: 2px solid #FF7EB3;"
   ],
   [
    "QLabel",
@@ -320,6 +310,16 @@
    "QLabel",
    "bubble_text",
    "\n            QLabel {\n                background-color: rgba(99,102,241,0.16);\n                color: #34374d;\n                border: 1px solid rgba(99,102,241,0.30);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
+  ],
+  [
+   "QLabel",
+   "dash_sprite_ram",
+   "\n            QLabel#dash_sprite_ram {\n                background-color: rgba(19,25,42,0.91);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n            }"
+  ],
+  [
+   "QLabel",
+   "dash_sprite_rem",
+   "\n            QLabel#dash_sprite_rem {\n                background-color: rgba(19,25,42,0.91);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n            }"
   ],
   [
    "QLineEdit",

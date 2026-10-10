@@ -276,9 +276,14 @@ def locate_highlight(selector: str = "QLabel") -> str:
     """
     return f"{selector} {{ background-color: {COLORS['locate_highlight']}; }}"
 
-def card_avatar(accent) -> str:
+def dash_sprite_frame(role: str) -> str:
+    """SPEC-20260922-25 A：Dashboard 立绘区（圆角框；底色 = 卡片底色，供底部渐隐衔接）。"""
     return (
-        f"border-radius: 23px; border: 2px solid {accent};"
+        f"\n            QLabel#dash_sprite_{role} {{\n"
+        f"                background-color: {COLORS['bg_surface']};\n"
+        f"                border: 1px solid {COLORS['border_subtle']};\n"
+        f"                border-radius: {RADIUS['medium']}px;\n"
+        f"            }}\n        "
     )
 
 def card_frame(role, border) -> str:
@@ -308,7 +313,7 @@ __all__ = [
     "nav_twins_slot",
     "quick_action_btn",
     "history_search_box",
-    "card_avatar",
+    "dash_sprite_frame",
     "history_locate_btn",
     "nav_btn_dock_active",
     "quote_bar",

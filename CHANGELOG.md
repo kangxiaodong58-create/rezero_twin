@@ -7,6 +7,21 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 ---
 
 
+## [V16.5.9] - 2026-10-10（立绘与头像 —— SPEC-20260922-25）
+
+### 新增 / 修复
+- **右侧双卡立绘化**：Dashboard 卡片改为「立绘区（圆角 + 底部渐隐）→ 名字 · 心情 → 状态行」；**拉姆在上、蕾姆在下**；立绘走 `_resolve_sprite`（`data/sprites` 自定义立绘生效）
+- **B1 缺陷修复（核心项）**：Dashboard 头像自 S1c 搬移后一直回退「蕾/拉」文字圈——根因 `_ASSETS` 指向不存在的 `<ui>/assets`；改为统一走 `ui.assets._asset_path`，并加 5 条回归用例
+- **头像 42 → 64px**（探针实测：真实消息行高 42/56/64 三档恒为 100px，零行高代价）
+- **脸部口径**：新增 `assets/{rem,ram}_face.png`（462² → 256²，保留完整发顶与下巴）；取图顺序 face → avatar.png → avatar.svg
+- **用户头像**：占位剪影替换为新版（深蓝底 + 金色描边 + 剪影）
+
+### 门禁
+- 全量 **368 passed**（+7）· 冒烟 31/31 · 隔离 ✓ · QSS golden 92 条（预期变更重采）
+- 截图基线：7 张 0.00%；`locate_flash.png` 预期变更（313×83→335×100）已留证并单独提交（`docs/evaluation/baselines/spec25_diff/`）
+
+### 施工记录
+- `docs/devlog/立绘与头像_2026-10-10.md`
 ## [V16.5.8] - 2026-09-28（B8 `ui/` 拆包 S1+S2 —— SPEC-20260922-22，零观感）
 
 ### 重构（行为/观感零变化：截图基线 8/8 diff 0.00% + 全量 361 passed + 冒烟 31/31 + 隔离 ✓）

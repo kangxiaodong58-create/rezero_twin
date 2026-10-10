@@ -1,7 +1,8 @@
 """Character Dashboard（V16.0-M_F）：右侧双子状态双卡。
 
 DESIGN 解析 §1.5：右栏不是"联系人"，而是 Character Dashboard——
-头像 / 心情 / 当前行为 / 关系阶段 / 好感 / 忠诚，全部属于 Persistent State。
+立绘 / 名字 · 心情 / 当前行为 / 关系阶段 / 好感 / 忠诚，全部属于 Persistent State。
+（SPEC-20260922-25 A：立绘区取代头像圆；资产入口统一走 ui.assets，修 B1 文字圈缺陷。）
 
 设计纪律：
 - 本模块**只负责展示**：数据由 gui 从 snapshot/world 组装成 dict 注入
@@ -21,9 +22,11 @@ from PySide6.QtGui import QFont, QPainter, QPixmap
 from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
 
 from design_tokens import (
-    COLORS, DIM, ELEVATION, FONT_FAMILY, FONT_SIZE, RADIUS, SURFACE_TINT,
+    COLORS, DIM, ELEVATION, FONT_FAMILY, FONT_SIZE, LAYOUT, RADIUS, SURFACE_TINT,
 )
+from shared import config as _config           # 晚绑定：调用时才解析数据目录
 from ui import theme  # SPEC-20260922-18：QSS 单一真源（B6·A14 收口）
+from ui.assets import _asset_path, sprite_card_pixmap
 
 try:
     from PySide6.QtSvg import QSvgRenderer
@@ -32,14 +35,13 @@ except Exception:  # pragma: no cover
     QSvgRenderer = None
     _SVG_OK = False
 
-_ASSETS = os.path.join(os.path.dirname(os.path.abspath(__file__)), "assets")
 _UI_FONT = FONT_FAMILY["ui"].split(",")[0]
 
 
 def _avatar_pixmap(role: str, size: int) -> QPixmap:
     """高清圆头像（.png 优先 → .svg 显式渲染 → 空图）。"""
     for fname in (f"{role}_avatar.png", f"{role}_avatar.svg"):
-        path = os.path.join(_ASSETS, fname)
+        path = _asset_path(fname)   # SPEC-20260922-25 B1：统一资产入口（原 _ASSETS 指向不存在的 <ui>/assets）
         if not os.path.isfile(path):
             continue
         if fname.endswith(".png"):
@@ -65,7 +67,7 @@ def _avatar_pixmap(role: str, size: int) -> QPixmap:
 
 
 class CharacterCard(QFrame):
-    """单角色状态卡：头像 | 心情 / 正在做 / 关系阶段 / 好感 / 忠诚。"""
+    """单角色状态卡：立绘区 / 名字 · 心情 / 正在做 / 关系阶段 / 好感 / 忠诚。"""
 
     def __init__(self, role: str, name: str, accent: str, parent=None):
         super().__init__(parent)
@@ -77,33 +79,28 @@ class CharacterCard(QFrame):
         lay.setContentsMargins(12, 10, 12, 10)
         lay.setSpacing(6)
 
-        # ── 头部：头像 + 名字 + 心情 ──
-        head = QHBoxLayout()
-        head.setSpacing(10)
-        self._avatar = QLabel()
-        self._avatar.setFixedSize(46, 46)
-        self._avatar.setAlignment(Qt.AlignCenter)
-        pm = _avatar_pixmap(role, 46)
-        if not pm.isNull():
-            self._avatar.setPixmap(pm)
-        else:
-            self._avatar.setText(name[:1])
-        self._avatar.setStyleSheet(
-            theme.card_avatar(accent))
-        head.addWidget(self._avatar)
+        # ── 立绘区（SPEC-20260922-25 A：取代头像圆；用户自定义 data/sprites 同样生效）──
+        self._sprite = QLabel()
+        self._sprite.setObjectName(f"dash_sprite_{role}")
+        self._sprite.setFixedHeight(LAYOUT.get("dash_sprite_h", 200))
+        self._sprite.setAlignment(Qt.AlignCenter)
+        self._sprite.setStyleSheet(theme.dash_sprite_frame(role))
+        self._load_sprite()
+        lay.addWidget(self._sprite)
 
-        info = QVBoxLayout()
-        info.setSpacing(2)
+        # ── 名字 · 心情 ──
+        head = QHBoxLayout()
+        head.setSpacing(8)
         self._name_label = QLabel(name)
         self._name_label.setFont(QFont(_UI_FONT, FONT_SIZE["body"], QFont.Bold))
         self._name_label.setStyleSheet(theme.color_only(accent))
-        info.addWidget(self._name_label)
+        head.addWidget(self._name_label)
+        head.addStretch()
 
         self._mood_label = QLabel("😊 平静")
         self._mood_label.setFont(QFont(_UI_FONT, FONT_SIZE["body"]))
         self._mood_label.setStyleSheet(theme.color_only(COLORS['text_secondary']))
-        info.addWidget(self._mood_label)
-        head.addLayout(info, 1)
+        head.addWidget(self._mood_label)
         lay.addLayout(head)
 
         # ── 明细行 ──
@@ -111,6 +108,17 @@ class CharacterCard(QFrame):
         self._stage_label = self._row("关系阶段", "—")
         self._favor_label = self._row("好感", "0 / 100")
         self._lock_row, self._lock_label = self._row_wrap("忠诚锁定", "—")
+
+    def _load_sprite(self) -> None:
+        """立绘卡片图；取不到时回退圆头像（B1 修好的资产入口），仍失败留空框。"""
+        w = int(LAYOUT.get("dash_w", 320)) - 48       # 320 − dashboard 边距 24 − 卡片边距 24
+        h = int(LAYOUT.get("dash_sprite_h", 200))
+        pm = sprite_card_pixmap(_config.get_data_dir(), self.role, w, h,
+                                RADIUS["medium"], COLORS["bg_surface"])
+        if pm.isNull():
+            pm = _avatar_pixmap(self.role, h)
+        if not pm.isNull():
+            self._sprite.setPixmap(pm)
 
     def _style(self, speaking: bool) -> None:
         border = self._accent if speaking else COLORS["border_subtle"]
@@ -156,12 +164,12 @@ class CharacterCard(QFrame):
 
 
 class CharacterDashboard(QFrame):
-    """右栏双子状态面板：标题 + 蕾姆卡 + 拉姆卡。"""
+    """右栏双子状态面板：标题 + 拉姆卡 + 蕾姆卡（SPEC-20260922-25 A：**拉姆在上**）。"""
 
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setObjectName("character_dashboard")
-        self.setFixedWidth(DIM.get("dash_w", 320))
+        self.setFixedWidth(LAYOUT.get("dash_w", 320))
         self.setStyleSheet(theme.dashboard_frame())
         lay = QVBoxLayout(self)
         lay.setContentsMargins(12, 12, 12, 12)
@@ -172,10 +180,10 @@ class CharacterDashboard(QFrame):
         title.setStyleSheet(theme.color_only(COLORS['text_secondary']))
         lay.addWidget(title)
 
-        self.rem_card = CharacterCard("rem", "蕾 姆", COLORS["rem_accent"])
         self.ram_card = CharacterCard("ram", "拉 姆", COLORS["ram_accent"])
+        self.rem_card = CharacterCard("rem", "蕾 姆", COLORS["rem_accent"])
+        lay.addWidget(self.ram_card)   # SPEC-25 A：拉姆在上
         lay.addWidget(self.rem_card)
-        lay.addWidget(self.ram_card)
         lay.addStretch()
 
     def set_data(self, rem: Dict[str, Any], ram: Dict[str, Any]) -> None:

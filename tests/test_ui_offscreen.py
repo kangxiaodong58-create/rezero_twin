@@ -527,3 +527,29 @@ def test_locate_flash_and_hit_marker_v1656() -> None:
     before = win.chat_layout.count()
     win._locate_message(0)
     assert win.chat_layout.count() == before + 1, "无效 id 应追加一条 transient 提示"
+
+def test_avatar_size_and_face_crop_v1659() -> None:
+    """SPEC-20260922-25 B2/B3：头像 64px（token 单点）+ 脸部紧裁图优先。"""
+    from design_tokens import DIM
+    from ui.widgets_message import AvatarLabel
+
+    assert DIM["avatar_size"] == 64, "token 应为 64（探针实测行高 0 代价）"
+    assert AvatarLabel.SIZE == 64, "AvatarLabel.SIZE 应随 token"
+    a = AvatarLabel("rem")
+    assert (a.width(), a.height()) == (64, 64)
+    assert (a._pixmap_path or "").endswith("rem_face.png"), f"应优先脸部紧裁图：{a._pixmap_path}"
+    b = AvatarLabel("ram")
+    assert (b._pixmap_path or "").endswith("ram_face.png")
+    u = AvatarLabel("user")
+    assert not u.pixmap().isNull(), "用户头像 v2 应能渲染"
+
+
+def test_dashboard_sprite_area_v1659() -> None:
+    """SPEC-20260922-25 A：卡片立绘区高度走 token、名字/心情仍在。"""
+    from design_tokens import LAYOUT
+    from ui.dashboard import CharacterCard
+
+    card = CharacterCard("ram", "拉 姆", "#FF7EB3")
+    assert card._sprite.height() == LAYOUT["dash_sprite_h"] == 200
+    assert card._name_label.text() == "拉 姆"
+    assert card._mood_label.text()

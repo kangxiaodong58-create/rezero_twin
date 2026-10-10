@@ -226,7 +226,7 @@ DIM = {
     "search_box_w":     160,  # 顶栏搜索框宽度
 
     # ── 元素尺寸 ──
-    "avatar_size":       42,  # 头像直径
+    "avatar_size":       64,  # 头像直径（SPEC-20260922-25 B2：42→64，探针实测行高 0 代价）
     "bubble_max_w":     600,  # 气泡/系统标签最大宽度
     "send_btn_w":        72,  # 发送按钮宽度
     "send_btn_h":        55,  # 发送按钮高度（与 input_box_h 同值，语义独立）
@@ -291,6 +291,7 @@ LAYOUT = {
     "header_h":  70,    # 顶部信息区（含世界状态 ambient）
     "nav_w":     182,   # 左导航
     "dash_w":    320,   # 右侧 Character Dashboard
+    "dash_sprite_h": 200,  # SPEC-20260922-25 A：Dashboard 立绘区高度
     "dock_h":    58,    # 底部图标坞
     "center_stretch": 60,  # 中央:右侧 = 60:26（余量给固定栏）
     "right_stretch": 26,

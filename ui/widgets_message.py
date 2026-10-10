@@ -37,8 +37,9 @@ class AvatarLabel(QLabel):
         self.setStyleSheet(theme.avatar_label_base(self.SIZE // 2, ring))
         self._emoji_fallback = {"rem": "🩵", "ram": "💗", "user": "🙂", "system": "❄"}.get(role, "·")
         avatar_files = {
-            "rem": ["rem_avatar.png", "rem_avatar.svg"],
-            "ram": ["ram_avatar.png", "ram_avatar.svg"],
+            # SPEC-20260922-25 B3：脸部紧裁图优先（256²，头肩完整、脸占比更大）
+            "rem": ["rem_face.png", "rem_avatar.png", "rem_avatar.svg"],
+            "ram": ["ram_face.png", "ram_avatar.png", "ram_avatar.svg"],
             "user": ["user_avatar.svg"], "system": ["system_avatar.svg"],
         }
         for fname in avatar_files.get(role, ["user_avatar.svg"]):

@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import os
 import shutil
-from PySide6.QtGui import QFont, QFontMetrics, QIcon, QPainter, QPixmap
+from PySide6.QtGui import (
+    QColor, QFont, QFontMetrics, QIcon, QLinearGradient, QPainter, QPainterPath, QPixmap,
+)
 from PySide6.QtCore import (
     Qt, QTimer, Signal, QObject, QThread, QSize,
     QPropertyAnimation, QSequentialAnimationGroup, QAbstractAnimation, QEasingCurve,
@@ -140,4 +142,36 @@ def _resolve_sprite(data_dir: str, key: str, asset_path: str) -> str:
     user = _user_sprite_path(data_dir, key)
     return user or asset_path
 
+def sprite_card_pixmap(data_dir: str, key: str, width: int, height: int,
+                       radius: int, fade_to: str) -> QPixmap:
+    """SPEC-20260922-25 A：Dashboard 立绘卡片图。
 
+    解析顺序与侧面板一致（用户自定义 data/sprites → 内置 assets，走 `_resolve_sprite`）；
+    缩放填充 + 居中偏上裁切（保头）+ 圆角裁切 + 底部渐隐到卡片底色。失败返回空 QPixmap。
+    """
+    src = QPixmap(_resolve_sprite(data_dir, key, _asset_path(f"{key}_sprite.jpg")))
+    if src.isNull():
+        return QPixmap()
+    scaled = src.scaled(width, height, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
+    x = max(0, (scaled.width() - width) // 2)
+    y = max(0, (scaled.height() - height) // 3)   # 偏上取景：保住头部
+    cropped = scaled.copy(x, y, width, height)
+
+    out = QPixmap(width, height)
+    out.fill(Qt.transparent)
+    painter = QPainter(out)
+    painter.setRenderHint(QPainter.Antialiasing)
+    clip = QPainterPath()
+    clip.addRoundedRect(0.0, 0.0, float(width), float(height), float(radius), float(radius))
+    painter.setClipPath(clip)
+    painter.drawPixmap(0, 0, cropped)
+    fade_h = max(1, int(height * 0.32))
+    grad = QLinearGradient(0.0, float(height - fade_h), 0.0, float(height))
+    top = QColor(fade_to)
+    top.setAlpha(0)
+    grad.setColorAt(0.0, top)
+    grad.setColorAt(1.0, QColor(fade_to))
+    painter.setPen(Qt.NoPen)
+    painter.fillRect(0, height - fade_h, width, fade_h, grad)
+    painter.end()
+    return out

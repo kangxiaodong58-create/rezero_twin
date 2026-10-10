@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><circle cx="64" cy="64" r="61" fill="#252943" stroke="#aeb9e8" stroke-width="4"/><circle cx="64" cy="47" r="21" fill="#d8dff6"/><path d="M26 105c3-24 20-37 38-37s35 13 38 37" fill="#d8dff6"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <defs>
+    <linearGradient id="ubg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#333A5C"/>
+      <stop offset="1" stop-color="#1E2236"/>
+    </linearGradient>
+    <linearGradient id="urim" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#F3D08A"/>
+      <stop offset="1" stop-color="#B98F4A"/>
+    </linearGradient>
+  </defs>
+  <circle cx="64" cy="64" r="60.5" fill="url(#ubg)" stroke="url(#urim)" stroke-width="3"/>
+  <path d="M64 30c9 0 16 7 16 16 0 6-3 11-8 13.5 6 2 11 6 14 12-6 3-14 5-22 5s-16-2-22-5c3-6 8-10 14-12-5-2.5-8-7.5-8-13.5 0-9 7-16 16-16z"
+        fill="#DDE3F6"/>
+  <path d="M64 78c17 0 30 9 34 24-9 6-21 9-34 9s-25-3-34-9c4-15 17-24 34-24z" fill="#C6CFEC"/>
+  <path d="M45 37c4-9 11-14 19-14s15 5 19 14c-6-4-12-6-19-6s-13 2-19 6z" fill="#8E9BC9" opacity="0.7"/>
+</svg>
