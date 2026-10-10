@@ -22,8 +22,8 @@ COLORS = {
 
     # ── 文本层级 ──
     "text_primary":   "#E2E8F0",  # 主文本（对话内容、角色名）
-    "text_secondary": "#94A3B8",  # 次要文本（状态、好感数值、提示语）
-    "text_muted":     "#64748B",  # 系统标签、占位符
+    "text_secondary": "#A9B6CE",  # 次要文本（SPEC-26 D5：对深面 8.59:1）
+    "text_muted":     "#8A9BBB",  # 系统标签、占位符（SPEC-26 D5：3.69:1 → 6.26:1）
 
     # ── 角色主题色 ──
     "rem_accent":    "#56CCF2",   # 蕾姆冰蓝
@@ -64,16 +64,16 @@ COLORS = {
     "title_pink":       "#ffd1ea",                # 顶栏主标题
     "twin_mode_fg":     "#f8e7f4",                # 「双子模式」胶囊文字
     "nav_fg":           "#eef1ff",                # 左导航按钮文字
-    "dock_fg":          "#f5eaf4",                # 底部图标坞按钮文字
+    "dock_fg":          "#C9BCCF",                # SPEC-26 D3：弱化前景（≈7:1 仍达标）
     "input_fg_dark":    "#3c3850",                # 输入框文字（浅底上的深色）
     "shell_header":     "rgba(8,12,35,0.82)",     # 顶栏壳底
     "shell_footer":     "rgba(8,12,35,0.76)",     # 底部状态栏壳底
     "shell_nav":        "rgba(8,12,34,0.76)",     # 左导航壳底
-    "shell_dock":       "rgba(15,20,55,0.76)",    # 底部图标坞壳底
+    "shell_dock":       "rgba(15,20,55,0.52)",    # SPEC-26 D3：更透、存在感更低
     "chip_bg":          "rgba(21,28,67,0.84)",    # 顶栏「双子模式」胶囊底
     "chip_bg_soft":     "rgba(21,28,67,0.66)",    # 左导航天气胶囊底
     "portrait_slot":    "rgba(50,45,94,0.42)",    # 左导航立绘占位底
-    "dock_border":      "rgba(255,255,255,0.16)", # 底部图标坞描边
+    "dock_border":      "rgba(255,255,255,0.09)", # SPEC-26 D3
     "chip_border":      "rgba(211,193,238,0.42)", # 顶栏胶囊描边（淡紫）
     "hairline_blue":    "rgba(179,211,239,0.14)", # 天气胶囊描边
     "chat_border_pink": "rgba(240,163,207,0.42)", # 输入区容器描边（粉）
@@ -200,10 +200,10 @@ SURFACE_TINT = {
     "active": "rgba(255,255,255,0.04)",  # 展开态外框底色（中叠加）
     "input":  "rgba(255,255,255,0.06)",  # 搜索框底色 / 按钮强 hover
     # ── V16.5.2/SPEC-18（B6·A14）：QSS 出库新增（值等价迁移）──
-    "input_light":         "rgba(255,255,255,0.74)",  # 输入框浅底
-    "chat_surface_strong": "rgba(255,249,255,0.92)",  # 输入区容器浅底（强）
-    "chat_surface":        "rgba(255,250,255,0.86)",  # 聊天滚动区浅底
-    "chat_border":         "rgba(255,255,255,0.78)",  # 聊天区描边
+    "input_light":         "rgba(18,27,45,0.88)",      # SPEC-26 D1：深色输入面（前景改 text_primary）
+    "chat_surface_strong": "rgba(16,22,38,0.82)",      # SPEC-26 D1：输入区深色玻璃
+    "chat_surface":        "rgba(19,25,42,0.66)",      # SPEC-26 D1：聊天区深色玻璃（原近白纸面→与 chrome 同族）
+    "chat_border":         "rgba(179,211,239,0.20)",   # SPEC-26 D1
     "hover_nav":           "rgba(255,255,255,0.12)",  # 导航按钮 hover 底
     "hover_dock":          "rgba(255,255,255,0.13)",  # 图标坞按钮 hover 底
 }
@@ -290,9 +290,9 @@ SURFACE = {
 LAYOUT = {
     "header_h":  70,    # 顶部信息区（含世界状态 ambient）
     "nav_w":     182,   # 左导航
-    "dash_w":    320,   # 右侧 Character Dashboard
+    "dash_w":    288,   # SPEC-26 D2：320→288（收窄，兼顾窄屏可见性）
     "dash_sprite_h": 200,  # SPEC-20260922-25 A：Dashboard 立绘区高度
-    "dock_h":    58,    # 底部图标坞
+    "dock_h":    50,    # SPEC-26 D3：58→50
     "center_stretch": 60,  # 中央:右侧 = 60:26（余量给固定栏）
     "right_stretch": 26,
 }

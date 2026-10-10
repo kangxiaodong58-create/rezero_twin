@@ -73,7 +73,7 @@ def _make_window() -> gui.TwinChatApp:
         item = win.chat_layout.takeAt(0)
         if item.widget() is not None:
             item.widget().deleteLater()
-    win.chat_layout.addStretch()
+    win.chat_layout.insertStretch(0)   # SPEC-26 D6：与实现一致（stretch 置首）
     return win
 
 

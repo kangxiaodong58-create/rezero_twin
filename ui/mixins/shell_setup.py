@@ -451,7 +451,7 @@ class ShellSetupMixin:
         self.chat_layout.setAlignment(Qt.AlignTop)
         self.chat_layout.setSpacing(SPACING['xs'])  # V12.1：回合间距 — 基线降到 xs，关系由本条 top margin 表达
         self.chat_layout.setContentsMargins(0, SPACING['sm'], 0, SPACING['sm'])  # V10.14：上下留白
-        self.chat_layout.addStretch()
+        self.chat_layout.insertStretch(0)   # SPEC-26 D6：stretch 置首 ⇒ 少消息时贴底
         self.scroll.setWidget(self.chat_container)
         chat_section.addWidget(self.scroll, 1)
 

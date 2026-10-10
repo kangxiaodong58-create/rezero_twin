@@ -40,7 +40,7 @@ def test_card_set_data_renders(qtapp):
     assert "🥰" in card._mood_label.text()
     assert card._doing_label.text() == "在整理房间"
     assert card._stage_label.text() == "深爱"
-    assert card._favor_label.text() == "96 / 100"
+    assert card._favor_bar.value() == 96 and card._favor_label.text() == "96"   # SPEC-26 D4：细条 + 小字
     assert "已锁定" in card._lock_label.text()
     assert not card._lock_row.isHidden()
 
@@ -49,7 +49,7 @@ def test_card_locked_none_hides_row(qtapp):
     card = CharacterCard("ram", "拉 姆", "#FF7EB3")
     card.set_data(mood="😒", doing="观察主人", stage="可疑", favor=8, locked=None)
     assert card._lock_row.isHidden(), "无忠诚维度的角色应隐藏该行"
-    assert card._favor_label.text() == "8 / 100"
+    assert card._favor_bar.value() == 8 and card._favor_label.text() == "8"   # SPEC-26 D4
 
 
 def test_dashboard_speaking_highlight(qtapp):
@@ -98,7 +98,7 @@ def test_gui_dashboard_integration(qtapp, tmp_path, monkeypatch):
         assert win.world.weather in win._nav_weather.text()
         assert win._nav_sysstatus.text()
         # 数据注入过（_update_panels 链）：好感行含数字
-        assert "/" in win.dashboard.rem_card._favor_label.text()
+        assert win.dashboard.rem_card._favor_label.text().isdigit()   # SPEC-26 D4：小字数值
         # 世界内反馈：streaming 标签文案不再出现系统术语
         import design_tokens
         assert "生成中" not in gui.WORLD_FEEDBACK.values()

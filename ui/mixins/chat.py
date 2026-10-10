@@ -28,7 +28,7 @@ class ChatMixin:
         全部 try/except，异常兜底 sm。
         """
         try:
-            i = self.chat_layout.count() - 2  # stretch 前最后一条
+            i = self.chat_layout.count() - 1  # SPEC-26 D6：stretch 已置首 ⇒ 末尾即最后一条
             steps = 0
             while i >= 0 and steps < 8:
                 item = self.chat_layout.itemAt(i)
@@ -97,7 +97,7 @@ class ChatMixin:
         # V12.1：回合间距 — 插入前计算（此时 layout 最后一条才是真正的上一条）
         self._apply_turn_rhythm(msg, role)
 
-        insert_index = self.chat_layout.count() - 1  # 在 stretch 之前插入
+        insert_index = self.chat_layout.count()   # SPEC-26 D6：stretch 在首部 ⇒ 追加到末尾
         self.chat_layout.insertWidget(insert_index, msg)
 
         # V12.0：正式角色泡轻入场（system 标签无入场；历史回放由调用方传 animate=False）
@@ -105,9 +105,9 @@ class ChatMixin:
             self._play_entrance_animation(msg, delay_ms=motion_delay_ms)
 
         # 限制可见 widget 数量，防止内存泄漏
-        visible = self.chat_layout.count() - 1  # 减去末尾 stretch
+        visible = self.chat_layout.count() - 1  # 减去首部 stretch（SPEC-26 D6）
         while visible > self.MAX_VISIBLE_WIDGETS:
-            item = self.chat_layout.itemAt(0)
+            item = self.chat_layout.itemAt(1)   # SPEC-26 D6：跳过首部 stretch
             if item and item.widget():
                 w = item.widget()
                 self.chat_layout.removeWidget(w)
@@ -134,7 +134,7 @@ class ChatMixin:
         msg = ChatMessageWidget(sender, "", role=role, variant="streaming")
         msg.setObjectName("__streaming_temp__")  # V12.1：临时泡标记（回合间距跳过用）
         self._apply_turn_rhythm(msg, role)  # V12.1：插入前计算（上一条 = 布局当前最后一条）
-        insert_index = self.chat_layout.count() - 1
+        insert_index = self.chat_layout.count()   # SPEC-26 D6
         self.chat_layout.insertWidget(insert_index, msg)
         QTimer.singleShot(30, self._scroll_to_bottom)
         return msg

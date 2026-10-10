@@ -19,7 +19,7 @@ from typing import Any, Dict, Optional
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QFont, QPainter, QPixmap
-from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QVBoxLayout
+from PySide6.QtWidgets import QFrame, QHBoxLayout, QLabel, QProgressBar, QVBoxLayout
 
 from design_tokens import (
     COLORS, DIM, ELEVATION, FONT_FAMILY, FONT_SIZE, LAYOUT, RADIUS, SURFACE_TINT,
@@ -106,7 +106,7 @@ class CharacterCard(QFrame):
         # ── 明细行 ──
         self._doing_label = self._row("正在做", "—")
         self._stage_label = self._row("关系阶段", "—")
-        self._favor_label = self._row("好感", "0 / 100")
+        self._favor_row, self._favor_bar, self._favor_label = self._favor_row_widget()  # SPEC-26 D4
         self._lock_row, self._lock_label = self._row_wrap("忠诚锁定", "—")
 
     def _load_sprite(self) -> None:
@@ -119,6 +119,29 @@ class CharacterCard(QFrame):
             pm = _avatar_pixmap(self.role, h)
         if not pm.isNull():
             self._sprite.setPixmap(pm)
+
+    def _favor_row_widget(self):
+        """SPEC-26 D4：好感弱化——细进度条 + 小字数值（隐藏小字，不做 KPI 强调）。"""
+        row = QFrame()
+        rl = QHBoxLayout(row)
+        rl.setContentsMargins(0, 0, 0, 0)
+        rl.setSpacing(6)
+        key = QLabel("好感")
+        key.setFont(QFont(_UI_FONT, FONT_SIZE["small"]))
+        key.setStyleSheet(theme.color_only(COLORS['text_muted']))
+        bar = QProgressBar()
+        bar.setRange(0, 100)
+        bar.setTextVisible(False)
+        bar.setFixedHeight(6)
+        bar.setStyleSheet(theme.dash_favor_bar(self._accent))
+        val = QLabel("0")
+        val.setFont(QFont(_UI_FONT, FONT_SIZE["small"]))
+        val.setStyleSheet(theme.color_only(COLORS['text_muted']))
+        rl.addWidget(key)
+        rl.addWidget(bar, 1)
+        rl.addWidget(val)
+        self.layout().addWidget(row)
+        return row, bar, val
 
     def _style(self, speaking: bool) -> None:
         border = self._accent if speaking else COLORS["border_subtle"]
@@ -151,7 +174,8 @@ class CharacterCard(QFrame):
         self._mood_label.setText(mood)
         self._doing_label.setText(doing or "—")
         self._stage_label.setText(stage or "—")
-        self._favor_label.setText(f"{int(favor)} / 100")
+        self._favor_bar.setValue(max(0, min(100, int(favor))))   # SPEC-26 D4
+        self._favor_label.setText(str(int(favor)))
         if locked is None:
             self._lock_row.hide()
         else:

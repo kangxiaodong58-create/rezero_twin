@@ -187,7 +187,7 @@ def nav_twins_slot() -> str:
 
 def chat_scroll_area() -> str:
     return (
-        f"QScrollArea {{ background: {SURFACE_TINT['chat_surface']}; border: 2px solid {SURFACE_TINT['chat_border']}; border-radius: 22px; }}"
+        f"QScrollArea {{ background: {SURFACE_TINT['chat_surface']}; border: 1px solid {SURFACE_TINT['chat_border']}; border-radius: 22px; }}"
     )
 
 def input_frame() -> str:
@@ -217,7 +217,7 @@ def quick_action_btn() -> str:
 
 def input_box() -> str:
     return (
-        f"QTextEdit {{ background: {SURFACE_TINT['input_light']}; color: {COLORS['input_fg_dark']}; border: none; border-radius: 12px; padding: 7px 10px; }} QTextEdit:focus {{ border: 1px solid {COLORS['input_border_pink']}; }}"
+        f"QTextEdit {{ background: {SURFACE_TINT['input_light']}; color: {COLORS['text_primary']}; border: none; border-radius: 12px; padding: 7px 10px; }} QTextEdit:focus {{ border: 1px solid {COLORS['input_border_pink']}; }}"
     )
 
 def send_btn_base() -> str:
@@ -276,6 +276,21 @@ def locate_highlight(selector: str = "QLabel") -> str:
     """
     return f"{selector} {{ background-color: {COLORS['locate_highlight']}; }}"
 
+def dash_favor_bar(accent: str) -> str:
+    """SPEC-26 D4：好感细进度条（弱化呈现，不再当 KPI 显示）。"""
+    return (
+        f"\n            QProgressBar {{\n"
+        f"                background-color: {SURFACE_TINT['input']};\n"
+        f"                border: none;\n"
+        f"                border-radius: 3px;\n"
+        f"            }}\n"
+        f"            QProgressBar::chunk {{\n"
+        f"                background-color: {accent};\n"
+        f"                border-radius: 3px;\n"
+        f"            }}\n        "
+    )
+
+
 def dash_sprite_frame(role: str) -> str:
     """SPEC-20260922-25 A：Dashboard 立绘区（圆角框；底色 = 卡片底色，供底部渐隐衔接）。"""
     return (
@@ -314,6 +329,7 @@ __all__ = [
     "quick_action_btn",
     "history_search_box",
     "dash_sprite_frame",
+    "dash_favor_bar",
     "history_locate_btn",
     "nav_btn_dock_active",
     "quote_bar",

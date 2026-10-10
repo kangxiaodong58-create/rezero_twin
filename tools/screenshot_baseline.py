@@ -91,7 +91,7 @@ def _demo_locate_flash():
     content = "客人大人，欢迎回来。蕾姆刚煮好了红茶，请趁热喝。"
     host = QWidget()
     host.setObjectName("chat_canvas")
-    host.setStyleSheet("#chat_canvas { background-color: #DDDCE8; }")  # 真机取样值
+    host.setStyleSheet("#chat_canvas { background-color: #15182A; }")  # SPEC-26 D1：深色玻璃面合成色（原 #DDDCE8）
     outer = QVBoxLayout(host)
     outer.setContentsMargins(0, 0, 0, 0)
 
