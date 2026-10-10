@@ -349,3 +349,62 @@ def _main(argv: list) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(_main(sys.argv[1:]))
+
+# ───────── SPEC-20260922-31：气泡可读性与样式统一（F31-2 / F31-3） ─────────
+
+def _wcag_lum(hex_color: str) -> float:
+    h = hex_color.lstrip("#")
+    ch = [int(h[i:i + 2], 16) / 255 for i in (0, 2, 4)]
+    f = lambda x: x / 12.92 if x <= 0.04045 else ((x + 0.055) / 1.055) ** 2.4  # noqa: E731
+    return 0.2126 * f(ch[0]) + 0.7152 * f(ch[1]) + 0.0722 * f(ch[2])
+
+
+def _blend_rgba(rgba: str, base_hex: str) -> str:
+    """把 rgba() 叠到不透明底 hex 上，返回合成 hex。"""
+    import re as _re
+    m = _re.match(r"rgba\((\d+),(\d+),(\d+),([\d.]+)\)", rgba)
+    if not m:
+        return rgba
+    r, g, b, a = (int(m.group(1)), int(m.group(2)), int(m.group(3)), float(m.group(4)))
+    base = [int(base_hex[i:i + 2], 16) for i in (1, 3, 5)]
+    return "#%02x%02x%02x" % tuple(round(v * a + base[i] * (1 - a)) for i, v in enumerate((r, g, b)))
+
+
+def _contrast(a: str, b: str) -> float:
+    la, lb = _wcag_lum(a), _wcag_lum(b)
+    hi, lo = max(la, lb), min(la, lb)
+    return (hi + 0.05) / (lo + 0.05)
+
+
+def test_bubble_text_contrast_wcag_aa():
+    """SPEC-31 F31-3：气泡正文对比度**自动断言**（≥4.5:1）。
+
+    背景 = SPEC-26 D1 深玻璃合成面（≈#15182a）+ 角色底色叠加。
+    本断言存在的理由：QSS golden 只比字符串，**抓不到"合成后的对比度"**——
+    原 `#34374d` 在深玻璃上仅 1.26:1 就是这样漏掉的（SPEC-26 未跟进项）。
+    """
+    from design_tokens import COLORS, ROLE_BUBBLE_STYLES
+
+    base = "#15182a"  # 合成聊天面（SPEC-26 D1）
+    for role in ("rem", "ram", "user"):
+        st = ROLE_BUBBLE_STYLES[role]
+        fg = st["fg"]
+        assert fg == COLORS["text_primary"], f"{role} 气泡正文应为 text_primary，实际 {fg}"
+        ratio = _contrast(fg, _blend_rgba(st["bg"], base))
+        assert ratio >= 4.5, f"{role} 气泡正文对比度 {ratio:.2f}:1 < 4.5:1（WCAG AA）"
+
+
+def test_bubble_border_form_unified():
+    """SPEC-31 F31-2：三角色气泡**边框句式一致**（同为全 1px 描边，无左彩条突出）。
+
+    不断言"无 border-left"（过绝对）：句式一致即可——未来若要回左彩条，需显式改本用例。
+    """
+    from design_tokens import ROLE_BUBBLE_STYLES
+
+    for role in ("rem", "ram", "user"):
+        st = ROLE_BUBBLE_STYLES[role]
+        for key in ("border", "hl_border", "stream_border"):
+            if key in st:
+                assert st[key].startswith("border: 1px solid"), (
+                    f"{role}.{key} 应为统一句式 'border: 1px solid …'，实际 {st[key]!r}"
+                )

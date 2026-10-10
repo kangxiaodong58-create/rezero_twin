@@ -259,17 +259,17 @@
   [
    "QLabel",
    "bubble_text",
-   "\n            QLabel {\n                background-color: rgba(127,179,213,0.10);\n                color: #34374d;\n                border-left: 3px solid rgba(127,179,213,0.45);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
+   "\n            QLabel {\n                background-color: rgba(127,179,213,0.10);\n                color: #E2E8F0;\n                border: 1px solid rgba(127,179,213,0.30);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
   ],
   [
    "QLabel",
    "bubble_text",
-   "\n            QLabel {\n                background-color: rgba(232,160,191,0.10);\n                color: #34374d;\n                border-left: 3px solid rgba(232,160,191,0.45);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
+   "\n            QLabel {\n                background-color: rgba(232,160,191,0.10);\n                color: #E2E8F0;\n                border: 1px solid rgba(232,160,191,0.30);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
   ],
   [
    "QLabel",
    "bubble_text",
-   "\n            QLabel {\n                background-color: rgba(99,102,241,0.16);\n                color: #34374d;\n                border: 1px solid rgba(99,102,241,0.30);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
+   "\n            QLabel {\n                background-color: rgba(99,102,241,0.16);\n                color: #E2E8F0;\n                border: 1px solid rgba(99,102,241,0.30);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
   ],
   [
    "QLabel",

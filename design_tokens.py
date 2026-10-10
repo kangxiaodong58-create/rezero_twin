@@ -141,28 +141,28 @@ ROLE_COLORS = {
 ROLE_BUBBLE_STYLES = {
     "rem": {
         "bg": COLORS['rem_bubble'],
-        "fg": "#34374d",  # 浅色聊天舞台上的正文
-        "border": f"border-left: 3px solid {COLORS['rem_left']};",
-        "hl_border": "border-left: 5px solid rgba(127,179,213,0.70);",
+        "fg": COLORS['text_primary'],  # SPEC-31：深玻璃面正文（原 #34374d＝浅色舞台遗留，1.26:1 不可读）
+        "border": "border: 1px solid rgba(127,179,213,0.30);",  # SPEC-31：与用户气泡同句式（去左彩条，保角色色相）
+        "hl_border": "border: 1px solid rgba(127,179,213,0.45);",
         "hl_bg": "rgba(127,179,213,0.15)",
         # V11.10.1：streaming 弱变体 — 底色降至 0.04，边线细 2px+弱 0.15，文字暗一档
         "stream_bg": "rgba(127,179,213,0.04)",
-        "stream_border": "border-left: 2px solid rgba(127,179,213,0.15);",
+        "stream_border": "border: 1px solid rgba(179,211,239,0.16);",
         "stream_fg": COLORS['text_secondary'],
     },
     "ram": {
         "bg": COLORS['ram_bubble'],
-        "fg": "#34374d",
-        "border": f"border-left: 3px solid {COLORS['ram_left']};",
-        "hl_border": "border-left: 5px solid rgba(232,160,191,0.70);",
+        "fg": COLORS['text_primary'],  # SPEC-31：同上
+        "border": "border: 1px solid rgba(232,160,191,0.30);",  # SPEC-31：同句式（保粉色相）
+        "hl_border": "border: 1px solid rgba(232,160,191,0.45);",
         "hl_bg": "rgba(232,160,191,0.15)",
         "stream_bg": "rgba(232,160,191,0.04)",
-        "stream_border": "border-left: 2px solid rgba(232,160,191,0.15);",
+        "stream_border": "border: 1px solid rgba(179,211,239,0.16);",
         "stream_fg": COLORS['text_secondary'],
     },
     "user": {
         "bg": COLORS['user_bubble'],
-        "fg": "#34374d",
+        "fg": COLORS['text_primary'],  # SPEC-31：同上
         "border": f"border: 1px solid {COLORS['user_border']};",
     },
 }
