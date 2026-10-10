@@ -142,6 +142,23 @@ def _resolve_sprite(data_dir: str, key: str, asset_path: str) -> str:
     user = _user_sprite_path(data_dir, key)
     return user or asset_path
 
+# SPEC-27 R7：无透明通道素材（JPG 实景）的取景微调（正数=下移）。实测校准。
+_SPRITE_TOP_BIAS = {"rem": 0, "ram": 0}
+
+
+def _first_opaque_row(pixmap: QPixmap, alpha_min: int = 10):
+    """自上而下扫描首个含非透明像素的行（x 每 4 列抽样）；全透明/全不透明返回 None。"""
+    img = pixmap.toImage()
+    h = img.height()
+    w = img.width()
+    limit = max(1, h // 3)
+    for y in range(limit):
+        for x in range(0, w, 4):
+            if img.pixelColor(x, y).alpha() >= alpha_min:
+                return y
+    return None
+
+
 def sprite_card_pixmap(data_dir: str, key: str, width: int, height: int,
                        radius: int, fade_to: str) -> QPixmap:
     """SPEC-20260922-25 A：Dashboard 立绘卡片图。
@@ -154,7 +171,15 @@ def sprite_card_pixmap(data_dir: str, key: str, width: int, height: int,
         return QPixmap()
     scaled = src.scaled(width, height, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation)
     x = max(0, (scaled.width() - width) // 2)
-    y = max(0, (scaled.height() - height) // 3)   # 偏上取景：保住头部
+    # SPEC-27 R7：头部锚定取景——先找首行非透明像素（alpha ≥ 10）作为"头顶"，
+    # 取"头顶上方留 8px"为取框上缘；扫不到（全透明/全不透明，如 JPG 实景图）⇒
+    # 回退「偏上 1/3」策略，并叠加 per-key 微调常量（_SPRITE_TOP_BIAS）。
+    top = _first_opaque_row(scaled)
+    if top is None:
+        y = max(0, int((scaled.height() - height) * 0.33))
+    else:
+        y = max(0, min(top - 8, scaled.height() - height))
+    y = max(0, min(y + _SPRITE_TOP_BIAS.get(key, 0), scaled.height() - height))
     cropped = scaled.copy(x, y, width, height)
 
     out = QPixmap(width, height)

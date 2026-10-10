@@ -9,7 +9,7 @@
   [
    "AvatarLabel",
    "",
-   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 32px;\n                border: 2px solid #56CCF2;\n            }"
+   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 32px;\n                border: 2px solid #7FB3D5;\n            }"
   ],
   [
    "AvatarLabel",
@@ -19,22 +19,22 @@
   [
    "AvatarLabel",
    "",
-   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 32px;\n                border: 2px solid #FF7EB3;\n            }"
+   "\n            QLabel {\n                background-color: rgba(34,39,61,0.84);\n                border-radius: 32px;\n                border: 2px solid #E8A0BF;\n            }"
   ],
   [
    "CharacterCard",
    "dash_card_ram",
-   "\n            QFrame#dash_card_ram {\n                background-color: rgba(19,25,42,0.91);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-top: 1px solid rgba(255,255,255,0.07);\n                border-radius: 12px;\n            }"
+   "\n            QFrame#dash_card_ram {\n                background-color: rgba(19,25,42,0.91);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n            }\n            QFrame#dash_card_ram:hover {\n                background-color: rgba(255,255,255,0.04);\n            }"
   ],
   [
    "CharacterCard",
    "dash_card_rem",
-   "\n            QFrame#dash_card_rem {\n                background-color: rgba(19,25,42,0.91);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-top: 1px solid rgba(255,255,255,0.07);\n                border-radius: 12px;\n            }"
+   "\n            QFrame#dash_card_rem {\n                background-color: rgba(19,25,42,0.91);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n            }\n            QFrame#dash_card_rem:hover {\n                background-color: rgba(255,255,255,0.04);\n            }"
   ],
   [
    "CharacterDashboard",
    "character_dashboard",
-   "\n            QFrame#character_dashboard {\n                background-color: rgba(255,255,255,0.03);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 16px;\n            }"
+   "\n            QFrame#character_dashboard {\n                background-color: rgba(255,255,255,0.03);\n                border: none;\n                border-radius: 16px;\n            }"
   ],
   [
    "MemoryBookOverlay",
@@ -124,42 +124,17 @@
   [
    "QLabel",
    "",
-   "color: #56CCF2;"
+   "color: #7FB3D5;"
   ],
   [
    "QLabel",
    "",
-   "color: #56CCF2;"
+   "color: #7FB3D5;"
   ],
   [
    "QLabel",
    "",
-   "color: #8A9BBB;"
-  ],
-  [
-   "QLabel",
-   "",
-   "color: #8A9BBB;"
-  ],
-  [
-   "QLabel",
-   "",
-   "color: #8A9BBB;"
-  ],
-  [
-   "QLabel",
-   "",
-   "color: #8A9BBB;"
-  ],
-  [
-   "QLabel",
-   "",
-   "color: #8A9BBB;"
-  ],
-  [
-   "QLabel",
-   "",
-   "color: #8A9BBB;"
+   "color: #7FB3D5; background: transparent;"
   ],
   [
    "QLabel",
@@ -224,27 +199,7 @@
   [
    "QLabel",
    "",
-   "color: #A9B6CE;"
-  ],
-  [
-   "QLabel",
-   "",
-   "color: #A9B6CE;"
-  ],
-  [
-   "QLabel",
-   "",
-   "color: #A9B6CE;"
-  ],
-  [
-   "QLabel",
-   "",
-   "color: #A9B6CE;"
-  ],
-  [
-   "QLabel",
-   "",
-   "color: #A9B6CE;"
+   "color: #A9B6CE; background: transparent;"
   ],
   [
    "QLabel",
@@ -279,12 +234,17 @@
   [
    "QLabel",
    "",
-   "color: #FF7EB3;"
+   "color: #E8A0BF;"
   ],
   [
    "QLabel",
    "",
-   "color: #FF7EB3;"
+   "color: #E8A0BF;"
+  ],
+  [
+   "QLabel",
+   "",
+   "color: #E8A0BF; background: transparent;"
   ],
   [
    "QLabel",
@@ -299,12 +259,12 @@
   [
    "QLabel",
    "bubble_text",
-   "\n            QLabel {\n                background-color: rgba(255,126,179,0.10);\n                color: #34374d;\n                border-left: 3px solid rgba(255,126,179,0.45);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
+   "\n            QLabel {\n                background-color: rgba(127,179,213,0.10);\n                color: #34374d;\n                border-left: 3px solid rgba(127,179,213,0.45);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
   ],
   [
    "QLabel",
    "bubble_text",
-   "\n            QLabel {\n                background-color: rgba(86,204,242,0.10);\n                color: #34374d;\n                border-left: 3px solid rgba(86,204,242,0.45);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
+   "\n            QLabel {\n                background-color: rgba(232,160,191,0.10);\n                color: #34374d;\n                border-left: 3px solid rgba(232,160,191,0.45);\n                border-radius: 14px;\n                padding: 10px 14px;\n                line-height: 150%;  /* V14.5：中文长文阅读行距优化 */\n            }"
   ],
   [
    "QLabel",
@@ -314,12 +274,12 @@
   [
    "QLabel",
    "dash_sprite_ram",
-   "\n            QLabel#dash_sprite_ram {\n                background-color: rgba(19,25,42,0.91);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n            }"
+   "\n            QLabel#dash_sprite_ram {\n                background-color: rgba(19,25,42,0.91);\n                border: none;\n                border-radius: 12px;\n            }"
   ],
   [
    "QLabel",
    "dash_sprite_rem",
-   "\n            QLabel#dash_sprite_rem {\n                background-color: rgba(19,25,42,0.91);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n            }"
+   "\n            QLabel#dash_sprite_rem {\n                background-color: rgba(19,25,42,0.91);\n                border: none;\n                border-radius: 12px;\n            }"
   ],
   [
    "QLineEdit",
@@ -334,12 +294,12 @@
   [
    "QProgressBar",
    "",
-   "\n            QProgressBar {\n                background-color: rgba(255,255,255,0.06);\n                border: none;\n                border-radius: 3px;\n            }\n            QProgressBar::chunk {\n                background-color: #56CCF2;\n                border-radius: 3px;\n            }"
+   "\n            QProgressBar {\n                background-color: rgba(255,255,255,0.06);\n                border: none;\n                border-radius: 3px;\n            }\n            QProgressBar::chunk {\n                background-color: #7FB3D5;\n                border-radius: 3px;\n            }"
   ],
   [
    "QProgressBar",
    "",
-   "\n            QProgressBar {\n                background-color: rgba(255,255,255,0.06);\n                border: none;\n                border-radius: 3px;\n            }\n            QProgressBar::chunk {\n                background-color: #FF7EB3;\n                border-radius: 3px;\n            }"
+   "\n            QProgressBar {\n                background-color: rgba(255,255,255,0.06);\n                border: none;\n                border-radius: 3px;\n            }\n            QProgressBar::chunk {\n                background-color: #E8A0BF;\n                border-radius: 3px;\n            }"
   ],
   [
    "QPushButton",
@@ -414,6 +374,16 @@
   [
    "QPushButton",
    "",
+   "QPushButton { background: transparent; color: #8A9BBB; border: none; padding: 2px 6px; }QPushButton:hover { color: #E2E8F0; background: rgba(255,255,255,0.03); border-radius: 6px; }"
+  ],
+  [
+   "QPushButton",
+   "",
+   "QPushButton { background: transparent; color: #8A9BBB; border: none; padding: 2px 6px; }QPushButton:hover { color: #E2E8F0; background: rgba(255,255,255,0.03); border-radius: 6px; }"
+  ],
+  [
+   "QPushButton",
+   "",
    "QPushButton { background: transparent; color: #C9BCCF; border: none; padding: 2px 9px; } QPushButton:hover { background: rgba(255,255,255,0.13); border-radius: 12px; }"
   ],
   [
@@ -470,6 +440,11 @@
    "QWidget",
    "",
    "background: transparent;"
+  ],
+  [
+   "QWidget",
+   "dash_folded_strip",
+   "\n            QWidget#dash_folded_strip {\n                background-color: rgba(255,255,255,0.03);\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n            }"
   ],
   [
    "TwinChatApp",

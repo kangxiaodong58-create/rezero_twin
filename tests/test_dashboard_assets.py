@@ -53,10 +53,10 @@ def test_card_shows_sprite_not_text(qtapp):
 
 
 def test_dashboard_order_ram_first(qtapp):
-    """A 项：拉姆在上、蕾姆在下（用户原话）。"""
+    """A 项：拉姆在上、蕾姆在下（用户原话）。SPEC-27：卡片移入 _expanded 容器。"""
     from ui.dashboard import CharacterDashboard
     dash = CharacterDashboard()
-    lay = dash.layout()
+    lay = dash._expanded.layout()
     cards = [lay.itemAt(i).widget() for i in range(lay.count())]
     cards = [w for w in cards if hasattr(w, "role")]
     assert [w.role for w in cards] == ["ram", "rem"]
@@ -78,3 +78,57 @@ def test_sprite_card_pixmap_geometry_and_fade(qtapp):
     r, g, b = int(fade_to[1:3], 16), int(fade_to[3:5], 16), int(fade_to[5:7], 16)
     assert abs(bottom.red() - r) <= 2 and abs(bottom.green() - g) <= 2 and abs(bottom.blue() - b) <= 2, \
         f"底行应已渐隐到卡片底色：{bottom.name()} vs {fade_to}"
+
+# ───────────────────── SPEC-20260922-27（侧栏重构）─────────────────────
+
+def test_fold_toggle_v27(qtapp):
+    """SPEC-27 R1：折叠/展开的宽度与可见性；手动操作后 auto 让位。"""
+    from design_tokens import LAYOUT
+    from ui.dashboard import CharacterDashboard
+
+    dash = CharacterDashboard()
+    assert not dash.is_collapsed()
+    assert dash.width() == LAYOUT["dash_w"]
+
+    dash.set_collapsed(True)
+    assert dash.is_collapsed() and dash.width() == LAYOUT["dash_folded_w"]
+    assert not dash._folded_strip.isHidden(), "折叠条应可见"
+    assert dash._expanded.isHidden(), "展开体应隐藏"
+
+    dash.set_collapsed(False)
+    assert not dash.is_collapsed() and dash.width() == LAYOUT["dash_w"]
+
+    # 手动操作一次 → auto 让位
+    dash._on_fold_clicked()
+    assert dash.is_collapsed() and dash._user_choice
+    dash.set_collapsed(False, auto=True)
+    assert dash.is_collapsed(), "手动选择后 auto 不应覆盖"
+
+
+def test_locked_icon_v27(qtapp):
+    """SPEC-27 R3：锁定=名字后缀 🔒；未锁定不显示（不再占行）。"""
+    from ui.dashboard import CharacterCard
+
+    card = CharacterCard("rem", "蕾 姆", "#7FB3D5")
+    assert card._lock_icon.isHidden(), "默认不显示"
+    card.set_data(mood="🥰", doing="陪伴", stage="深爱", favor=99, locked_icon=True)
+    assert not card._lock_icon.isHidden()
+    card.set_data(mood="😊", doing="陪伴", stage="亲密", favor=50, locked_icon=False)
+    assert card._lock_icon.isHidden()
+    assert not hasattr(card, "_lock_row"), "SPEC-27：忠诚锁定整行已移除"
+
+
+def test_sprite_head_anchor_boundaries_v27(qtapp):
+    """F27-4：头部锚定边界——全不透明 ⇒ 第 0 行命中；全透明 ⇒ None（回退 1/3）。"""
+    from PySide6.QtCore import Qt
+    from PySide6.QtGui import QColor, QPixmap
+
+    from ui.assets import _first_opaque_row
+
+    opaque = QPixmap(40, 40)
+    opaque.fill(QColor(10, 20, 30))
+    assert _first_opaque_row(opaque) == 0
+
+    transparent = QPixmap(40, 40)
+    transparent.fill(Qt.transparent)
+    assert _first_opaque_row(transparent) is None

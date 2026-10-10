@@ -26,12 +26,12 @@ COLORS = {
     "text_muted":     "#8A9BBB",  # 系统标签、占位符（SPEC-26 D5：3.69:1 → 6.26:1）
 
     # ── 角色主题色 ──
-    "rem_accent":    "#56CCF2",   # 蕾姆冰蓝
-    "rem_bubble":    "rgba(86,204,242,0.10)",
-    "rem_left":      "rgba(86,204,242,0.45)",
-    "ram_accent":    "#FF7EB3",   # 拉姆蔷薇粉
-    "ram_bubble":    "rgba(255,126,179,0.10)",
-    "ram_left":      "rgba(255,126,179,0.45)",
+    "rem_accent":    "#7FB3D5",   # SPEC-27 R5：柔化（原 #56CCF2）
+    "rem_bubble":    "rgba(127,179,213,0.10)",
+    "rem_left":      "rgba(127,179,213,0.45)",
+    "ram_accent":    "#E8A0BF",   # SPEC-27 R5：柔化（原 #FF7EB3）
+    "ram_bubble":    "rgba(232,160,191,0.10)",
+    "ram_left":      "rgba(232,160,191,0.45)",
 
     # ── 用户 ──
     "user_bubble":   "rgba(99,102,241,0.16)",
@@ -143,21 +143,21 @@ ROLE_BUBBLE_STYLES = {
         "bg": COLORS['rem_bubble'],
         "fg": "#34374d",  # 浅色聊天舞台上的正文
         "border": f"border-left: 3px solid {COLORS['rem_left']};",
-        "hl_border": "border-left: 5px solid rgba(86,204,242,0.70);",
-        "hl_bg": "rgba(86,204,242,0.15)",
+        "hl_border": "border-left: 5px solid rgba(127,179,213,0.70);",
+        "hl_bg": "rgba(127,179,213,0.15)",
         # V11.10.1：streaming 弱变体 — 底色降至 0.04，边线细 2px+弱 0.15，文字暗一档
-        "stream_bg": "rgba(86,204,242,0.04)",
-        "stream_border": "border-left: 2px solid rgba(86,204,242,0.15);",
+        "stream_bg": "rgba(127,179,213,0.04)",
+        "stream_border": "border-left: 2px solid rgba(127,179,213,0.15);",
         "stream_fg": COLORS['text_secondary'],
     },
     "ram": {
         "bg": COLORS['ram_bubble'],
         "fg": "#34374d",
         "border": f"border-left: 3px solid {COLORS['ram_left']};",
-        "hl_border": "border-left: 5px solid rgba(255,126,179,0.70);",
-        "hl_bg": "rgba(255,126,179,0.15)",
-        "stream_bg": "rgba(255,126,179,0.04)",
-        "stream_border": "border-left: 2px solid rgba(255,126,179,0.15);",
+        "hl_border": "border-left: 5px solid rgba(232,160,191,0.70);",
+        "hl_bg": "rgba(232,160,191,0.15)",
+        "stream_bg": "rgba(232,160,191,0.04)",
+        "stream_border": "border-left: 2px solid rgba(232,160,191,0.15);",
         "stream_fg": COLORS['text_secondary'],
     },
     "user": {
@@ -292,6 +292,9 @@ LAYOUT = {
     "nav_w":     182,   # 左导航
     "dash_w":    288,   # SPEC-26 D2：320→288（收窄，兼顾窄屏可见性）
     "dash_sprite_h": 200,  # SPEC-20260922-25 A：Dashboard 立绘区高度
+    "dash_folded_w": 44,   # SPEC-27 R1：折叠条宽度
+    "dash_auto_fold_below": 1220,    # SPEC-27 R1（F27-1 实测：展开态聊天 < 700px 即折叠）
+    "dash_auto_unfold_above": 1260,  # SPEC-27 R1：滞回 40px
     "dock_h":    50,    # SPEC-26 D3：58→50
     "center_stretch": 60,  # 中央:右侧 = 60:26（余量给固定栏）
     "right_stretch": 26,

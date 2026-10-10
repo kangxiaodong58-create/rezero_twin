@@ -91,10 +91,10 @@ class PanelsMixin:
                     rem={"mood": rem_emotion, "doing": actions.get("rem", "—"),
                          "stage": FAVOR_LEVEL_CN.get(state.favor_level.name,
                                                      state.favor_level.name),
-                         "favor": state.favor, "locked": rem_lock},
+                         "favor": state.favor, "locked_icon": rem_lock},   # SPEC-27 R3
                     ram={"mood": ram_emotion, "doing": actions.get("ram", "—"),
                          "stage": state.ram_stage.value,
-                         "favor": state.ram_favor, "locked": None},
+                         "favor": state.ram_favor, "locked_icon": False},  # SPEC-27 R3
                 )
         except Exception as e:
             _log(f"Dashboard 更新异常: {e}", durable=True)

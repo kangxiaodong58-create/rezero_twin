@@ -36,26 +36,25 @@ def qtapp():
 def test_card_set_data_renders(qtapp):
     card = CharacterCard("rem", "蕾 姆", "#56CCF2")
     card.set_data(mood="🥰 深爱满溢", doing="在整理房间", stage="深爱",
-                  favor=96, locked=True)
+                  favor=96, locked_icon=True)
     assert "🥰" in card._mood_label.text()
-    assert card._doing_label.text() == "在整理房间"
+    assert card._desc_label.text() == "在整理房间"
     assert card._stage_label.text() == "深爱"
     assert card._favor_bar.value() == 96 and card._favor_label.text() == "96"   # SPEC-26 D4：细条 + 小字
-    assert "已锁定" in card._lock_label.text()
-    assert not card._lock_row.isHidden()
+    assert not card._lock_icon.isHidden(), "SPEC-27 R3：锁定 = 名字后缀 🔒 小图标"
 
 
 def test_card_locked_none_hides_row(qtapp):
     card = CharacterCard("ram", "拉 姆", "#FF7EB3")
-    card.set_data(mood="😒", doing="观察主人", stage="可疑", favor=8, locked=None)
-    assert card._lock_row.isHidden(), "无忠诚维度的角色应隐藏该行"
+    card.set_data(mood="😒", doing="观察主人", stage="可疑", favor=8, locked_icon=False)
+    assert card._lock_icon.isHidden(), "SPEC-27 R3：未锁定 ⇒ 不显示 🔒（不再占一整行）"
     assert card._favor_bar.value() == 8 and card._favor_label.text() == "8"   # SPEC-26 D4
 
 
 def test_dashboard_speaking_highlight(qtapp):
     dash = CharacterDashboard()
     dash.set_speaking("ram")
-    assert "FF7EB3" in dash.ram_card.styleSheet(), "说话卡应以角色色描边"
+    assert "E8A0BF" in dash.ram_card.styleSheet(), "说话卡应以角色色描边（SPEC-27 R5 柔化后 #E8A0BF）"
     assert "border_subtle" not in dash.rem_card.styleSheet() or \
         dash.ram_card.styleSheet() != dash.rem_card.styleSheet()
     dash.set_speaking(None)
@@ -66,12 +65,12 @@ def test_dashboard_data_injection(qtapp):
     dash = CharacterDashboard()
     dash.set_data(
         rem={"mood": "😊 平静", "doing": "在整理房间", "stage": "亲密",
-             "favor": 44, "locked": False},
+             "favor": 44, "locked_icon": False},
         ram={"mood": "😒 可疑", "doing": "靠在一旁休息", "stage": "可疑",
-             "favor": 8, "locked": None},
+             "favor": 8, "locked_icon": False},
     )
     assert dash.rem_card._stage_label.text() == "亲密"
-    assert dash.ram_card._doing_label.text() == "靠在一旁休息"
+    assert dash.ram_card._desc_label.text() == "靠在一旁休息"
 
 
 def test_gui_dashboard_integration(qtapp, tmp_path, monkeypatch):

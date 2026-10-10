@@ -276,6 +276,37 @@ def locate_highlight(selector: str = "QLabel") -> str:
     """
     return f"{selector} {{ background-color: {COLORS['locate_highlight']}; }}"
 
+def dash_title_label() -> str:
+    """SPEC-27 R2：侧栏标题「双子 · 陪伴状态」。"""
+    return f"color: {COLORS['text_secondary']}; background: transparent;"
+
+
+def dash_collapse_btn() -> str:
+    """SPEC-27 R2：折叠/展开小按钮（扁平、无边框、悬停微亮）。"""
+    return (
+        f"QPushButton {{ background: transparent; color: {COLORS['text_muted']};"
+        f" border: none; padding: 2px 6px; }}"
+        f"QPushButton:hover {{ color: {COLORS['text_primary']};"
+        f" background: {SURFACE_TINT['hover']}; border-radius: {RADIUS['sm2']}px; }}"
+    )
+
+
+def dash_folded_strip() -> str:
+    """SPEC-27 R1/§7.5：折叠条（复用 SPEC-26 体系：detail 底 + subtle 边 + radius.medium）。"""
+    return (
+        f"\n            QWidget#dash_folded_strip {{\n"
+        f"                background-color: {SURFACE_TINT['detail']};\n"
+        f"                border: 1px solid {COLORS['border_subtle']};\n"
+        f"                border-radius: {RADIUS['medium']}px;\n"
+        f"            }}\n        "
+    )
+
+
+def dash_folded_name(accent: str) -> str:
+    """SPEC-27：折叠条里的角色名首字。"""
+    return f"color: {accent}; background: transparent;"
+
+
 def dash_favor_bar(accent: str) -> str:
     """SPEC-26 D4：好感细进度条（弱化呈现，不再当 KPI 显示）。"""
     return (
@@ -292,23 +323,32 @@ def dash_favor_bar(accent: str) -> str:
 
 
 def dash_sprite_frame(role: str) -> str:
-    """SPEC-20260922-25 A：Dashboard 立绘区（圆角框；底色 = 卡片底色，供底部渐隐衔接）。"""
+    """SPEC-27 R4：立绘直接嵌卡片，**不再单独描边**（底色 = 卡片底色，供底部渐隐衔接）。"""
     return (
         f"\n            QLabel#dash_sprite_{role} {{\n"
         f"                background-color: {COLORS['bg_surface']};\n"
-        f"                border: 1px solid {COLORS['border_subtle']};\n"
+        f"                border: none;\n"
         f"                border-radius: {RADIUS['medium']}px;\n"
         f"            }}\n        "
     )
 
 def card_frame(role, border) -> str:
+    """SPEC-27 R4/R6：卡片 = 唯一表面（去掉顶光边）；hover 轻微提亮。"""
     return (
-        f"\n            QFrame#dash_card_{role} {{\n                background-color: {COLORS['bg_surface']};\n                border: 1px solid {border};\n                border-top: 1px solid {ELEVATION['glow_top']};\n                border-radius: {RADIUS['medium']}px;\n            }}\n        "
+        f"\n            QFrame#dash_card_{role} {{\n"
+        f"                background-color: {COLORS['bg_surface']};\n"
+        f"                border: 1px solid {border};\n"
+        f"                border-radius: {RADIUS['medium']}px;\n"
+        f"            }}\n"
+        f"            QFrame#dash_card_{role}:hover {{\n"
+        f"                background-color: {SURFACE_TINT['active']};\n"
+        f"            }}\n        "
     )
 
 def dashboard_frame() -> str:
+    """SPEC-27 R4：外壳只留底色，去描边（减少嵌套边框第一层）。"""
     return (
-        f"\n            QFrame#character_dashboard {{\n                background-color: {SURFACE_TINT['detail']};\n                border: 1px solid {COLORS['border_subtle']};\n                border-radius: {RADIUS['large']}px;\n            }}\n        "
+        f"\n            QFrame#character_dashboard {{\n                background-color: {SURFACE_TINT['detail']};\n                border: none;\n                border-radius: {RADIUS['large']}px;\n            }}\n        "
     )
 
 __all__ = [
@@ -330,6 +370,10 @@ __all__ = [
     "history_search_box",
     "dash_sprite_frame",
     "dash_favor_bar",
+    "dash_title_label",
+    "dash_collapse_btn",
+    "dash_folded_strip",
+    "dash_folded_name",
     "history_locate_btn",
     "nav_btn_dock_active",
     "quote_bar",

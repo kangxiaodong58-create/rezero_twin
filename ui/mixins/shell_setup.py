@@ -223,6 +223,17 @@ class ShellSetupMixin:
                 self._refresh_ambient()
         except Exception:
             pass
+        # SPEC-27 R1：窄窗自动折叠右栏（阈值来自 F27-1 实测；手动选择后让位）
+        try:
+            dash = getattr(self, "dashboard", None)
+            if dash is not None:
+                width = self.width()
+                if width < int(LAYOUT.get("dash_auto_fold_below", 1220)):
+                    dash.set_collapsed(True, auto=True)
+                elif width >= int(LAYOUT.get("dash_auto_unfold_above", 1260)):
+                    dash.set_collapsed(False, auto=True)
+        except Exception:
+            pass
 
     def closeEvent(self, event) -> None:
         self._teardown_llm_thread()  # V13.0：先收尾线程，再存状态（防 worker 写一半）
