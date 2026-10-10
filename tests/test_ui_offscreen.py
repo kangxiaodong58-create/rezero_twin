@@ -469,7 +469,7 @@ def test_panel_favor_format_v148() -> None:
 
 
 def test_locate_flash_and_hit_marker_v1656() -> None:
-    """SPEC-23（步 10）+ SPEC-32：定位打磨——句级命中标记 + 幂等恢复；**不再做视觉突出**（闪光已关）。"""
+    """SPEC-23（步 10）+ SPEC-33：定位打磨——句级命中标记 + 幂等恢复；视觉指示为**柔和档**（α=0.16）。"""
     import tempfile
 
     win = _make_window()
@@ -479,8 +479,8 @@ def test_locate_flash_and_hit_marker_v1656() -> None:
     win.conv_store = gui.ConversationStore(db_path=db_path)
 
     # 定档：token 单源（色值变即基线变，防静默回退）
-    assert gui.COLORS["locate_highlight"] == "rgba(255,205,96,0.55)", \
-        f"定位底色定档应 0.55: {gui.COLORS['locate_highlight']}"
+    assert gui.COLORS["locate_highlight"] == "rgba(255,205,96,0.16)", \
+        f"定位底色定档应 0.16（SPEC-33 柔和档）: {gui.COLORS['locate_highlight']}"
     assert gui.LOCATE_FLASH_MS == 2400, "闪光时长定档应 2400ms"
 
     w = win._append_parsed_message("蕾 姆", "今天去野外散步，野外很美", "rem")
@@ -492,9 +492,10 @@ def test_locate_flash_and_hit_marker_v1656() -> None:
     orig_bubble_style = label.styleSheet()
     orig_name_style = name_label.styleSheet()
 
-    # 1) 带关键词：**不再上闪光底色**（SPEC-32 F2：定位不做视觉突出）+ 句级标记照旧；角色名不受影响
+    # 1) 带关键词：上**柔和指示**（SPEC-33 α=0.16，不是全关也不是突兀档）+ 句级标记照旧；角色名不受影响
     win._locate_message(mid, keyword="野外")
-    assert label.styleSheet() == orig_bubble_style, f"气泡不应再被染色（SPEC-32）: {label.styleSheet()!r}"
+    assert "rgba(255,205,96,0.16)" in label.styleSheet(), f"应上柔和指示: {label.styleSheet()!r}"
+    assert "rgba(255,205,96,0.55)" not in label.styleSheet(), "不得回到突兀档"
     assert name_label.styleSheet() == orig_name_style, "角色名不受影响"
     assert "<span" in label.text(), f"应标出命中句: {label.text()}"
     assert getattr(w, "_locate_hit_text", None) == "今天去野外散步，野外很美", \
@@ -508,18 +509,19 @@ def test_locate_flash_and_hit_marker_v1656() -> None:
     assert not hasattr(w, "_locate_orig_style"), "恢复后应删除样式留存"
     win._clear_locate_marks(w)  # 二次调用无副作用（幂等）
 
-    # 3) 无关键词：不标句、亦不上色（SPEC-32：滚动定位即为反馈）
+    # 3) 无关键词：上柔和指示、不标句
     w2 = win._append_parsed_message("你", "没有关键词也要闪一下", "user")
     label2 = w2._bubble.findChild(QLabel, "bubble_text")
     orig2 = label2.styleSheet()
     win._locate_message(w2.message_id)
-    assert label2.styleSheet() == orig2, "SPEC-32：不应再有任何视觉突出"
+    assert "rgba(255,205,96,0.16)" in label2.styleSheet(), "无关键词也应有柔和指示"
+    assert label2.styleSheet() != orig2
     assert not hasattr(w2, "_locate_hit_text"), "无关键词不应标句"
     win._clear_locate_marks(w2)
 
-    # 4) 关键词不在该条：不标句、不上色（SPEC-32）
+    # 4) 关键词不在该条：上柔和指示、不标句
     win._locate_message(mid, keyword="不存在的词")
-    assert label.styleSheet() == orig_bubble_style, "未命中亦不应上色"
+    assert "rgba(255,205,96,0.16)" in label.styleSheet(), "未命中也要有柔和指示"
     assert not hasattr(w, "_locate_hit_text"), "未命中不应标句"
     win._clear_locate_marks(w)
 
@@ -625,11 +627,25 @@ def test_no_focus_highlight_rules():
         assert ":focus" not in qss, f"theme.{name}() 仍含 :focus 亮边规则"
 
 
-def test_locate_flash_disabled():
-    """SPEC-32 F2：定位不做视觉突出——`locate_highlight()` 返回空串 ⇒ `_locate_message` 走 no-op。"""
-    import ui.theme as th
+def test_locate_highlight_is_soft():
+    """SPEC-33：定位指示回归，但必须是**柔和档**。
 
-    assert th.locate_highlight() == "", "定位闪光应为关闭（返回空串）"
+    用户口径（2026-10-10 真机）：「不是不需要视觉聚焦，只是不要太突兀」。
+    上限机器锁定：底色 α ≤ 0.20（旧突兀档 0.55 的主因）。
+    """
+    import re as _re
+
+    import ui.theme as th
+    from design_tokens import COLORS
+
+    qss = th.locate_highlight()
+    assert qss != "", "定位应给出柔和指示（不再为空串）"
+    m = _re.search(r"background-color: rgba([^;]+);", qss)
+    assert m, f"应含底色规则: {qss!r}"
+    alpha = float(m.group(1).split(",")[-1].strip().rstrip(")"))
+    assert alpha <= 0.20, f"定位底色不得过亮（上限 0.20）: {qss!r}"
+    assert COLORS["locate_highlight"].endswith("0.16)"), "定档 0.16（改动需同步本断言）"
+    assert "border: 1px solid" in qss, "描边须为 1px（与角色描边同宽 ⇒ 不挤布局）"
 
 
 def test_send_btn_is_scoped_dark():
@@ -651,7 +667,6 @@ def test_input_focus_does_not_restyle():
 
     win = _make_window()
     qss = win.input_box.styleSheet()
-    assert "input_box()" not in qss  # 展示用（非断言重点）
     win.eventFilter(win.input_box, QEvent(QEvent.FocusIn))
     assert win.input_box.styleSheet() == qss, "FocusIn 不得改变输入框样式"
     win.eventFilter(win.input_box, QEvent(QEvent.FocusOut))

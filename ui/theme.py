@@ -285,13 +285,16 @@ def nav_btn_side() -> str:
 def locate_highlight(selector: str = "QLabel") -> str:
     """SPEC-32 F2：定位**不再做视觉突出**（用户真机反馈：闪光「异常发亮」）。
 
-    历史到 SPEC-23：该函数返回一个亮琥珀底色（`rgba(255,205,96,0.55)`）追加到气泡 label 上，
-    实现「定位闪光」。用户 2026-10-10 反馈不想要这种突出 ⇒ 返回空串；
-    调用方（`ui/mixins/history.py::_locate_message`）已有空判 ⇒ 整条闪光链路自然成为 no-op，
-    滚动定位与句级柔和高亮（SPEC-20）保持不变。
-    如需恢复：把返回值改回 `f"{selector} {{ background-color: {COLORS['locate_highlight']}; }}"`。
+    历史：SPEC-23 用亮琥珀底色（`rgba(255,205,96,0.55)`）整块闪光 → 用户反馈「太突兀」；
+    SPEC-32 一度全关 → 用户又反馈「不是不需要视觉聚焦，只是不要太突兀」（2026-10-10）。
+    ⇒ 本版（SPEC-33）取**柔和档**：底色 α=0.16 + 同宽（1px）细描边，
+    描边宽度与 `bubble_body()` 的角色描边一致 ⇒ **不引起气泡尺寸变化**（无布局抖动）。
+    亮度上限由用例 `test_locate_highlight_is_soft` 锁定（α ≤ 0.20），防再度回弹。
     """
-    return ""
+    return (
+        f"{selector} {{ background-color: {COLORS['locate_highlight']};"
+        f" border: 1px solid {COLORS['locate_border']}; }}"
+    )
 
 def dash_title_label() -> str:
     """SPEC-27 R2：侧栏标题「双子 · 陪伴状态」。"""
