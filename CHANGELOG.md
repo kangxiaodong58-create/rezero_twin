@@ -13,6 +13,7 @@ All notable changes to the **Re:Zero Twin System** (Ram & Rem) are documented in
 - **S1**：5 个叶子模块（`ui/logging_util/text/assets/flags/app_data/ui/widgets/w…`）+ 9 个控件类 + `status_dashboard.py → ui/dashboard.py`；`gui.py` **3731 → 2289**
 - **S2**：类体 **52 方法 → 8 个 mixin 模块**（`ui/mixins/`：search 4 / message_ops 7 / history 6 / chat 16 / panels 8 / daily 10 / commands 5 / shell_setup 9）；`gui.py` **2289 → 286**
 - 逐字搬移（AST 切片 + 字节校验）+ 每步语法门禁；`gui.py` 保留 re-export 快照（外部接口零变化）
+- **S3**：`_setup_ui`（314 行 / 203 条语句）拆为 7 个 `_build_*`；两级机器判据——源码级语句指纹 **203↔203 逐条相等** + 运行级离屏控件树 **88↔88 节点差异 0**
 
 ### 修复（顺带发现，见 SPEC-20260922-25 B1）
 - `ui/dashboard.py` 的资产路径在搬移后失效（`_avatar_pixmap` 恒空 → 真机头像回退「蕾/拉」文字圈），已立 SPEC-25 修复项

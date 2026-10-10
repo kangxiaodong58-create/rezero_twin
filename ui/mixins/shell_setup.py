@@ -277,6 +277,21 @@ class ShellSetupMixin:
         main_layout.setContentsMargins(12, 12, 12, 8)
         main_layout.setSpacing(8)
 
+        self._build_top_bar(main_layout)
+
+        # ── 主体三栏布局 ──
+        body = QHBoxLayout()
+        body.setSpacing(12)
+        self._build_side_nav(body)
+        chat_section = self._build_chat_area(body)
+        self._build_input_area(chat_section)
+        body.addLayout(chat_section, LAYOUT['center_stretch'])
+        self._build_dashboard(body)
+        main_layout.addLayout(body, 1)
+        self._build_dock(main_layout)
+        self._build_footer(main_layout)
+
+    def _build_top_bar(self, main_layout: QVBoxLayout) -> None:
         # ── 顶部标题栏 ──
         header = QFrame()
         header.setFixedHeight(LAYOUT["header_h"])
@@ -361,10 +376,7 @@ class ShellSetupMixin:
 
         main_layout.addWidget(header)
 
-        # ── 主体三栏布局 ──
-        body = QHBoxLayout()
-        body.setSpacing(12)
-
+    def _build_side_nav(self, body: QHBoxLayout) -> None:
         # ── 参考图式左侧图标导航 ──
         nav = QFrame()
         nav.setObjectName("side_nav")
@@ -422,6 +434,7 @@ class ShellSetupMixin:
             body.addWidget(self.rem_panel)
             self.rem_panel.hide()  # 左栏由主题导航替代（开关开启时保留拖入换立绘能力）。
 
+    def _build_chat_area(self, body: QHBoxLayout) -> QVBoxLayout:
         # 中间：聊天区域
         chat_section = QVBoxLayout()
         chat_section.setSpacing(0)
@@ -446,7 +459,10 @@ class ShellSetupMixin:
         self.sakura = SakuraOverlay(self.scroll.viewport())
         self.sakura.setGeometry(self.scroll.viewport().rect())
         self.scroll.viewport().installEventFilter(self)
+        return chat_section
 
+
+    def _build_input_area(self, chat_section: QVBoxLayout) -> None:
         # 输入区域
         input_frame = QFrame()
         input_frame.setFixedHeight(DIM['input_frame_h'])
@@ -523,8 +539,7 @@ class ShellSetupMixin:
         input_layout.addLayout(input_row)
         chat_section.addWidget(input_frame)
 
-        body.addLayout(chat_section, LAYOUT['center_stretch'])
-
+    def _build_dashboard(self, body: QHBoxLayout) -> None:
         # 右侧：拉姆面板（同上：默认不构造；V16-M_F 起右栏由 Character Dashboard 承担）
         self.ram_panel = None
         if _side_panels_enabled():
@@ -546,8 +561,7 @@ class ShellSetupMixin:
         self.dashboard = CharacterDashboard()
         body.addWidget(self.dashboard, LAYOUT['right_stretch'])
 
-        main_layout.addLayout(body, 1)
-
+    def _build_dock(self, main_layout: QVBoxLayout) -> None:
         # ── 底部图标坞 ──
         dock = QFrame()
         dock.setFixedHeight(58)
@@ -562,6 +576,7 @@ class ShellSetupMixin:
         dock_layout.addStretch()
         main_layout.addWidget(dock)
 
+    def _build_footer(self, main_layout: QVBoxLayout) -> None:
         # ── 底部状态栏 ──
         footer = QFrame()
         footer.setFixedHeight(DIM['footer_h'])
@@ -583,3 +598,4 @@ class ShellSetupMixin:
         footer_layout.addWidget(mode_label)
 
         main_layout.addWidget(footer)
+
