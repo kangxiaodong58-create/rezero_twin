@@ -553,3 +553,59 @@ def test_dashboard_sprite_area_v1659() -> None:
     assert card._sprite.height() == LAYOUT["dash_sprite_h"] == 200
     assert card._name_label.text() == "拉 姆"
     assert card._mood_label.text()
+
+# ───────── SPEC-20260922-29 G5：容器 QSS 作用域守卫（防回弹） ─────────
+
+# 白名单 = 无选择器裸声明里**允许保留**的（皆无子控件 ⇒ 无级联面；加新例外必须改本集合）
+BARE_QSS_WHITELIST = {
+    "ambient_label", "character_placeholder", "history_header_sep", "nav_twins_slot",
+    "dash_title_label", "quote_label", "bubble_tag_muted", "nav_section_hint", "nav_sep",
+    "empty_hint", "nav_weather_chip", "twin_mode_chip", "transparent_bg", "transparent_bg_color",
+}
+
+# 容器 → 期望的 objectName（容器 QSS 必须用 `#objectName` 作用域）
+CONTAINER_QSS = {
+    "header_shell": "app_header",
+    "dock": "app_dock",
+    "footer": "app_footer",
+    "input_frame": "input_frame",
+    "quote_bar": "quote_bar",
+}
+
+
+def test_container_qss_is_scoped():
+    """SPEC-29 G5：给容器设样式表 ⇒ 必须 objectName + `#obj` 作用域。
+
+    反例（真实缺陷）：`header_shell()` 等五个函数曾是**无选择器裸声明**，
+    Qt 会把规则级联到**每个子控件** ⇒ 顶栏里「长框里套一个又一个框」。
+    （对照组：nav 有 `QFrame#side_nav` 选择器，其子控件始终干净。）
+    """
+    import pathlib
+
+    import ui.theme as th
+
+    root = pathlib.Path(__file__).resolve().parent.parent
+    bad = []
+
+    for fn_name, obj in CONTAINER_QSS.items():
+        qss = getattr(th, fn_name)()
+        if f"#{obj}" not in qss:
+            bad.append(f"theme.{fn_name}() 未用 #{obj} 作用域：{qss[:60]!r}")
+
+    src = (root / "ui" / "mixins" / "shell_setup.py").read_text(encoding="utf-8")
+    for obj in CONTAINER_QSS.values():
+        if f'setObjectName("{obj}")' not in src:
+            bad.append(f"shell_setup 未给容器设 objectName(\"{obj}\")")
+
+    for name in th.__all__:
+        fn = getattr(th, name, None)
+        if not callable(fn) or fn.__code__.co_argcount != 0:
+            continue
+        try:
+            out = fn()
+        except Exception:
+            continue
+        if isinstance(out, str) and out.strip() and "{" not in out and name not in BARE_QSS_WHITELIST:
+            bad.append(f"theme.{name}() 是无选择器裸声明且不在白名单（会级联到子控件）")
+
+    assert not bad, "容器 QSS 作用域守卫失败：\n  " + "\n  ".join(bad)

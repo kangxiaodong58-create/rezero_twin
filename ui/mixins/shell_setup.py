@@ -305,14 +305,13 @@ class ShellSetupMixin:
     def _build_top_bar(self, main_layout: QVBoxLayout) -> None:
         # ── 顶部标题栏 ──
         header = QFrame()
+        header.setObjectName("app_header")  # SPEC-29 G1：容器作用域（QSS 走 QFrame#app_header）
         header.setFixedHeight(LAYOUT["header_h"])
         header.setStyleSheet(theme.header_shell())
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(18, 0, 18, 0)
 
-        title_mark = QLabel()
-        title_mark.setPixmap(QPixmap(_asset_path("app_icon.png")).scaled(28, 28, Qt.KeepAspectRatio, Qt.SmoothTransformation))
-        header_layout.addWidget(title_mark)
+        # SPEC-29 G3：顶栏左上 app 图标（title_mark）已按用户要求删除
         title = QLabel("Re:zero Twin\n双子系统")
         title.setFont(QFont("Georgia", 18, QFont.Bold))
         title.setStyleSheet(theme.color_only(COLORS['title_pink']))
@@ -421,12 +420,7 @@ class ShellSetupMixin:
         self._nav_sysstatus.setStyleSheet(
             theme.nav_section_hint())
         nav_layout.addWidget(self._nav_sysstatus)
-        nav_twins = QLabel()
-        nav_twins.setAlignment(Qt.AlignCenter)
-        nav_twins.setPixmap(QPixmap(_asset_path("app_icon.png")).scaled(140, 140, Qt.KeepAspectRatioByExpanding, Qt.SmoothTransformation))
-        nav_twins.setFixedHeight(108)
-        nav_twins.setStyleSheet(theme.nav_twins_slot())
-        nav_layout.addWidget(nav_twins)
+        # SPEC-29 G4：左导航底部 app 图标（nav_twins）已按用户要求删除（用户原话「LLM人生账本14条下面那个图片」→ 已确认即此图）
         body.addWidget(nav)
 
         # 左侧：蕾姆面板
@@ -476,6 +470,7 @@ class ShellSetupMixin:
     def _build_input_area(self, chat_section: QVBoxLayout) -> None:
         # 输入区域
         input_frame = QFrame()
+        input_frame.setObjectName("input_frame")  # SPEC-29 G1
         input_frame.setFixedHeight(DIM['input_frame_h'])
         input_frame.setStyleSheet(theme.input_frame())
         input_layout = QVBoxLayout(input_frame)
@@ -484,6 +479,7 @@ class ShellSetupMixin:
 
         # V14.2：引用条（默认隐藏；发起引用后显示「↪ 回复 …」，可 × 取消）
         self._quote_bar = QFrame()
+        self._quote_bar.setObjectName("quote_bar")  # SPEC-29 G1
         self._quote_bar.setObjectName("quote_bar")
         self._quote_bar.setStyleSheet(
             theme.quote_bar()
@@ -575,6 +571,7 @@ class ShellSetupMixin:
     def _build_dock(self, main_layout: QVBoxLayout) -> None:
         # ── 底部图标坞 ──
         dock = QFrame()
+        dock.setObjectName("app_dock")  # SPEC-29 G1
         dock.setFixedHeight(58)
         dock.setStyleSheet(theme.dock())
         dock_layout = QHBoxLayout(dock)
@@ -590,6 +587,7 @@ class ShellSetupMixin:
     def _build_footer(self, main_layout: QVBoxLayout) -> None:
         # ── 底部状态栏 ──
         footer = QFrame()
+        footer.setObjectName("app_footer")  # SPEC-29 G1
         footer.setFixedHeight(DIM['footer_h'])
         footer.setStyleSheet(theme.footer())
         footer_layout = QHBoxLayout(footer)

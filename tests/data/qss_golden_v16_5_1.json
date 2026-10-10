@@ -44,42 +44,42 @@
   [
    "QFrame",
    "",
-   "background-color: rgba(8,12,35,0.82); border: 1px solid rgba(179,211,239,0.16); border-radius: 18px;"
-  ],
-  [
-   "QFrame",
-   "",
-   "background: rgba(15,20,55,0.52); border: 1px solid rgba(255,255,255,0.09); border-radius: 17px;"
-  ],
-  [
-   "QFrame",
-   "",
-   "background: rgba(16,22,38,0.82); border: 1px solid rgba(240,163,207,0.42); border-radius: 18px;"
-  ],
-  [
-   "QFrame",
-   "",
    "background: rgba(179,211,239,0.16); border: none;"
   ],
   [
    "QFrame",
    "",
-   "background: rgba(8,12,35,0.76); border-radius: 10px;"
-  ],
-  [
-   "QFrame",
-   "",
    "border-bottom: 1px solid rgba(179,211,239,0.16);"
   ],
   [
    "QFrame",
    "",
    "border-bottom: 1px solid rgba(179,211,239,0.16);"
+  ],
+  [
+   "QFrame",
+   "app_dock",
+   "QFrame#app_dock { background: rgba(15,20,55,0.52); border: 1px solid rgba(255,255,255,0.09); border-radius: 17px; }"
+  ],
+  [
+   "QFrame",
+   "app_footer",
+   "QFrame#app_footer { background: rgba(8,12,35,0.76); border-radius: 10px; }"
+  ],
+  [
+   "QFrame",
+   "app_header",
+   "QFrame#app_header { background-color: rgba(8,12,35,0.82); border: 1px solid rgba(179,211,239,0.16); border-radius: 18px; }"
   ],
   [
    "QFrame",
    "history_card",
    "\n            QFrame#history_card {\n                background-color: rgba(34,39,61,0.84);\n                border: 1px solid rgba(255,255,255,0.10);\n                border-top: 1px solid rgba(255,255,255,0.07);\n                border-radius: 16px;\n            }"
+  ],
+  [
+   "QFrame",
+   "input_frame",
+   "QFrame#input_frame { background: rgba(16,22,38,0.82); border: 1px solid rgba(240,163,207,0.42); border-radius: 18px; }"
   ],
   [
    "QFrame",
@@ -89,7 +89,7 @@
   [
    "QFrame",
    "quote_bar",
-   "background-color: rgba(201,169,110,0.08); border-left: 3px solid rgba(201,169,110,0.8); border-radius: 4px;"
+   "QFrame#quote_bar { background-color: rgba(201,169,110,0.08); border-left: 3px solid rgba(201,169,110,0.8); border-radius: 4px; }"
   ],
   [
    "QFrame",
@@ -110,16 +110,6 @@
    "QLabel",
    "",
    "background: rgba(21,28,67,0.66); color: #A9B6CE;border: 1px solid rgba(179,211,239,0.14); border-radius: 12px;padding: 8px 6px;"
-  ],
-  [
-   "QLabel",
-   "",
-   "background: rgba(21,28,67,0.84); color: #f8e7f4; border: 1px solid rgba(211,193,238,0.42); border-radius: 13px; padding: 8px 14px; font-weight: bold;"
-  ],
-  [
-   "QLabel",
-   "",
-   "background: rgba(50,45,94,0.42); border-radius: 14px;"
   ],
   [
    "QLabel",
@@ -205,6 +195,11 @@
    "QLabel",
    "",
    "color: #A9B6CE; background: transparent;"
+  ],
+  [
+   "QLabel",
+   "",
+   "color: #A9B6CE; background: transparent; border: none; padding: 0 6px;"
   ],
   [
    "QLabel",

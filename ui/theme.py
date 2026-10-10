@@ -126,13 +126,15 @@ def empty_hint() -> str:
     )
 
 def header_shell() -> str:
+    # SPEC-29 G1：必须带作用域选择器——裸声明会被 Qt 级联给**每个子控件**（历史上「长框里套一堆小框」的根因）
     return (
-        f"background-color: {COLORS['shell_header']}; border: 1px solid {COLORS['border_subtle']}; border-radius: 18px;"
+        f"QFrame#app_header {{ background-color: {COLORS['shell_header']}; border: 1px solid {COLORS['border_subtle']}; border-radius: 18px; }}"
     )
 
 def twin_mode_chip() -> str:
+    # SPEC-29 G2（审计 F29-5 写死口径）：纯文字 + text_secondary；无底色/无描边/无圆角；与氛围行同档、无分隔符
     return (
-        f"background: {COLORS['chip_bg']}; color: {COLORS['twin_mode_fg']}; border: 1px solid {COLORS['chip_border']}; border-radius: 13px; padding: 8px 14px; font-weight: bold;"
+        f"color: {COLORS['text_secondary']}; background: transparent; border: none; padding: 0 6px;"
     )
 
 def ambient_label() -> str:
@@ -191,13 +193,15 @@ def chat_scroll_area() -> str:
     )
 
 def input_frame() -> str:
+    # SPEC-29 G1：同 header_shell——加作用域，防级联到输入区内部各控件
     return (
-        f"background: {SURFACE_TINT['chat_surface_strong']}; border: 1px solid {COLORS['chat_border_pink']}; border-radius: 18px;"
+        f"QFrame#input_frame {{ background: {SURFACE_TINT['chat_surface_strong']}; border: 1px solid {COLORS['chat_border_pink']}; border-radius: 18px; }}"
     )
 
 def quote_bar() -> str:
+    # SPEC-29：作用域化（左彩条是引用条的设计语言，保留；只去掉「级联给内部 label」的副作用）
     return (
-        f"background-color: {COLORS['accent_veil']}; border-left: 3px solid {COLORS['accent_border']}; border-radius: 4px;"
+        f"QFrame#quote_bar {{ background-color: {COLORS['accent_veil']}; border-left: 3px solid {COLORS['accent_border']}; border-radius: 4px; }}"
     )
 
 def quote_label() -> str:
@@ -227,13 +231,15 @@ def send_btn_base() -> str:
     )
 
 def dock() -> str:
+    # SPEC-29 G1
     return (
-        f"background: {COLORS['shell_dock']}; border: 1px solid {COLORS['dock_border']}; border-radius: 17px;"
+        f"QFrame#app_dock {{ background: {COLORS['shell_dock']}; border: 1px solid {COLORS['dock_border']}; border-radius: 17px; }}"
     )
 
 def footer() -> str:
+    # SPEC-29 G1
     return (
-        f"background: {COLORS['shell_footer']}; border-radius: 10px;"
+        f"QFrame#app_footer {{ background: {COLORS['shell_footer']}; border-radius: 10px; }}"
     )
 
 def app_shell(backdrop_url) -> str:
