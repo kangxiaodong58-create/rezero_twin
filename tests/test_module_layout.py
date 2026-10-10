@@ -203,3 +203,55 @@ def test_guard_detectors_actually_bite(tmp_path):
         "        pass",
     ]), encoding="utf-8")
     assert "m" in _class_method_names(dup), "守卫 3 检测器失效"
+
+# ─────────────── 守卫 6（SPEC-28 / F28-1）：模块级全局必须有定义 ───────────────
+
+def _module_defs(tree) -> set:
+    """模块级定义名：def/class/赋值/注解赋值/import（含顶层 try/if 内的赋值）。"""
+    names = set()
+    for node in tree.body:
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)):
+            names.add(node.name)
+        elif isinstance(node, ast.Assign):
+            for t in node.targets:
+                if isinstance(t, ast.Name):
+                    names.add(t.id)
+        elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
+            names.add(node.target.id)
+        elif isinstance(node, (ast.Import, ast.ImportFrom)):
+            for a in node.names:
+                names.add(a.asname or a.name.split(".")[0])
+        elif isinstance(node, (ast.Try, ast.If)):
+            for sub in ast.walk(node):
+                if isinstance(sub, ast.Assign):
+                    for t in sub.targets:
+                        if isinstance(t, ast.Name):
+                            names.add(t.id)
+    return names
+
+
+def test_module_globals_are_defined():
+    """`global X` 声明的名字必须在本模块有模块级定义。
+
+    反例（真实事故）：SPEC-22 S1a 把 `_get_ambient_registry` 搬进 `ui/flags.py`，
+    但 `_AMBIENT_REGISTRY = None` 留在 `gui.py` ⇒ 函数首次读取即 NameError（被 except 吞掉，
+    「偶发一句」静默降级）。本守卫把「搬移后剩余变量丢失」钉死。
+    """
+    import builtins
+
+    bad = []
+    for p in _ui_files():
+        tree = _parse(p)
+        defs = _module_defs(tree) | set(dir(builtins))
+        for node in ast.walk(tree):
+            if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            for stmt in node.body:
+                if isinstance(stmt, ast.Global):
+                    for gname in stmt.names:
+                        if gname not in defs:
+                            bad.append(
+                                "%s:%d 函数 %s 声明 global %s，但本模块无模块级定义"
+                                % (p.relative_to(ROOT), node.lineno, node.name, gname)
+                            )
+    assert not bad, "global 声明的名字缺模块级定义：\n  " + "\n  ".join(bad)

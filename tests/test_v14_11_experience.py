@@ -181,3 +181,17 @@ def test_character_panel_set_sprite_offscreen(tmp_path):
     assert ok, "有效图片应加载成功"
     assert panel._placeholder_label.isHidden(), "加载后占位应隐藏"
     assert not panel.set_sprite(str(tmp_path / "missing.png")), "缺失路径返回 False"
+
+
+def test_ambient_registry_via_flags_wrapper():
+    """SPEC-20260922-28 回归：走**应用真实路径**（`ui.flags` 包装器），而非直连 shared.template_registry。
+
+    事故教训：原 `test_ambient_registry_contract` 直连 `load_registry/registry_pick`，
+    包装器里的 NameError 成了**覆盖盲区**（降级路径「恒为无」照样绿）。
+    """
+    from ui.flags import _get_ambient_registry
+
+    reg = _get_ambient_registry()
+    assert isinstance(reg, dict), "注册表加载不应失败"
+    assert reg.get("items"), "应加载到条目（空 = 走了降级分支，说明修复未生效）"
+    assert _get_ambient_registry() is reg, "应保持懒加载单例"

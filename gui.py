@@ -52,8 +52,7 @@ import traceback
 from datetime import date, datetime
 from typing import Optional
 
-# V14.11 Step5：偶发一句注册表（懒加载单例；加载失败 = 空 dict，选型返回 None）
-_AMBIENT_REGISTRY: Optional[dict] = None
+# V14.11 Step5：偶发一句注册表（懒加载单例）——SPEC-28：**定义已归位 ui/flags.py**（re-export 见下方归位块）
 
 # SPEC-20260922-22 S1a：路径引导不能再借 `_PROJECT_ROOT`（已归位 ui/assets.py，
 # 而 import ui.* 又需要 sys.path 就绪——先有鸡还是先有蛋）⇒ 引导就地自算（与 ui/assets 同式，值恒等）。
@@ -90,7 +89,7 @@ from runtime.forensic import record, shutdown_forensic, init_forensic
 from ui.logging_util import _LOG_FH, _LOG_FH_PATH, _LOG_LOCK, _LOG_FSYNC_ALL, _log_path, _log_open_locked, _log_close, _log_write_locked, _log  # noqa: F401
 from ui.text import PERIOD_KEYWORDS, WEATHER_EVENT_CONFLICT, highlight_plain_text, event_compatible, format_world_line, match_speaker_tag, _streaming_segments, parse_twin_segments, _rgba_to_qcolor  # noqa: F401
 from ui.assets import QSvgRenderer, _SVG_OK, _SPRITE_EXTS, _asset_path, _svg_pixmap, _backdrop_image_url, _theme_icon, _user_sprite_path, _copy_user_sprite, _resolve_sprite  # noqa: F401
-from ui.flags import _VIGNETTE_DISABLED, _HISTORY_DISABLED, _ui_motion_enabled, _side_panels_enabled, _get_ambient_registry, name_hint_once  # noqa: F401
+from ui.flags import _VIGNETTE_DISABLED, _HISTORY_DISABLED, _ui_motion_enabled, _side_panels_enabled, _get_ambient_registry, name_hint_once, _AMBIENT_REGISTRY  # noqa: F401
 from ui.app_data import ARC_CN, GREETING_TEMPLATES, NAV_ENTRIES, ONI_STAGE_CN, WEATHER_CLAUSES, WORLD_FEEDBACK  # noqa: F401
 from ui.widgets_message import AvatarLabel, BubbleWidget, SystemLabelWidget, ChatMessageWidget  # noqa: F401
 from ui.history import HistoryItemWidget, HistoryOverlay, LOCATE_FLASH_MS  # noqa: F401

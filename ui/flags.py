@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+from typing import Optional
 
 
 # 开场引言开关（V10.10.3）：环境变量 REZERO_DISABLE_VIGNETTE=1 可禁用引言做二分排查
@@ -43,6 +44,11 @@ def name_hint_once() -> bool:
         return False
     _name_hint_shown = True
     return True
+
+
+# SPEC-20260922-28：本变量**必须定义在归属模块**（原留在 gui.py ⇒ 本模块首个 global 读取即
+# NameError，被 except 吞掉，「偶发一句」恒降级。守卫 `test_module_globals_are_defined` 钉死）。
+_AMBIENT_REGISTRY: Optional[dict] = None
 
 
 def _get_ambient_registry() -> dict:
