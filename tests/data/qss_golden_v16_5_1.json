@@ -279,12 +279,12 @@
   [
    "QLineEdit",
    "",
-   "\n            QLineEdit {\n                background-color: rgba(255,255,255,0.06);\n                color: #E2E8F0;\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n                padding: 4px 10px;\n            }\n            QLineEdit:focus {\n                border-color: rgba(135,220,248,0.68);\n            }"
+   "\n            QLineEdit {\n                background-color: rgba(255,255,255,0.06);\n                color: #E2E8F0;\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n                padding: 4px 10px;\n            }"
   ],
   [
    "QLineEdit",
    "",
-   "\n            QLineEdit {\n                background-color: rgba(255,255,255,0.06);\n                color: #E2E8F0;\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 8px;\n                padding: 2px 8px;\n            }\n            QLineEdit:focus {\n                border-color: rgba(135,220,248,0.68);\n            }"
+   "\n            QLineEdit {\n                background-color: rgba(255,255,255,0.06);\n                color: #E2E8F0;\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 8px;\n                padding: 2px 8px;\n            }"
   ],
   [
    "QProgressBar",
@@ -413,8 +413,8 @@
   ],
   [
    "QPushButton",
-   "",
-   "QPushButton { border-radius: 12px; }QPushButton:pressed { padding-top: 1px; }"
+   "send_btn",
+   "QPushButton#send_btn { background: rgba(18,27,45,0.88); color: #A9B6CE; border: 1px solid rgba(179,211,239,0.16); border-radius: 12px; }QPushButton#send_btn:hover { background: rgba(16,22,38,0.82); color: #E2E8F0; border: 1px solid rgba(179,211,239,0.30); }QPushButton#send_btn:pressed { background: rgba(12,17,30,0.92); padding-top: 1px; }QPushButton#send_btn:disabled { background: #4a4a4a; color: #888; }"
   ],
   [
    "QScrollArea",
@@ -429,7 +429,7 @@
   [
    "QTextEdit",
    "",
-   "QTextEdit { background: rgba(18,27,45,0.88); color: #E2E8F0; border: none; border-radius: 12px; padding: 7px 10px; } QTextEdit:focus { border: 1px solid rgba(225,140,190,0.70); }"
+   "QTextEdit { background: rgba(18,27,45,0.88); color: #E2E8F0; border: none; border-radius: 12px; padding: 7px 10px; }"
   ],
   [
    "QWidget",
@@ -444,7 +444,7 @@
   [
    "TwinChatApp",
    "",
-   "\n            QWidget#app_shell {\n                border-image: url(<DATA>/backdrop_cache.png) 0 0 0 0 stretch stretch;\n            }\n            QMainWindow {\n                background-color: #101626;\n            }\n            QScrollArea {\n                border: none;\n                background-color: transparent;\n            }\n            QTextEdit {\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n                padding: 8px 10px;\n                background-color: rgba(18,27,45,0.94);\n                color: #E2E8F0;\n            }\n            QTextEdit:focus {\n                border-color: rgba(135,220,248,0.68);\n            }\n            QPushButton {\n                background-color: #b99a62;\n                color: white;\n                border: none;\n                border-radius: 8px;\n            }\n            QPushButton:hover {\n                background-color: #d6b877;\n            }\n            QPushButton:pressed {\n                background-color: #927542;\n            }\n            QPushButton:disabled {\n                background-color: #4a4a4a;\n                color: #888;\n            }"
+   "\n            QWidget#app_shell {\n                border-image: url(<DATA>/backdrop_cache.png) 0 0 0 0 stretch stretch;\n            }\n            QMainWindow {\n                background-color: #101626;\n            }\n            QScrollArea {\n                border: none;\n                background-color: transparent;\n            }\n            QTextEdit {\n                border: 1px solid rgba(179,211,239,0.16);\n                border-radius: 12px;\n                padding: 8px 10px;\n                background-color: rgba(18,27,45,0.94);\n                color: #E2E8F0;\n            }\n            QPushButton {\n                background-color: #b99a62;\n                color: white;\n                border: none;\n                border-radius: 8px;\n            }\n            QPushButton:hover {\n                background-color: #d6b877;\n            }\n            QPushButton:pressed {\n                background-color: #927542;\n            }\n            QPushButton:disabled {\n                background-color: #4a4a4a;\n                color: #888;\n            }"
   ]
  ]
 }

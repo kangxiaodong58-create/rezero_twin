@@ -200,13 +200,9 @@ class ShellSetupMixin:
             if event.key() == Qt.Key_Return and not event.modifiers() & Qt.ShiftModifier:
                 self._send_message()
                 return True
-        # V14.4（Trial #1 B-02）：输入框聚焦高亮——小白首启区分输入框与搜索框
-        if source is self.input_box and event.type() == QEvent.FocusIn:
-            self.input_box.setStyleSheet(
-                theme.input_box_highlight())
-        if source is self.input_box and event.type() == QEvent.FocusOut:
-            self.input_box.setStyleSheet(
-                theme.input_box_normal())
+        # SPEC-32 追加（用户真机反馈）：**取消输入框聚焦高亮**。
+        # 历史：V14.4（Trial #1 B-02）在 FocusIn/FocusOut 上程序化换样式（聚焦＝2px accent 金边），
+        # 用户实测「点击输入框 / 历史定位时边框闪光」⇒ 去掉。聚焦态与静止态统一为 `theme.input_box()`。
         # 樱花层跟随 viewport 大小变化
         if source is self.scroll.viewport() and event.type() == QEvent.Resize:
             self.sakura.setGeometry(self.scroll.viewport().rect())
@@ -535,6 +531,7 @@ class ShellSetupMixin:
         # V16-M_D：完整创建块恢复（此前布局改版误删——流式"取消"文本与
         # _send_message 信号都挂在 self.send_btn 上，必须保持同一实例）
         self.send_btn = QPushButton("发 送")
+        self.send_btn.setObjectName("send_btn")  # SPEC-32 F3：QSS 走 #send_btn（覆盖 app_shell 的 accent 系）
         self.send_btn.setStyleSheet(
             theme.send_btn_base())
         self.send_btn.setFixedSize(DIM['send_btn_w'], DIM['send_btn_h'])

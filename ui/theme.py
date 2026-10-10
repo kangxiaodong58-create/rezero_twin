@@ -117,7 +117,7 @@ def history_close_btn() -> str:
 
 def history_search_box() -> str:
     return (
-        f"\n            QLineEdit {{\n                background-color: {SURFACE_TINT['input']};\n                color: {COLORS['text_primary']};\n                border: 1px solid {COLORS['border_subtle']};\n                border-radius: {RADIUS['medium']}px;\n                padding: 4px 10px;\n            }}\n            QLineEdit:focus {{\n                border-color: {COLORS['border_focus']};\n            }}\n        "
+        f"\n            QLineEdit {{\n                background-color: {SURFACE_TINT['input']};\n                color: {COLORS['text_primary']};\n                border: 1px solid {COLORS['border_subtle']};\n                border-radius: {RADIUS['medium']}px;\n                padding: 4px 10px;\n            }}\n        "
     )
 
 def empty_hint() -> str:
@@ -144,7 +144,7 @@ def ambient_label() -> str:
 
 def search_box() -> str:
     return (
-        f"\n            QLineEdit {{\n                background-color: {SURFACE_TINT['input']};\n                color: {COLORS['text_primary']};\n                border: 1px solid {COLORS['border_subtle']};\n                border-radius: {RADIUS['small']}px;\n                padding: 2px 8px;\n            }}\n            QLineEdit:focus {{\n                border-color: {COLORS['border_focus']};\n            }}\n        "
+        f"\n            QLineEdit {{\n                background-color: {SURFACE_TINT['input']};\n                color: {COLORS['text_primary']};\n                border: 1px solid {COLORS['border_subtle']};\n                border-radius: {RADIUS['small']}px;\n                padding: 2px 8px;\n            }}\n        "
     )
 
 def search_btn() -> str:
@@ -221,13 +221,29 @@ def quick_action_btn() -> str:
 
 def input_box() -> str:
     return (
-        f"QTextEdit {{ background: {SURFACE_TINT['input_light']}; color: {COLORS['text_primary']}; border: none; border-radius: 12px; padding: 7px 10px; }} QTextEdit:focus {{ border: 1px solid {COLORS['input_border_pink']}; }}"
+        f"QTextEdit {{ background: {SURFACE_TINT['input_light']}; color: {COLORS['text_primary']}; border: none; border-radius: 12px; padding: 7px 10px; }}"
     )
 
 def send_btn_base() -> str:
+    """SPEC-32 F3：发送按钮改**暗沉玻璃**（原样式继承 `app_shell()` 的 `QPushButton{accent}` 金铜色，用户反馈太醒目）。
+
+    必须**带 #send_btn 作用域**：id 选择器优先级高于 `app_shell()` 的类型选择器，
+    否则 hover/pressed/disabled 仍会漏出 accent 系的亮色。
+    """
     return (
-        "QPushButton { border-radius: 12px; }"
-            "QPushButton:pressed { padding-top: 1px; }"
+        f"QPushButton#send_btn {{"
+        f" background: {SURFACE_TINT['input_light']};"
+        f" color: {COLORS['text_secondary']};"
+        f" border: 1px solid {COLORS['border_subtle']};"
+        f" border-radius: 12px; }}"
+        f"QPushButton#send_btn:hover {{"
+        f" background: {SURFACE_TINT['chat_surface_strong']};"
+        f" color: {COLORS['text_primary']};"
+        f" border: 1px solid rgba(179,211,239,0.30); }}"
+        f"QPushButton#send_btn:pressed {{"
+        f" background: rgba(12,17,30,0.92); padding-top: 1px; }}"
+        f"QPushButton#send_btn:disabled {{"
+        f" background: {COLORS['btn_disabled_bg']}; color: {COLORS['btn_disabled_fg']}; }}"
     )
 
 def dock() -> str:
@@ -244,7 +260,7 @@ def footer() -> str:
 
 def app_shell(backdrop_url) -> str:
     return (
-        f"\n            QWidget#app_shell {{\n                border-image: url({backdrop_url}) 0 0 0 0 stretch stretch;\n            }}\n            QMainWindow {{\n                background-color: {COLORS['bg_base']};\n            }}\n            QScrollArea {{\n                border: none;\n                background-color: transparent;\n            }}\n            QTextEdit {{\n                border: 1px solid {COLORS['border_subtle']};\n                border-radius: {RADIUS['medium']}px;\n                padding: 8px 10px;\n                background-color: {COLORS['input']};\n                color: {COLORS['text_primary']};\n            }}\n            QTextEdit:focus {{\n                border-color: {COLORS['border_focus']};\n            }}\n            QPushButton {{\n                background-color: {COLORS['accent']};\n                color: white;\n                border: none;\n                border-radius: {RADIUS['small']}px;\n            }}\n            QPushButton:hover {{\n                background-color: {COLORS['accent_hover']};\n            }}\n            QPushButton:pressed {{\n                background-color: {COLORS['accent_press']};\n            }}\n            QPushButton:disabled {{\n                background-color: {COLORS['btn_disabled_bg']};\n                color: {COLORS['btn_disabled_fg']};\n            }}\n        "
+        f"\n            QWidget#app_shell {{\n                border-image: url({backdrop_url}) 0 0 0 0 stretch stretch;\n            }}\n            QMainWindow {{\n                background-color: {COLORS['bg_base']};\n            }}\n            QScrollArea {{\n                border: none;\n                background-color: transparent;\n            }}\n            QTextEdit {{\n                border: 1px solid {COLORS['border_subtle']};\n                border-radius: {RADIUS['medium']}px;\n                padding: 8px 10px;\n                background-color: {COLORS['input']};\n                color: {COLORS['text_primary']};\n            }}\n            QPushButton {{\n                background-color: {COLORS['accent']};\n                color: white;\n                border: none;\n                border-radius: {RADIUS['small']}px;\n            }}\n            QPushButton:hover {{\n                background-color: {COLORS['accent_hover']};\n            }}\n            QPushButton:pressed {{\n                background-color: {COLORS['accent_press']};\n            }}\n            QPushButton:disabled {{\n                background-color: {COLORS['btn_disabled_bg']};\n                color: {COLORS['btn_disabled_fg']};\n            }}\n        "
     )
 
 def nav_btn_dock() -> str:
@@ -262,25 +278,20 @@ def nav_btn_side() -> str:
         f"QPushButton {{ background: transparent; color: {COLORS['nav_fg']}; border: none; border-radius: 12px; text-align: left; padding-left: 14px; }} QPushButton:hover {{ background: {SURFACE_TINT['hover_nav']}; color: white; }}"
     )
 
-def input_box_highlight() -> str:
-    return (
-        f"QTextEdit {{ border: 2px solid {COLORS['accent']}; border-radius: 10px; background-color: {COLORS['input']}; padding: 6px 10px; }}"
-    )
-
-def input_box_normal() -> str:
-    return (
-        f"QTextEdit {{ border: 1px solid {COLORS['border_subtle']}; border-radius: 10px; background-color: {COLORS['input']}; padding: 6px 10px; }}"
-    )
+# SPEC-32 追加：`input_box_highlight()` / `input_box_normal()` 已删除——
+# 它们只被 `eventFilter` 的聚焦换样式分支使用；该分支因「聚焦时边框闪光」被移除（用户真机反馈），
+# 输入框外观统一由 `input_box()` 单一来源负责。
 
 def locate_highlight(selector: str = "QLabel") -> str:
-    """SPEC-23 修订（用户真机反馈）：定位闪光只作用于**气泡本体**。
+    """SPEC-32 F2：定位**不再做视觉突出**（用户真机反馈：闪光「异常发亮」）。
 
-    关键点：必须带**选择器**。气泡 label 的样式表来自 `bubble_body()`（含 `QLabel { … }` 规则），
-    无选择器的裸声明会被那条按优先级压住 ⇒ 渲染上「什么都没发生」（截图基线抓到的坑）。
-    这里默认用 `QLabel {}` 与之同优先级、靠**后写**取胜；调用方把它**追加**到
-    气泡 label 自己的样式表末尾即可 —— 天然只作用于气泡，不染角色名/整行。
+    历史到 SPEC-23：该函数返回一个亮琥珀底色（`rgba(255,205,96,0.55)`）追加到气泡 label 上，
+    实现「定位闪光」。用户 2026-10-10 反馈不想要这种突出 ⇒ 返回空串；
+    调用方（`ui/mixins/history.py::_locate_message`）已有空判 ⇒ 整条闪光链路自然成为 no-op，
+    滚动定位与句级柔和高亮（SPEC-20）保持不变。
+    如需恢复：把返回值改回 `f"{selector} {{ background-color: {COLORS['locate_highlight']}; }}"`。
     """
-    return f"{selector} {{ background-color: {COLORS['locate_highlight']}; }}"
+    return ""
 
 def dash_title_label() -> str:
     """SPEC-27 R2：侧栏标题「双子 · 陪伴状态」。"""
@@ -361,7 +372,6 @@ __all__ = [
     "history_card",
     "ambient_label",
     "avatar_frame_border",
-    "input_box_normal",
     "history_close_btn",
     "bubble_tag_role",
     "character_placeholder",
@@ -393,7 +403,6 @@ __all__ = [
     "quote_close_btn",
     "send_btn_base",
     "search_btn",
-    "input_box_highlight",
     "dock",
     "empty_hint",
     "nav_weather_chip",

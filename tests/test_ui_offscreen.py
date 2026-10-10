@@ -469,7 +469,7 @@ def test_panel_favor_format_v148() -> None:
 
 
 def test_locate_flash_and_hit_marker_v1656() -> None:
-    """SPEC-23（步 10）：定位打磨——底色定档 + 句级命中标记 + 幂等恢复 + 无关键词只闪不标。"""
+    """SPEC-23（步 10）+ SPEC-32：定位打磨——句级命中标记 + 幂等恢复；**不再做视觉突出**（闪光已关）。"""
     import tempfile
 
     win = _make_window()
@@ -492,11 +492,10 @@ def test_locate_flash_and_hit_marker_v1656() -> None:
     orig_bubble_style = label.styleSheet()
     orig_name_style = name_label.styleSheet()
 
-    # 1) 带关键词：气泡上底色 + 句级标记同时上；**角色名不受影响**（用户真机要求）
+    # 1) 带关键词：**不再上闪光底色**（SPEC-32 F2：定位不做视觉突出）+ 句级标记照旧；角色名不受影响
     win._locate_message(mid, keyword="野外")
-    assert "rgba(255,205,96,0.55)" in label.styleSheet(), f"气泡应上闪光底色: {label.styleSheet()!r}"
-    assert label.styleSheet() != orig_bubble_style
-    assert name_label.styleSheet() == orig_name_style, "角色名不得被闪光染色（只标气泡）"
+    assert label.styleSheet() == orig_bubble_style, f"气泡不应再被染色（SPEC-32）: {label.styleSheet()!r}"
+    assert name_label.styleSheet() == orig_name_style, "角色名不受影响"
     assert "<span" in label.text(), f"应标出命中句: {label.text()}"
     assert getattr(w, "_locate_hit_text", None) == "今天去野外散步，野外很美", \
         "原文应留存供恢复"
@@ -509,17 +508,18 @@ def test_locate_flash_and_hit_marker_v1656() -> None:
     assert not hasattr(w, "_locate_orig_style"), "恢复后应删除样式留存"
     win._clear_locate_marks(w)  # 二次调用无副作用（幂等）
 
-    # 3) 无关键词：只闪光、不标句
+    # 3) 无关键词：不标句、亦不上色（SPEC-32：滚动定位即为反馈）
     w2 = win._append_parsed_message("你", "没有关键词也要闪一下", "user")
-    win._locate_message(w2.message_id)
     label2 = w2._bubble.findChild(QLabel, "bubble_text")
-    assert "rgba(255,205,96,0.55)" in label2.styleSheet(), "无关键词也应上底色"
+    orig2 = label2.styleSheet()
+    win._locate_message(w2.message_id)
+    assert label2.styleSheet() == orig2, "SPEC-32：不应再有任何视觉突出"
     assert not hasattr(w2, "_locate_hit_text"), "无关键词不应标句"
     win._clear_locate_marks(w2)
 
-    # 4) 关键词不在该条：不标句（只闪）
+    # 4) 关键词不在该条：不标句、不上色（SPEC-32）
     win._locate_message(mid, keyword="不存在的词")
-    assert "rgba(255,205,96,0.55)" in label.styleSheet(), "未命中也应上底色"
+    assert label.styleSheet() == orig_bubble_style, "未命中亦不应上色"
     assert not hasattr(w, "_locate_hit_text"), "未命中不应标句"
     win._clear_locate_marks(w)
 
@@ -609,3 +609,50 @@ def test_container_qss_is_scoped():
             bad.append(f"theme.{name}() 是无选择器裸声明且不在白名单（会级联到子控件）")
 
     assert not bad, "容器 QSS 作用域守卫失败：\n  " + "\n  ".join(bad)
+
+# ───────── SPEC-20260922-32：不做视觉突出 + 发送按钮暗沉 ─────────
+
+def test_no_focus_highlight_rules():
+    """SPEC-32 F1：文本框/搜索框不得带 focus 亮边（用户真机反馈：输入/定位时边框发亮，不要突出）。"""
+    import ui.theme as th
+
+    for name, qss in (
+        ("input_box", th.input_box()),
+        ("search_box", th.search_box()),
+        ("history_search_box", th.history_search_box()),
+        ("app_shell", th.app_shell("x")),
+    ):
+        assert ":focus" not in qss, f"theme.{name}() 仍含 :focus 亮边规则"
+
+
+def test_locate_flash_disabled():
+    """SPEC-32 F2：定位不做视觉突出——`locate_highlight()` 返回空串 ⇒ `_locate_message` 走 no-op。"""
+    import ui.theme as th
+
+    assert th.locate_highlight() == "", "定位闪光应为关闭（返回空串）"
+
+
+def test_send_btn_is_scoped_dark():
+    """SPEC-32 F3：发送按钮 QSS 必须带 `#send_btn` 作用域——否则会继承 app_shell 的 accent 金铜色。"""
+    import ui.theme as th
+
+    qss = th.send_btn_base()
+    assert "#send_btn" in qss
+    assert "accent" not in qss
+
+def test_input_focus_does_not_restyle():
+    """SPEC-32 追加：聚焦**不得**改变输入框样式。
+
+    反例（真实缺陷）：`shell_setup.eventFilter` 曾在 FocusIn/FocusOut 上程序化 setStyleSheet
+    （聚焦 = 2px accent 金边）⇒ 用户实测「点击输入框 / 历史定位时边框闪光」。
+    这条断言直接打在 eventFilter 上（比"QSS 里没有 :focus"更贴根因）。
+    """
+    from PySide6.QtCore import QEvent
+
+    win = _make_window()
+    qss = win.input_box.styleSheet()
+    assert "input_box()" not in qss  # 展示用（非断言重点）
+    win.eventFilter(win.input_box, QEvent(QEvent.FocusIn))
+    assert win.input_box.styleSheet() == qss, "FocusIn 不得改变输入框样式"
+    win.eventFilter(win.input_box, QEvent(QEvent.FocusOut))
+    assert win.input_box.styleSheet() == qss, "FocusOut 不得改变输入框样式"

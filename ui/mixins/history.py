@@ -125,9 +125,11 @@ class HistoryMixin:
         try:
             label = self._bubble_text_label(widget)
             target = label if label is not None else widget
-            if not hasattr(widget, "_locate_orig_style"):
-                widget._locate_orig_style = target.styleSheet()
-            target.setStyleSheet(target.styleSheet() + "\n" + theme.locate_highlight())
+            _hl = theme.locate_highlight()   # SPEC-32 F2：返回空串（定位不做视觉突出）⇒ 整链 no-op
+            if _hl:
+                if not hasattr(widget, "_locate_orig_style"):
+                    widget._locate_orig_style = target.styleSheet()
+                target.setStyleSheet(target.styleSheet() + "\n" + _hl)
             self._mark_locate_hit(widget, keyword)
             QTimer.singleShot(LOCATE_FLASH_MS, lambda: self._clear_locate_marks(widget))
         except Exception as e:
