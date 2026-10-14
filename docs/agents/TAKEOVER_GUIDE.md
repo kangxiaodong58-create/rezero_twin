@@ -175,3 +175,36 @@ SPEC-ID：SPEC-<日期>-<序号>
 ② **真机确认** 判断观感是否真的更好；
 ③ **用户口径**（"不是不要 X，而是不要 X 太强"这类）决定档位。
 你负责带入更强的视觉评估与更高清的资产，但**闸门顺序不能变**：出 SPEC → 批准 → 分支实现 → 四门禁 → 对照图 + 真机 → 合入 → 四件套。
+
+---
+
+## 12. 本机磁盘清理红线（用户 2026-10-14 明确要求，**最高优先级**）
+
+> 用户原话：**「注意一些重要的、敏感的、历史会话记录、核心安全、游戏存档等的不要删除」**
+
+### 12.1 永不删除（列清单比"凭常识判断"可靠）
+
+| 类别 | 具体位置（本机） |
+|---|---|
+| **AI 会话/记忆/技能** | `C:\Users\11985\AppData\Local\hermes\` 下的 `sessions/`（历史会话）· `memories/` · `skills/` · `plugins/` · `cron/` · `attachments/` · `audio_cache/` · `.hermes_history` · `auth.json` · `.env` |
+| **游戏存档** | `C:\Users\11985\Saved Games\` · `Documents\My Games\` · `AppData\Local\<游戏名>\` · `AppData\Roaming\<游戏名>\` · Steam `userdata\` · 各类模拟器存档目录 |
+| **浏览器数据** | `AppData\Local\Google\Chrome\User Data\` · `Microsoft\Edge\User Data\` · 书签/密码/历史/登录态一律不碰 |
+| **通讯软件数据** | `Documents\WeChat Files\` · `Documents\Tencent Files\` · QQ/微信/钉钉等的 `AppData` 数据目录 |
+| **用户文件** | `Documents\` · `Desktop\` · `Downloads\` · `Pictures\` · `Videos\` 内的任何文件 |
+| **本项目数据** | `.env`（真实 API key）· `data/` · `dist/data/`（会话/记忆/账本 DB）· `assets/` |
+| **系统目录** | `C:\Windows\` · `Program Files` · `ProgramData`（**只报告，不清理**） |
+| **回收站** | 清空回收站属"不可逆"操作 → **先问用户** |
+
+### 12.2 允许清理（白名单，皆为"可再生成"的纯缓存）
+
+- 包管理器缓存：`%LOCALAPPDATA%\npm-cache` · `%LOCALAPPDATA%\pip` · `%LOCALAPPDATA%\uv`（下次安装自动重建）；
+- `%TEMP%`（`C:\Users\11985\AppData\Local\Temp`）中**修改时间 >7 天**的条目（锁定中/在用的自动跳过）；
+- Hermes 自身缓存 `%LOCALAPPDATA%\hermes\cache`（该目录设计上 24 小时自动清理，属可弃）；
+- 编译/构建产物（如项目 `build/`、旧 `dist/` 副本——但**先确认不是唯一存档**）。
+
+### 12.3 执行纪律
+
+1. **白名单之外一律先报告、等确认**，不得"顺手删"；
+2. 每次清理前先**列清单 + 体量**，清完**再报实际释放量**；
+3. 涉及任何"存档/会话/凭据"相邻目录时，**先只读核查、后动手**；
+4. 清理不影响功能的验证方式：跑四条门禁命令（§4）+ 抽查受保护目录仍在（`sessions/`、`Saved Games/` 等）。
